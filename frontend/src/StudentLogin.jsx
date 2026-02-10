@@ -1,4 +1,59 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 export default function StudentLogin() {
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    student_number: '',
+    email: '',
+    access_code: '',
+    antibot: '',
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    const { id, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [id]: value
+    }));
+    setError('');
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store session token in localStorage
+        localStorage.setItem('session_token', data.session_token);
+        localStorage.setItem('student_id', data.student_id);
+        
+        // Redirect to ConsentForm
+        navigate('/consent');
+      } else {
+        setError(data.detail || 'Login failed. Please check your credentials.');
+      }
+    } catch (err) {
+      setError('Connection error. Make sure the backend is running on localhost:8000');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Left side - Decorative */}
@@ -44,17 +99,27 @@ export default function StudentLogin() {
           </div>
 
           {/* Login Form */}
-          <form className="space-y-3">
+          <form className="space-y-3" onSubmit={handleSubmit}>
+            {/* Error Message */}
+            {error && (
+              <div className="p-3 bg-red-900 border border-red-700 rounded-lg text-red-100 text-xs">
+                {error}
+              </div>
+            )}
+
             {/* Student Number */}
             <div>
-              <label htmlFor="studentNumber" className="block text-white text-xs font-medium mb-1">
+              <label htmlFor="student_number" className="block text-white text-xs font-medium mb-1">
                 Student Number
               </label>
               <input
                 type="text"
-                id="studentNumber"
+                id="student_number"
                 placeholder="Student Number"
+                value={formData.student_number}
+                onChange={handleChange}
                 className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-colors"
+                required
               />
             </div>
 
@@ -67,20 +132,26 @@ export default function StudentLogin() {
                 type="email"
                 id="email"
                 placeholder="Your UE Complete Email Address"
+                value={formData.email}
+                onChange={handleChange}
                 className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-colors"
+                required
               />
             </div>
 
             {/* Access Code */}
             <div>
-              <label htmlFor="accessCode" className="block text-white text-xs font-medium mb-1">
+              <label htmlFor="access_code" className="block text-white text-xs font-medium mb-1">
                 Access Code
               </label>
               <input
                 type="password"
-                id="accessCode"
+                id="access_code"
                 placeholder="Access Code"
+                value={formData.access_code}
+                onChange={handleChange}
                 className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-colors"
+                required
               />
             </div>
 
@@ -93,7 +164,10 @@ export default function StudentLogin() {
                 type="text"
                 id="antibot"
                 placeholder="Antibot Validation"
+                value={formData.antibot}
+                onChange={handleChange}
                 className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-colors"
+                required
               />
             </div>
 
@@ -107,9 +181,10 @@ export default function StudentLogin() {
             {/* Login Button */}
             <button
               type="submit"
-              className="w-full bg-red-700 hover:bg-red-600 text-white font-semibold py-2 px-4 text-sm rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
+              disabled={loading}
+              className="w-full bg-red-700 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 text-sm rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
             >
-              Log In
+              {loading ? 'Logging In...' : 'Log In'}
             </button>
 
             {/* Divider */}

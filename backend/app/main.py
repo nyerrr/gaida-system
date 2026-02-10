@@ -3,8 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.services.intent_router import analyze_intent
 from app.services.virtual_agent import generate_response
+from app.api import auth
 
 app = FastAPI(title="GAIDA Backend")
+
+# Include API routers
+app.include_router(auth.router)
 
 # Enable CORS for local frontend during development
 app.add_middleware(
