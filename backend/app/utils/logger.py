@@ -5,6 +5,7 @@ from pathlib import Path
 LOG_FILE = Path("logs/interactions.json")
 
 def log_interaction(
+    session_id: str,
     user_message: str,
     intent: str,
     confidence: float,
@@ -13,6 +14,7 @@ def log_interaction(
 ):
     log_entry = {
         "timestamp": datetime.utcnow().isoformat(),
+        "session_id": session_id,
         "user_message": user_message,
         "intent": intent,
         "confidence": confidence,

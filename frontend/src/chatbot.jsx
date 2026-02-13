@@ -38,10 +38,17 @@ export default function Chatbot() {
                 setSending(true);
 
                 try {
+                        // include existing session_id if present so backend can link conversation
+                        const sessionId = localStorage.getItem('session_id');
+                        const token = localStorage.getItem('session_token');
+
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (token) headers['Authorization'] = `Bearer ${token}`;
+
                         const res = await fetch('/virtual-agent', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ message: text }),
+                                headers,
+                                body: JSON.stringify({ message: text, session_id: sessionId }),
                         });
 
                         if (!res.ok) {
@@ -49,6 +56,11 @@ export default function Chatbot() {
                                 setMessages(prev => [...prev, { role: 'bot', text: `Error: ${err || res.status}` }]);
                         } else {
                                 const data = await res.json();
+                                // Persist session_id returned by backend so future messages are linked
+                                if (data.session_id) {
+                                        localStorage.setItem('session_id', data.session_id);
+                                }
+
                                 const botText = data.response || 'No response from backend';
                                 setMessages(prev => [...prev, { role: 'bot', text: botText }]);
                         }
