@@ -38,7 +38,7 @@ export default function Chatbot() {
                 setSending(true);
 
                 try {
-                        const res = await fetch('http://localhost:8000/virtual-agent', {
+                        const res = await fetch('/virtual-agent', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ message: text }),

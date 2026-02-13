@@ -32,7 +32,8 @@ def root():
 @app.post("/virtual-agent")
 def virtual_agent(input: UserInput):
     intent_data = analyze_intent(input.message)
-    response_text = generate_response(intent_data)
+    # Use response returned by analyze_intent if provided, otherwise generate one
+    response_text = intent_data.get("response") if isinstance(intent_data, dict) and intent_data.get("response") else generate_response(intent_data)
 
     return {
         "intent": intent_data.get("intent"),

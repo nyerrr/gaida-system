@@ -1,0 +1,130 @@
+[
+  {
+    "timestamp": "2026-02-12T12:23:22.979935",
+    "user_message": "test",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "Processed as neutral",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:23:33.498126",
+    "user_message": "im feeling anxious",
+    "intent": "anxiety",
+    "confidence": 1.0,
+    "response": "Processed as anxiety",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:23:43.519215",
+    "user_message": "everyones bullying me",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "Processed as neutral",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:23:49.865973",
+    "user_message": "why are you like this",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "Processed as neutral",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:24:40.563727",
+    "user_message": "hi",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "Processed as neutral",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:24:57.675820",
+    "user_message": "i'm getting bullied by my muslim friends, i feel anxious",
+    "intent": "anxiety",
+    "confidence": 1.0,
+    "response": "Processed as anxiety",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:30:29.353586",
+    "user_message": "naaanxious ako because of my \"Friends\"",
+    "intent": "anxiety",
+    "confidence": 1.0,
+    "response": "Processed as anxiety",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:30:50.939958",
+    "user_message": "hi",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "Processed as neutral",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:30:53.068749",
+    "user_message": "hello",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "Processed as neutral",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T12:30:58.001567",
+    "user_message": "are youa  chatbot",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "Processed as neutral",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T14:27:27.068925",
+    "user_message": "hello",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "I'm here with you. Please tell me more.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T14:27:31.674456",
+    "user_message": "stress",
+    "intent": "stress",
+    "confidence": 1.0,
+    "response": "It sounds like you're under a lot of pressure. Taking short breaks can sometimes help.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T14:27:40.043313",
+    "user_message": "anxiety",
+    "intent": "anxiety",
+    "confidence": 1.0,
+    "response": "I understand that you're feeling anxious. Let's take this one step at a time.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T14:28:07.052589",
+    "user_message": "nauubusan",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "response": "I'm here with you. Please tell me more.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T14:28:21.035989",
+    "user_message": "natataranta",
+    "intent": "anxiety",
+    "confidence": 1.0,
+    "response": "I understand that you're feeling anxious. Let's take this one step at a time.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-12T14:28:29.828751",
+    "user_message": "burnout",
+    "intent": "stress",
+    "confidence": 1.0,
+    "response": "It sounds like you're under a lot of pressure. Taking short breaks can sometimes help.",
+    "method": "rule-based"
+  }
+]

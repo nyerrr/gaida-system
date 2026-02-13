@@ -39,13 +39,3 @@ def analyze_with_rules(user_input: str) -> Dict[str, object]:
     confidence = 0.5 + min(0.5, best_count / max(1, total_hits))
 
     return {"intent": best_label if best_count > 0 else "other", "confidence": round(confidence, 3)}
-def analyze_with_rules(user_input: str):
-    text = user_input.lower()
-
-    if "anxious" in text or "anxiety" in text:
-        return {"intent": "anxiety", "confidence": 0.8}
-
-    if "sad" in text:
-        return {"intent": "sadness", "confidence": 0.75}
-
-    return {"intent": "general", "confidence": 0.6}
