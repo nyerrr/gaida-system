@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import json
+from pathlib import Path
+from datetime import datetime
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+CONSENT_FILE = Path("logs/consents.json")
 
 # Temporary test credentials for development/testing
 TEST_CREDENTIALS = {
@@ -37,6 +41,11 @@ class LoginResponse(BaseModel):
     session_token: str = None
 
 
+class ConsentRequest(BaseModel):
+    session_id: str
+    consent_given: bool
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
     """
@@ -66,6 +75,43 @@ def login(payload: LoginRequest):
         student_id=student_number,
         session_token=session_token,
     )
+
+
+@router.post("/consent")
+def record_consent(payload: ConsentRequest):
+    """
+    Record user consent for logging interactions.
+    """
+    # Load existing consents
+    if CONSENT_FILE.exists():
+        with open(CONSENT_FILE, "r", encoding="utf-8") as f:
+            consents = json.load(f)
+    else:
+        consents = []
+    
+    # Check if session already has consent recorded
+    existing = next((c for c in consents if c.get("session_id") == payload.session_id), None)
+    
+    if existing:
+        existing["consent_given"] = payload.consent_given
+        existing["updated_at"] = datetime.utcnow().isoformat()
+    else:
+        consents.append({
+            "session_id": payload.session_id,
+            "consent_given": payload.consent_given,
+            "recorded_at": datetime.utcnow().isoformat()
+        })
+    
+    # Save consents
+    CONSENT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONSENT_FILE, "w", encoding="utf-8") as f:
+        json.dump(consents, f, indent=2)
+    
+    return {
+        "success": True,
+        "message": f"Consent recorded: {payload.consent_given}",
+        "session_id": payload.session_id
+    }
 
 
 @router.get("/test-credentials")

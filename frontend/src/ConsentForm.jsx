@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 export default function ConsentForm() {
   const navigate = useNavigate();
 
-  const handleConsent = () => {
+  const handleConsent = async () => {
     const token = localStorage.getItem('session_token');
     if (!token) {
       // If user is not logged in, send them back to login
@@ -11,9 +11,39 @@ export default function ConsentForm() {
       return;
     }
 
-    // Mark consent and go to chat
-    localStorage.setItem('consent_given', 'true');
-    navigate('/chat');
+    // Get or create session_id for logging
+    let sessionId = localStorage.getItem('session_id');
+    if (!sessionId) {
+      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('session_id', sessionId);
+    }
+
+    // Send consent to backend
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/consent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          consent_given: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to record consent');
+      }
+
+      // Mark consent and go to chat
+      localStorage.setItem('consent_given', 'true');
+      navigate('/chat');
+    } catch (error) {
+      console.error('Error recording consent:', error);
+      // Still allow navigation even if consent recording fails
+      localStorage.setItem('consent_given', 'true');
+      navigate('/chat');
+    }
   };
 
   return (
