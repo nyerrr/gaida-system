@@ -1,0 +1,195 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+export default function InformedConsent() {
+  const navigate = useNavigate();
+  const [isChecked, setIsChecked] = useState(false);
+
+  const handleAccept = (e) => {
+    e.preventDefault();
+    if (isChecked) {
+      // TODO: Store consent in database/localStorage
+      // For now, navigate to student dashboard
+      navigate('/student-dashboard');
+    }
+  };
+
+  const handleDecline = () => {
+    // TODO: Log out user
+    navigate('/');
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4 relative overflow-hidden">
+      {/* Decorative Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-20 left-20 w-96 h-96 border-4 border-red-500 rotate-45"></div>
+        <div className="absolute bottom-20 right-20 w-80 h-80 border-4 border-red-500 rotate-12"></div>
+      </div>
+
+      {/* Grid Pattern Overlay */}
+      <div className="absolute inset-0 opacity-10">
+        <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+        </svg>
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Informed Consent</h1>
+          <div className="text-right">
+            <p className="text-sm text-gray-600">User: <span className="font-medium">Juan Dela Cruz</span></p>
+          </div>
+        </div>
+
+        {/* Consent Content - Scrollable */}
+        <div className="bg-gray-50 rounded-lg p-6 mb-6 max-h-96 overflow-y-auto border border-gray-200">
+          <div className="space-y-4 text-sm text-gray-700">
+            {/* Purpose */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Purpose:</h3>
+              <p>
+                GAIDA (Guidance System with Multimodal Anxiety Detection) uses voice, text, and behavioral analysis 
+                to detect anxiety levels and provide guidance support. The system analyzes your interactions to 
+                identify signs of anxiety and connect you with appropriate counseling resources.
+              </p>
+            </div>
+
+            {/* Data Collection */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Data Collection:</h3>
+              <p>
+                We will collect your voice recordings, text messages, interaction patterns, and behavioral data 
+                during counseling sessions. All data is linked to your student ID for session tracking and 
+                counselor review. Data collected includes but is not limited to: audio recordings of conversations, 
+                text input, response times, interaction frequency, and detected emotional indicators.
+              </p>
+            </div>
+
+            {/* Privacy */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Privacy:</h3>
+              <p>
+                All data is encrypted and stored securely on university servers. Only authorized counselors and 
+                administrators can access flagged sessions. Your data will not be shared with third parties without 
+                your explicit consent, except as required by law or in cases of imminent danger to yourself or 
+                others.
+              </p>
+            </div>
+
+            {/* Limitations */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Limitations:</h3>
+              <p>
+                GAIDA is an assistive tool and does not replace professional mental health care. It is designed 
+                to support early anxiety detection and facilitate counselor intervention, not provide medical 
+                diagnosis or treatment. If you are experiencing a mental health emergency, please contact your 
+                university counseling center immediately or call emergency services.
+              </p>
+            </div>
+
+            {/* Session Recording */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Session Recording:</h3>
+              <p>
+                By accepting, you consent to audio, text, and interaction data recording during your session. 
+                Recordings may be reviewed by authorized counselors for assessment and support purposes. You 
+                will be notified when recording begins.
+              </p>
+            </div>
+
+            {/* Counselor Alerts */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Counselor Alerts:</h3>
+              <p>
+                If GAIDA detects high anxiety levels or concerning patterns, an alert will be sent to counselors 
+                who may reach out to provide support. This is for your safety and wellbeing. Response time may 
+                vary based on counselor availability.
+              </p>
+            </div>
+
+            {/* Rights */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Rights:</h3>
+              <p>
+                You may withdraw consent and end your session at any time without penalty. You have the right 
+                to request access to your session data by contacting the guidance office. You may request 
+                deletion of your data, subject to university record-keeping requirements. You can review what 
+                data has been collected about you upon request by emailing guidance@ue.edu.ph.
+              </p>
+            </div>
+
+            {/* Data Retention */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Data Retention:</h3>
+              <p>
+                Your session data will be retained for a period of two (2) academic years for counseling continuity 
+                and quality improvement purposes, after which it will be securely deleted unless you request earlier 
+                deletion or extended retention is required by university policy.
+              </p>
+            </div>
+
+            {/* Contact Information */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Questions or Concerns:</h3>
+              <p>
+                If you have any questions about this consent form or GAIDA's data practices, please contact the 
+                University Guidance Office at guidance@ue.edu.ph or visit the Guidance Office at [Building Name, 
+                Room Number].
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Consent Checkbox */}
+        <div className="mb-6">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onChange={(e) => setIsChecked(e.target.checked)}
+              className="mt-1 w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer"
+            />
+            <span className="text-sm text-gray-700 select-none">
+              I have read and understood the terms above. I consent to participate in this session 
+              and agree to the collection, use, and storage of my data as described.
+            </span>
+          </label>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-4">
+          <button
+            onClick={handleAccept}
+            disabled={!isChecked}
+            className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${
+              isChecked
+                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            I Accept - Start Session
+          </button>
+          <button
+            onClick={handleDecline}
+            className="flex-1 py-3 px-6 rounded-lg font-semibold border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-200"
+          >
+            Decline & Logout
+          </button>
+        </div>
+
+        {/* Footer Note */}
+        <p className="text-xs text-gray-500 text-center mt-4">
+          By clicking "I Accept", you acknowledge that you have read and agree to the terms outlined above.
+        </p>
+      </div>
+    </div>
+  );
+}
