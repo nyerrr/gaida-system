@@ -4,3 +4,7 @@ python-dotenv
 openai
 pytest
 httpx
+librosa
+opensmile
+pyaudio
+speechrecognition
