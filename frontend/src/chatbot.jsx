@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import VoiceInput from './VoiceInput';
 
 export default function Chatbot() {
         const navigate = useNavigate();
-        const [messages, setMessages] = useState([]); // {role: 'user'|'bot', text: string}
+        const [messages, setMessages] = useState([]);
         const [input, setInput] = useState('');
         const [sending, setSending] = useState(false);
         const containerRef = useRef(null);
@@ -22,7 +23,6 @@ export default function Chatbot() {
         }, [navigate]);
 
         useEffect(() => {
-                // auto-scroll to bottom when messages change
                 if (containerRef.current) {
                         containerRef.current.scrollTop = containerRef.current.scrollHeight;
                 }
@@ -38,7 +38,6 @@ export default function Chatbot() {
                 setSending(true);
 
                 try {
-                        // include existing session_id if present so backend can link conversation
                         const sessionId = localStorage.getItem('session_id');
                         const token = localStorage.getItem('session_token');
 
@@ -56,11 +55,9 @@ export default function Chatbot() {
                                 setMessages(prev => [...prev, { role: 'bot', text: `Error: ${err || res.status}` }]);
                         } else {
                                 const data = await res.json();
-                                // Persist session_id returned by backend so future messages are linked
                                 if (data.session_id) {
                                         localStorage.setItem('session_id', data.session_id);
                                 }
-
                                 const botText = data.response || 'No response from backend';
                                 setMessages(prev => [...prev, { role: 'bot', text: botText }]);
                         }
@@ -114,6 +111,14 @@ export default function Chatbot() {
                                                 onKeyDown={handleKeyDown}
                                                 placeholder="Type your message..."
                                                 className="flex-1 resize-none h-12 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none"
+                                        />
+                                        <VoiceInput
+                                                sessionId={localStorage.getItem('session_id')}
+                                                onTranscript={(text) => setInput(text)}
+                                                onAgentResponse={(data) => {
+                                                        if (data.session_id) localStorage.setItem('session_id', data.session_id);
+                                                        setMessages(prev => [...prev, { role: 'bot', text: data.response }]);
+                                                }}
                                         />
                                         <button onClick={sendMessage} disabled={sending} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg">
                                                 {sending ? 'Sending...' : 'Send'}

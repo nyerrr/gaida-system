@@ -5,14 +5,13 @@ export default function InformedConsent() {
   const navigate = useNavigate();
   const [isChecked, setIsChecked] = useState(false);
 
-  const handleAccept = (e) => {
-    e.preventDefault();
-    if (isChecked) {
-      // TODO: Store consent in database/localStorage
-      // For now, navigate to student dashboard
-      navigate('/student-dashboard');
-    }
-  };
+const handleAccept = (e) => {
+  e.preventDefault();
+  if (isChecked) {
+    localStorage.setItem('consent_given', 'true');
+    navigate('/student-dashboard');
+  }
+};
 
   const handleDecline = () => {
     // TODO: Log out user

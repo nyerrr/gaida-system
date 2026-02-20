@@ -4,11 +4,13 @@ from pydantic import BaseModel
 from app.services.intent_router import analyze_intent
 from app.services.virtual_agent import generate_response
 from app.api import auth
+from app.api.voice import router as audio_router
 
 app = FastAPI(title="GAIDA Backend")
 
 # Include API routers
 app.include_router(auth.router)
+app.include_router(audio_router)
 
 # Enable CORS for local frontend during development
 app.add_middleware(
@@ -19,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🔹 UPDATED: accept optional session_id
+# accept optional session_id
 class UserInput(BaseModel):
     message: str
     session_id: str | None = None
@@ -32,14 +34,11 @@ def root():
 
 @app.post("/virtual-agent")
 def virtual_agent(input: UserInput):
-    # 🔹 Pass session_id into intent analyzer
     intent_data = analyze_intent(
         user_message=input.message,
         session_id=input.session_id
     )
 
-    # Use response returned by analyze_intent if provided,
-    # otherwise generate one
     response_text = (
         intent_data.get("response")
         if isinstance(intent_data, dict) and intent_data.get("response")
@@ -47,7 +46,7 @@ def virtual_agent(input: UserInput):
     )
 
     return {
-        "session_id": intent_data.get("session_id"),  # 🔹 RETURN SESSION ID
+        "session_id": intent_data.get("session_id"),
         "intent": intent_data.get("intent"),
         "confidence": intent_data.get("confidence"),
         "response": response_text,

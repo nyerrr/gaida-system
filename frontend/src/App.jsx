@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import PortalSelection from './PortalSelection'
 import StudentLogin from './StudentLogin'
-import ConsentForm from './ConsentForm'
-import Chatbot from './chatbot'
+import CounselorLogin from './CounselorLogin'
+import InformedConsent from './InformedConsent'
+import StudentDashboard from './StudentDashboard'
 
 function App() {
   return (
@@ -10,8 +11,9 @@ function App() {
       <Routes>
         <Route path="/" element={<PortalSelection />} />
         <Route path="/student-login" element={<StudentLogin />} />
-        <Route path="/consent" element={<ConsentForm />} />
-        <Route path="/chat" element={<Chatbot />} />
+        <Route path="/counselor-login" element={<CounselorLogin />} />
+        <Route path="/consent" element={<InformedConsent />} />
+        <Route path="/student-dashboard" element={<StudentDashboard />} />
       </Routes>
     </BrowserRouter>
   )

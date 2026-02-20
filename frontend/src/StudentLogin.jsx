@@ -47,7 +47,7 @@ export default function StudentLogin() {
       } else {
         setError(data.detail || 'Login failed. Please check your credentials.');
       }
-    } catch (err) {
+    } catch  {
       setError('Connection error. Make sure the backend is running on localhost:8000');
     } finally {
       setLoading(false);

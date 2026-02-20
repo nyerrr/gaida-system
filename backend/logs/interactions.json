@@ -183,5 +183,75 @@
     "anxiety_score": 3,
     "response": "It sounds like you're under a lot of pressure. Taking short breaks can sometimes help.",
     "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-20T07:14:34.164532",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "hindi ko na kaya",
+    "intent": "sadness",
+    "confidence": 1.0,
+    "anxiety_score": 1,
+    "response": "I'm here to listen. Would you like to talk more about what's making you feel this way?",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-20T07:14:40.123971",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "pagod na ako",
+    "intent": "stress",
+    "confidence": 1.0,
+    "anxiety_score": 3,
+    "response": "It sounds like you're under a lot of pressure. Taking short breaks can sometimes help.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-20T07:14:50.697917",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "what are your thoughts",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "anxiety_score": 1,
+    "response": "I'm here with you. Please tell me more.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-20T07:15:18.830033",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "i feel like i cant do it",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "anxiety_score": 1,
+    "response": "I'm here with you. Please tell me more.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-20T07:15:27.848255",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "tell me more rainier",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "anxiety_score": 1,
+    "response": "I'm here with you. Please tell me more.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-20T07:15:49.172453",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "bold ni theo at nicolo",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "anxiety_score": 1,
+    "response": "I'm here with you. Please tell me more.",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-20T07:15:58.941074",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "nicholo x edward",
+    "intent": "neutral",
+    "confidence": 0.5,
+    "anxiety_score": 1,
+    "response": "I'm here with you. Please tell me more.",
+    "method": "rule-based"
   }
 ]
