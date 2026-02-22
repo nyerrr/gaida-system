@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.services.intent_router import analyze_intent
 from app.services.virtual_agent import generate_response
 from app.api import auth
-from app.api.voice import router as audio_router
+from frontend.src.voice import router as audio_router
 
 app = FastAPI(title="GAIDA Backend")
 

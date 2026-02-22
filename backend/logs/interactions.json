@@ -253,5 +253,105 @@
     "anxiety_score": 1,
     "response": "I'm here with you. Please tell me more.",
     "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-21T17:27:43.664473",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "HI",
+    "intent": "neutral",
+    "confidence": 0.42,
+    "anxiety_score": 1,
+    "response": "Hello! This is a safe space where you can talk about anything on your mind. How can I help you today?",
+    "method": "ml-model"
+  },
+  {
+    "timestamp": "2026-02-21T17:27:51.778038",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "PARA SAAN ANG APP NA TO?",
+    "intent": "neutral",
+    "confidence": 0.95,
+    "anxiety_score": 1,
+    "response": "Hello! This is a safe space where you can talk about anything on your mind. How can I help you today?",
+    "method": "rule-based (informational guard)"
+  },
+  {
+    "timestamp": "2026-02-21T17:27:58.446522",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "PARA SAAN?",
+    "intent": "neutral",
+    "confidence": 0.95,
+    "anxiety_score": 1,
+    "response": "Hi! I'm GAIDA, your virtual counseling assistant. I'm here to listen and support you. How are you feeling today?",
+    "method": "rule-based (informational guard)"
+  },
+  {
+    "timestamp": "2026-02-21T17:28:03.730979",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "APP",
+    "intent": "neutral",
+    "confidence": 0.524,
+    "anxiety_score": 1,
+    "response": "Hello! This is a safe space where you can talk about anything on your mind. How can I help you today?",
+    "method": "ml-model"
+  },
+  {
+    "timestamp": "2026-02-21T17:28:10.002966",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "PARA SAAN ANG APP",
+    "intent": "neutral",
+    "confidence": 0.95,
+    "anxiety_score": 1,
+    "response": "Welcome! You can talk to me about how you're feeling, what's stressing you out, or anything that's been on your mind. What brings you here today?",
+    "method": "rule-based (informational guard)"
+  },
+  {
+    "timestamp": "2026-02-21T17:28:15.949787",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "SAAN ANG APP",
+    "intent": "sadness",
+    "confidence": 0.305,
+    "anxiety_score": 1,
+    "response": "It takes courage to share how you feel. I'm here and I'm listening. What's been making you feel sad?",
+    "method": "ml-model"
+  },
+  {
+    "timestamp": "2026-02-21T20:52:24.119897",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "PARA SAAN",
+    "intent": "faq",
+    "confidence": 0.95,
+    "anxiety_score": 1,
+    "response": "GAIDA is a virtual counseling assistant for students. You can share how you're feeling, talk about stress, anxiety, or sadness, and get support anytime. Your counselor can also view sessions to follow up with you.",
+    "method": "rule-based (informational guard)"
+  },
+  {
+    "timestamp": "2026-02-21T20:52:29.342530",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "PAANO?",
+    "intent": "faq",
+    "confidence": 0.95,
+    "anxiety_score": 1,
+    "response": "This app is here to support your mental and emotional wellbeing. Talk to me about what you're feeling, and I'll listen. For urgent concerns, your school counselor is notified.",
+    "method": "rule-based (informational guard)"
+  },
+  {
+    "timestamp": "2026-02-21T20:52:41.021078",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "I HAVE AN SEVERE ANXIETY",
+    "intent": "anxiety",
+    "confidence": 1.0,
+    "anxiety_score": 5,
+    "response": "You're not alone in this. A lot of students go through this. Can you describe what the anxiety feels like for you?",
+    "method": "rule-based"
+  },
+  {
+    "timestamp": "2026-02-21T20:52:53.628590",
+    "session_id": "session_1771571663409_62e4pbqai",
+    "user_message": "IM LOSING MY BREATH",
+    "intent": "anxiety",
+    "confidence": 0.444,
+    "anxiety_score": 5,
+    "response": "It sounds like you're feeling anxious right now. That's okay. Let's slow down together. Can you tell me what's been on your mind?",
+    "method": "ml-model"
   }
 ]

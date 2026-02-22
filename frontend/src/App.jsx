@@ -4,6 +4,7 @@ import StudentLogin from './StudentLogin'
 import CounselorLogin from './CounselorLogin'
 import InformedConsent from './InformedConsent'
 import StudentDashboard from './StudentDashboard'
+import CounselorDashboard from './CounselorDashboard'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/counselor-login" element={<CounselorLogin />} />
         <Route path="/consent" element={<InformedConsent />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
+        <Route path="/counselor-dashboard" element={<CounselorDashboard />} />
       </Routes>
     </BrowserRouter>
   )

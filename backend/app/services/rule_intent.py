@@ -2,152 +2,290 @@ import re
 from typing import Dict, List
 from difflib import SequenceMatcher
 
-# fuzzy thresholds for rule-based matching (align with virtual_agent tuning)
-PHRASE_FUZZY_THRESHOLD = 0.70
-TOKEN_FUZZY_THRESHOLD = 0.82
+# Fuzzy match thresholds
+PHRASE_FUZZY_THRESHOLD = 0.72
+TOKEN_FUZZY_THRESHOLD = 0.84
 
 STOPWORDS = {
     "ang", "ng", "sa", "ako", "ikaw", "siya",
     "ko", "mo", "niya", "na", "pa", "lang",
-    "yung", "ito", "yan", "din", "rin"
+    "yung", "ito", "yan", "din", "rin", "mga",
+    "at", "ay", "kung", "hindi", "naman", "talaga"
 }
 
-KEYWORDS = {
+# Each keyword maps to a weight (signal strength).
+# Higher weight = stronger indicator for that intent.
+KEYWORDS: Dict[str, List[tuple]] = {
+
     "suicidal": [
-        "ayoko na mabuhay",
-        "gusto ko na mamatay",
-        "magpapakamatay",
-        "tapusin ko na",
-        "wala nang dahilan para mabuhay",
-        "i want to die",
-        "kill myself",
-        "end my life",
-        "suicide"
+        # English
+        ("i want to die", 4.0),
+        ("i want to kill myself", 4.0),
+        ("kill myself", 4.0),
+        ("end my life", 4.0),
+        ("take my own life", 4.0),
+        ("suicide", 4.0),
+        ("suicidal", 4.0),
+        ("i don't want to live", 3.8),
+        ("i don't want to exist", 3.8),
+        ("no reason to live", 3.8),
+        ("no reason to stay alive", 3.8),
+        ("thinking about suicide", 3.8),
+        ("planning to end it", 3.8),
+        ("want to disappear forever", 3.5),
+        ("nobody would miss me", 3.5),
+        ("better off dead", 3.5),
+        ("i want to hurt myself", 3.5),
+        ("i want to harm myself", 3.5),
+        ("feel like ending everything", 3.5),
+        ("don't want to wake up", 3.5),
+        # Filipino / Taglish
+        ("gusto ko na mamatay", 4.0),
+        ("ayoko na mabuhay", 4.0),
+        ("magpapakamatay", 4.0),
+        ("magpapakamatay na ako", 4.0),
+        ("tapusin ko na buhay ko", 4.0),
+        ("tapusin ko na lahat", 4.0),
+        ("wala nang dahilan para mabuhay", 3.8),
+        ("ayoko na magising", 3.8),
+        ("gusto ko nang mawala", 3.8),
+        ("sana di na lang ako ipinanganak", 3.5),
+        ("pabigat lang ako", 3.5),
+        ("wala na akong silbi", 3.5),
+        ("mas tahimik kung wala ako", 3.5),
+        ("gusto ko na sumuko sa buhay", 3.5),
+        ("pagod na ako sa existence", 3.5),
+        ("ayoko na sa lahat", 3.0),
+        ("parang wala nang saysay mabuhay", 3.8),
     ],
 
     "anxiety": [
-        "anxious", "anxiety", "nervous", "panic",
-        "worried", "restless", "uneasy",
-        "kinakabahan", "kabado", "natatakot",
-        "natataranta", "balisa",
-        "overthink", "overthinking"
+        # English
+        ("anxiety", 2.0),
+        ("anxious", 2.0),
+        ("panic attack", 2.5),
+        ("panic", 1.8),
+        ("nervous", 1.5),
+        ("worried", 1.5),
+        ("overthinking", 2.0),
+        ("overthink", 1.8),
+        ("restless", 1.5),
+        ("uneasy", 1.5),
+        ("on edge", 1.8),
+        ("heart racing", 2.0),
+        ("can't breathe", 1.8),
+        ("shaking from fear", 1.8),
+        ("scared of failing", 1.8),
+        ("constantly worried", 2.0),
+        ("social anxiety", 2.2),
+        ("fear of judgment", 1.8),
+        ("freeze up", 1.5),
+        ("impending doom", 2.0),
+        # Filipino / Taglish
+        ("kinakabahan", 2.0),
+        ("kabado", 1.8),
+        ("natatakot", 1.5),
+        ("natataranta", 1.8),
+        ("balisa", 1.8),
+        ("nag aalala", 1.8),
+        ("hindi mapanatag", 1.8),
+        ("hindi mapakali", 1.8),
+        ("takot mabigo", 1.8),
+        ("hindi makatulog sa pagaalala", 2.0),
+        ("parang may mangyayaring masama", 1.8),
+        ("nanginginig sa kaba", 2.0),
+        ("nahihirapan huminga pag stressed", 2.0),
     ],
 
     "sadness": [
-        "sad", "depressed", "depression",
-        "hopeless", "lonely", "empty",
-        "worthless", "crying",
-        "malungkot", "lungkot",
-        "kawalan ng pag asa",
-        "walang halaga",
-        "wala akong gana",
-        "di na kaya"
+        # English
+        ("sad", 1.5),
+        ("sadness", 1.5),
+        ("depressed", 2.0),
+        ("depression", 2.0),
+        ("hopeless", 2.2),
+        ("hopelessness", 2.2),
+        ("lonely", 1.8),
+        ("alone", 1.5),
+        ("empty inside", 2.2),
+        ("worthless", 2.2),
+        ("burden to everyone", 2.5),
+        ("nobody cares", 2.0),
+        ("nobody understands", 2.0),
+        ("crying for no reason", 2.0),
+        ("lost interest", 2.0),
+        ("no motivation", 1.8),
+        ("feel broken", 2.2),
+        ("feel abandoned", 2.0),
+        ("feel ignored", 1.8),
+        ("feel unwanted", 2.0),
+        # Filipino / Taglish
+        ("malungkot", 2.0),
+        ("lungkot", 1.8),
+        ("wala nang gana", 2.2),
+        ("wala na akong gana", 2.2),
+        ("walang halaga", 2.2),
+        ("parang wala akong silbi", 2.2),
+        ("di ko na kaya", 2.0),
+        ("ayoko na umalis sa kwarto", 2.0),
+        ("parang wala akong halaga", 2.2),
+        ("hindi mahanap motivation", 1.8),
+        ("iyak gabi gabi", 2.2),
+        ("parang ako lang palagi", 2.0),
     ],
 
     "stress": [
-        "stressed", "stress",
-        "overwhelmed", "pressure",
-        "burnout", "drained",
-        "exhausted",
-        "pagod", "napapagod",
-        "naiistress"
+        # English
+        ("stressed", 2.0),
+        ("stress", 1.8),
+        ("overwhelmed", 2.0),
+        ("pressure", 1.8),
+        ("burnout", 2.2),
+        ("burned out", 2.2),
+        ("burnt out", 2.2),
+        ("drained", 1.8),
+        ("exhausted", 1.8),
+        ("too many deadlines", 2.2),
+        ("can't cope", 2.0),
+        ("workload is killing me", 2.5),
+        ("no time to sleep", 2.0),
+        ("no time to rest", 2.0),
+        ("too much work", 2.0),
+        ("stretched too thin", 2.0),
+        ("drowning in tasks", 2.2),
+        ("can't manage", 1.8),
+        ("academic pressure", 2.0),
+        ("financial stress", 2.0),
+        # Filipino / Taglish
+        ("pagod", 1.8),
+        ("pagod na pagod", 2.2),
+        ("napapagod", 1.8),
+        ("nakakapagod", 1.8),
+        ("naiistress", 2.0),
+        ("hindi ko na kaya ang pressure", 2.5),
+        ("ubos na energy", 2.2),
+        ("wala nang oras matulog", 2.2),
+        ("sobrang daming requirements", 2.0),
+        ("hindi matapos gawain", 1.8),
+        ("andaming expectations", 1.8),
+        ("sabay sabay problema", 2.0),
     ],
 }
 
-
 INTENSIFIERS = {
-    "sobrang", "sobra", "grabe", "super",
-    "too much", "napaka"
+    # Filipino
+    "sobrang", "sobra", "grabe", "super", "napaka", "talagang",
+    # English
+    "extremely", "very", "too", "so much", "unbearable", "terrible",
+    "completely", "absolutely", "totally"
 }
 
 ESCALATION_MESSAGE = (
-    "If you or someone else is in immediate danger, please contact local emergency services "
-    "or a trusted person. If you're feeling like harming yourself, reach out to a crisis line "
-    "or a mental health professional."
+    "You are not alone. If you or someone you know is in danger, "
+    "please contact local emergency services or a trusted person immediately. "
+    "You can also reach a crisis line or mental health professional for support."
 )
 
 
 def normalize_text(text: str) -> str:
     text = text.lower()
+    # collapse repeated characters (e.g., "soooo" -> "so")
     text = re.sub(r"(.)\1{2,}", r"\1", text)
+    # normalize unicode quotes
+    text = re.sub(r"[\u2018\u2019\u201c\u201d]", "'", text)
+    # strip excessive punctuation but keep apostrophes
+    text = re.sub(r"[^\w\s']", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
 def remove_stopwords(text: str) -> str:
     tokens = text.split()
-    filtered = [t for t in tokens if t not in STOPWORDS]
-    return " ".join(filtered)
+    return " ".join(t for t in tokens if t not in STOPWORDS)
+
+
+def _phrase_match(keyword: str, text: str) -> bool:
+    if re.search(r"\b" + re.escape(keyword) + r"\b", text):
+        return True
+    return SequenceMatcher(None, keyword, text).ratio() >= PHRASE_FUZZY_THRESHOLD
+
+
+def _token_match(keyword: str, tokens: set) -> bool:
+    if keyword in tokens:
+        return True
+    return any(
+        SequenceMatcher(None, keyword, t).ratio() >= TOKEN_FUZZY_THRESHOLD
+        for t in tokens
+    )
+
+
+def _count_intensifiers(text: str) -> int:
+    return sum(1 for i in INTENSIFIERS if i in text)
 
 
 def analyze_with_rules(user_input: str) -> Dict[str, object]:
     raw_text = user_input or ""
     text = normalize_text(raw_text)
-    text = remove_stopwords(text)
+    clean_text = remove_stopwords(text)
+    tokens = set(clean_text.split())
 
-    counts = {label: 0 for label in KEYWORDS}
+    scores: Dict[str, float] = {label: 0.0 for label in KEYWORDS}
     matched: Dict[str, List[str]] = {label: [] for label in KEYWORDS}
 
-    for label, words in KEYWORDS.items():
-        for w in words:
-            pattern = r"\b" + re.escape(w) + r"\b"
-            if re.search(pattern, text):
-                counts[label] += 1
-                matched[label].append(w)
+    for label, kw_list in KEYWORDS.items():
+        for kw, weight in kw_list:
+            hit = False
+            tag = kw
+
+            if " " in kw:
+                if _phrase_match(kw, clean_text):
+                    hit = True
+                elif _phrase_match(kw, text):
+                    hit = True
+                    tag = kw + " (fuzzy)"
             else:
-                # fuzzy phrase/token matching fallback
-                if ' ' in w:
-                    # compare phrase similarity against full text
-                    if SequenceMatcher(None, w, text).ratio() >= PHRASE_FUZZY_THRESHOLD:
-                        counts[label] += 1
-                        matched[label].append(w + " (fuzzy)")
-                else:
-                    # token-wise similarity check
-                    tokens = set(text.split())
-                    for t in tokens:
-                        if SequenceMatcher(None, w, t).ratio() >= TOKEN_FUZZY_THRESHOLD:
-                            counts[label] += 1
-                            matched[label].append(w + " (fuzzy->" + t + ")")
-                            break
+                if _token_match(kw, tokens):
+                    hit = True
 
-    total_hits = sum(counts.values())
+            if hit:
+                scores[label] += weight
+                matched[label].append(tag)
 
-    # Urgent escalation: if suicidal keywords are present, prioritize immediately
-    if matched.get('suicidal'):
+    # Hard escalation: suicidal always wins if any keyword matched
+    if matched["suicidal"]:
         return {
             "intent": "suicidal",
             "confidence": 0.99,
             "intensity": 1.0,
-            "matched_keywords": {"suicidal": matched['suicidal']},
+            "matched_keywords": {"suicidal": matched["suicidal"]},
             "escalate": True,
-            "escalation_message": ESCALATION_MESSAGE
+            "escalation_message": ESCALATION_MESSAGE,
         }
 
-    if total_hits == 0:
+    total_score = sum(scores.values())
+
+    if total_score == 0.0:
         return {
             "intent": "neutral",
             "confidence": 0.5,
             "intensity": 0.0,
-            "matched_keywords": {}
+            "matched_keywords": {},
         }
 
-    best_label = max(counts, key=counts.get)
-    best_count = counts[best_label]
+    best_label = max(scores, key=scores.get)
+    best_score = scores[best_label]
 
-    confidence = best_count / total_hits
+    # Confidence: share of total weighted score belonging to best label
+    confidence = round(best_score / total_score, 3)
 
-    intensity_score = best_count
-
-    for intensifier in INTENSIFIERS:
-        if intensifier in text:
-            intensity_score += 1
-
-    intensity = min(1.0, intensity_score / 5)
+    # Intensity: normalized score boosted by intensifier count
+    intensifier_boost = _count_intensifiers(text) * 0.15
+    raw_intensity = (best_score / 10.0) + intensifier_boost
+    intensity = round(min(1.0, raw_intensity), 3)
 
     return {
         "intent": best_label,
-        "confidence": round(confidence, 3),
-        "intensity": round(intensity, 3),
-        "matched_keywords": {
-            best_label: matched[best_label]
-        }
+        "confidence": confidence,
+        "intensity": intensity,
+        "matched_keywords": {best_label: matched[best_label]},
     }
