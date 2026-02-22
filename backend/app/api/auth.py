@@ -25,6 +25,11 @@ TEST_CREDENTIALS = {
         "access_code": "ACCESS789",
         "antibot": "GAIDA",
     },
+    "COUNSELOR01": {
+        "email": "counselor@ue.edu.ph",
+        "access_code": "COUNSEL123",
+        "antibot": "GAIDA",
+    },
 }
 
 

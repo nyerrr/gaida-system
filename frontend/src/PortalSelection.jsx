@@ -72,7 +72,10 @@ export default function PortalSelection() {
           </button>
 
           {/* Counselor Dashboard */}
-          <button className="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-6 hover:border-red-600 hover:bg-gray-850 hover:shadow-lg transition-all duration-200 flex items-center gap-4 group">
+          <button
+            onClick={() => navigate('/counselor-login')}
+            className="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-6 hover:border-red-600 hover:bg-gray-850 hover:shadow-lg transition-all duration-200 flex items-center gap-4 group"
+          >
             <div className="w-16 h-16 bg-gradient-to-br from-red-600 to-red-700 rounded-full flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-200 shadow-md">
               <svg className="w-9 h-9 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
