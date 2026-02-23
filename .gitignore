@@ -1,28 +1,57 @@
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+*.local
+
+# =========================
 # Logs
-logs
+# =========================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-# Python bytecode
-*.pyc
-__pycache__/
-node_modules
-dist
-dist-ssr
-*.local
 
-# Editor directories and files
+# =========================
+# Node / Frontend
+# =========================
+node_modules/
+dist/
+dist-ssr/
+build/
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+
+# =========================
+# IDE / Editors
+# =========================
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
+
+# =========================
+# OS Files
+# =========================
 .DS_Store
+Thumbs.db
+
+# =========================
+# Visual Studio
+# =========================
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
 
-.env
+# =========================
+# Temp files
+# =========================
+*.sw?
