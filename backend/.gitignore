@@ -1,29 +1,48 @@
-# Byte-compiled / optimized / DLL files
+# =========================
+# Python Cache
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual environment
+# =========================
+# Virtual Environments
+# =========================
 venv/
-.env/
+.venv/
 
-# VS Code
-.vscode/
+# =========================
+# Environment Files
+# =========================
+.env
+.env.*
 
-# PyCharm
-.idea/
-
-# Logs and database
+# =========================
+# Logs / Databases
+# =========================
 *.log
 *.sqlite3
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# Pickle / model files (optional)
+# =========================
+# Model / Cache Files
+# =========================
 *.pkl
 *.cpython-*
 
-# Node modules (frontend)
-frontend/node_modules/
+# =========================
+# Build Files
+# =========================
+build/
+dist/
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db

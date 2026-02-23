@@ -1,78 +1,74 @@
-import os
-import os
 import json
-from dotenv import load_dotenv
-
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None
-
-load_dotenv()
-
-# Create client only when OpenAI SDK is available and API key is set.
-_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = None
-if OpenAI and _OPENAI_API_KEY:
-    try:
-        client = OpenAI(api_key=_OPENAI_API_KEY)
-    except Exception:
-        client = None
+from app.services.openai_client import client
 
 SYSTEM_PROMPT = """
-You are an intent classification system for a mental health support application.
+You are an intent classification system for a university mental health support chatbot.
+
+Task:
+Classify the emotional intent of the user's message.
 
 Rules:
-- Classify emotional intent ONLY.
-- Do NOT give advice.
-- Do NOT generate supportive messages.
-- Do NOT add explanations.
+- Return ONLY valid JSON
+- Do NOT explain
+- Do NOT add extra text
+- Do NOT give advice
 
-Allowed intent labels:
-- anxiety
-- sadness
-- stress
-- neutral
-- other
+Allowed labels:
+anxiety
+sadness
+stress
+neutral
+other
 
-Output STRICT JSON only:
+JSON format:
 {
-  "intent": "<label>",
-  "confidence": <number between 0 and 1>
+  "intent": "label",
+  "confidence": 0.0
 }
 """
 
 
 def analyze_with_gpt(user_input: str):
-    """Call OpenAI to classify intent. If OpenAI isn't configured, return a conservative fallback.
-
-    Returns a dict: {"intent": <label>, "confidence": <float>}
     """
+    Uses OpenAI to classify emotional intent.
+    Returns:
+    {
+        "intent": str,
+        "confidence": float
+    }
+    """
+
+    # Fallback if API not available
     if not client:
         return {"intent": "other", "confidence": 0.5}
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1-mini",  # cheaper + fast
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_input},
             ],
-            temperature=0.0,
+            temperature=0,
+            max_tokens=60,
         )
 
-        content = None
-        if hasattr(response, "choices") and len(response.choices) > 0:
-            choice = response.choices[0]
-            if hasattr(choice, "message") and choice.message is not None:
-                content = getattr(choice.message, "content", None) or choice.message.get("content")
-            else:
-                content = getattr(choice, "text", None)
+        content = response.choices[0].message.content.strip()
 
-        if not content:
-            raise ValueError("no content in completion")
+        # Try parsing JSON safely
+        result = json.loads(content)
 
-        return json.loads(content)
+        # Validate structure
+        intent = result.get("intent", "other")
+        confidence = float(result.get("confidence", 0.5))
+
+        return {
+            "intent": intent,
+            "confidence": confidence
+        }
 
     except Exception:
-        return {"intent": "other", "confidence": 0.5}
+        return {
+            "intent": "other",
+            "confidence": 0.5
+        }
