@@ -1,11 +1,13 @@
 # backend/app/main.py
 import sys
 import os
+from pathlib import Path
+import json
+from datetime import datetime  # <-- needed for logging timestamps
 
 # ----------------------------
 # Add project root to Python path
 # ----------------------------
-# This allows importing frontend modules when running backend alone
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if project_root not in sys.path:
     sys.path.append(project_root)
@@ -17,12 +19,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Internal backend services
 from app.services.intent_router import analyze_intent
 from app.services.virtual_agent import generate_response
 from app.api import auth
-
-# Frontend module
 from frontend.src.voice import router as audio_router
 
 # ----------------------------
@@ -34,10 +33,10 @@ app = FastAPI(title="GAIDA Backend")
 app.include_router(auth.router)
 app.include_router(audio_router)
 
-# Enable CORS for local frontend during development
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # you can restrict to frontend URL later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,24 +50,60 @@ class UserInput(BaseModel):
     session_id: str | None = None
 
 # ----------------------------
+# ✅ Logging setup
+# ----------------------------
+LOG_FILE = Path("logs/interactions.json")
+LOG_FILE.parent.mkdir(exist_ok=True)  # make sure 'logs' folder exists
+if not LOG_FILE.exists():
+    LOG_FILE.write_text("[]")  # initialize as empty JSON array
+
+def log_interaction(session_id: str, user_message: str, assistant_reply: str):
+    """Append each chat session interaction to interactions.json"""
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+    except json.JSONDecodeError:
+        logs = []
+
+    logs.append({
+        "timestamp": datetime.utcnow().isoformat(),
+        "session_id": session_id,
+        "user_message": user_message,
+        "assistant_reply": assistant_reply
+    })
+
+    with open(LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(logs, f, indent=4)
+
+# ----------------------------
 # Routes
 # ----------------------------
 @app.get("/")
 def root():
     return {"status": "ok", "message": "GAIDA Backend"}
 
-
 @app.post("/virtual-agent")
 def virtual_agent(input: UserInput):
+    # Detect intent
     intent_data = analyze_intent(
         user_message=input.message,
         session_id=input.session_id
     )
 
+    # Generate response
     response_text = (
         intent_data.get("response")
         if isinstance(intent_data, dict) and intent_data.get("response")
         else generate_response(intent_data)
+    )
+
+    # ----------------------------
+    # Log the chat
+    # ----------------------------
+    log_interaction(
+        session_id=intent_data.get("session_id") or input.session_id or "unknown",
+        user_message=input.message,
+        assistant_reply=response_text
     )
 
     return {

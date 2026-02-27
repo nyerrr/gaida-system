@@ -3,7 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from app.utils.consent_checker import has_consent
 
-LOG_FILE = Path("logs/interactions.json")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+LOG_FILE = BASE_DIR / "logs" / "interactions.json"
 
 
 def log_interaction(
@@ -15,7 +16,7 @@ def log_interaction(
     response: str,
     method: str
 ):
-    # 🔐 Ethics check: only log if consent exists
+
     if not has_consent(session_id):
         return
 
@@ -27,19 +28,20 @@ def log_interaction(
         "confidence": confidence,
         "anxiety_score": anxiety_score,
         "response": response,
-        "method": method
+        "method": method,
     }
 
-    # Load existing logs safely
+    # Load safely
     if LOG_FILE.exists():
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            data = []
     else:
         data = []
 
-    # Append new interaction
     data.append(log_entry)
 
-    # Save back to file
     with open(LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)

@@ -10,11 +10,22 @@ from app.utils.consent_checker import has_consent
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 _SUBSCRIBERS: List[Callable] = []
 
-LOG_FILE = Path("logs/interactions.json")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+LOG_FILE = BASE_DIR / "logs" / "interactions.json"
 
 
-def start_session(user_id: str | None = None) -> str:
-    session_id = str(uuid.uuid4())
+def start_session(user_id: str | None = None, session_id: str | None = None) -> str:
+    """Create a new session record.
+
+    If ``session_id`` is provided we use it verbatim; otherwise we generate a
+    fresh UUID.  This guarantees that callers who already know their ID
+    (e.g. ``analyze_intent``) will not have it silently replaced by a random
+    value later in ``record_interaction``.
+    """
+
+    if session_id is None:
+        session_id = str(uuid.uuid4())
+
     SESSIONS[session_id] = {
         "session_id": session_id,
         "user_id": user_id,
@@ -67,8 +78,10 @@ def _persist_entry(entry: Dict[str, Any]):
 def record_interaction(session_id: str, sender: str, text: str, analysis: Dict | None = None, response: str | None = None):
     session = SESSIONS.get(session_id)
     if session is None:
-        # create ephemeral session if missing
-        session_id = start_session(None)
+        # create ephemeral session if missing.  respect any ID the caller
+        # supplied so that all interactions in a single conversation use the
+        # same identifier.
+        session_id = start_session(None, session_id=session_id)
         session = SESSIONS[session_id]
 
     entry = {
@@ -93,6 +106,42 @@ def record_interaction(session_id: str, sender: str, text: str, analysis: Dict |
     try:
         if has_consent(session_id):
             _persist_entry(entry)
+
+            # also mirror the interaction into the flattened log format
+            # used by ``log_interaction`` so that every message contains
+            # session_id, intent/confidence, etc.  when the message comes
+            # from the user we have analysis info already; for bot replies
+            # we synthesize whatever metadata we can.
+            from app.utils.logger import log_interaction
+
+            if sender == "user":
+                # user message is the primary thing we care about
+                intent = entry.get("analysis", {}).get("intent", "unknown")
+                confidence = entry.get("analysis", {}).get("confidence", 0.0)
+                anxiety_score = entry.get("analysis", {}).get(
+                    "intensity", 0
+                )
+                # response field is kept empty for user inputs
+                log_interaction(
+                    session_id=session_id,
+                    user_message=text,
+                    intent=intent,
+                    confidence=confidence,
+                    anxiety_score=anxiety_score,
+                    response=response or "",
+                    method="session-manager",
+                )
+            else:
+                # bot replies can also be logged if desired (optional)
+                log_interaction(
+                    session_id=session_id,
+                    user_message=text,
+                    intent=entry.get("analysis", {}).get("intent", ""),
+                    confidence=entry.get("analysis", {}).get("confidence", 0.0),
+                    anxiety_score=entry.get("analysis", {}).get("anxiety_score", 0),
+                    response=response or "",
+                    method="session-manager",
+                )
     except Exception:
         # if consent check fails, skip persistence
         pass

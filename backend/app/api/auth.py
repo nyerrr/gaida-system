@@ -5,7 +5,8 @@ from pathlib import Path
 from datetime import datetime
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-CONSENT_FILE = Path("logs/consents.json")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+CONSENT_FILE = BASE_DIR / "logs" / "consents.json"
 
 # Temporary test credentials for development/testing
 TEST_CREDENTIALS = {
@@ -82,6 +83,8 @@ def record_consent(payload: ConsentRequest):
     """
     Record user consent for logging interactions.
     """
+    print(f"DEBUG: Recording consent for session {payload.session_id}: {payload.consent_given}")
+    
     # Load existing consents
     if CONSENT_FILE.exists():
         with open(CONSENT_FILE, "r", encoding="utf-8") as f:
@@ -106,6 +109,8 @@ def record_consent(payload: ConsentRequest):
     CONSENT_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CONSENT_FILE, "w", encoding="utf-8") as f:
         json.dump(consents, f, indent=2)
+    
+    print(f"DEBUG: Consent saved. File now contains: {[c.get('session_id') for c in consents]}")
     
     return {
         "success": True,

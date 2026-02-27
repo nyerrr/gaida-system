@@ -8,5 +8,11 @@
     "session_id": "session_1771571663409_62e4pbqai",
     "consent_given": true,
     "recorded_at": "2026-02-20T07:14:23.421810"
+  },
+  {
+    "session_id": "test123",
+    "consent_given": true,
+    "recorded_at": "2026-02-27T11:53:31.637430",
+    "updated_at": "2026-02-27T11:57:48.136397"
   }
 ]
