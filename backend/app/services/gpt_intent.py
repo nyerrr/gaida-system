@@ -1,5 +1,6 @@
 import json
 from app.services.openai_client import client
+from backend.app.core.config import OPENAI_MODEL_BASE
 
 SYSTEM_PROMPT = """
 You are an intent classification system for a university mental health support chatbot.
@@ -44,7 +45,7 @@ def analyze_with_gpt(user_input: str):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1-mini",  # cheaper + fast
+            model=OPENAI_MODEL_BASE,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_input},
@@ -52,7 +53,6 @@ def analyze_with_gpt(user_input: str):
             temperature=0,
             max_tokens=60,
         )
-
         content = response.choices[0].message.content.strip()
 
         # Try parsing JSON safely

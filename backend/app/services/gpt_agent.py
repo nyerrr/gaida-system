@@ -2,6 +2,7 @@ import os
 import json
 from dotenv import load_dotenv
 from typing import Dict, Any
+from app.core.config import OPENAI_MODEL_BASE
 
 try:
     from openai import OpenAI
@@ -52,7 +53,7 @@ def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-4o",
+            model=OPENAI_MODEL_BASE,
             messages=messages,
             temperature=0.7,
             max_tokens=200,
