@@ -57,20 +57,34 @@ LOG_FILE.parent.mkdir(exist_ok=True)  # make sure 'logs' folder exists
 if not LOG_FILE.exists():
     LOG_FILE.write_text("[]")  # initialize as empty JSON array
 
-def log_interaction(session_id: str, user_message: str, assistant_reply: str):
-    """Append each chat session interaction to interactions.json"""
+def log_interaction(session_id: str, user_message: str, assistant_reply: str, 
+                   intent: str = None, confidence: float = None, anxiety_score: int = None, 
+                   method: str = None):
+    """Append each chat session interaction to interactions.json with intent and confidence"""
     try:
         with open(LOG_FILE, "r", encoding="utf-8") as f:
             logs = json.load(f)
     except json.JSONDecodeError:
         logs = []
 
-    logs.append({
+    log_entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "session_id": session_id,
         "user_message": user_message,
         "assistant_reply": assistant_reply
-    })
+    }
+    
+    # Add optional fields if provided
+    if intent is not None:
+        log_entry["intent"] = intent
+    if confidence is not None:
+        log_entry["confidence"] = confidence
+    if anxiety_score is not None:
+        log_entry["anxiety_score"] = anxiety_score
+    if method is not None:
+        log_entry["method"] = method
+
+    logs.append(log_entry)
 
     with open(LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(logs, f, indent=4)
@@ -103,7 +117,11 @@ def virtual_agent(input: UserInput):
     log_interaction(
         session_id=intent_data.get("session_id") or input.session_id or "unknown",
         user_message=input.message,
-        assistant_reply=response_text
+        assistant_reply=response_text,
+        intent=intent_data.get("intent"),
+        confidence=intent_data.get("confidence"),
+        anxiety_score=intent_data.get("anxiety_score"),
+        method=intent_data.get("method")
     )
 
     return {

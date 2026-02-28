@@ -76,5 +76,21 @@
         "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
         "user_message": "thank you",
         "assistant_reply": "GAIDA is a virtual counseling assistant for students. You can share how you're feeling, talk about stress, anxiety, or sadness, and get support anytime. Your counselor can also view sessions to follow up with you."
+    },
+    {
+        "timestamp": "2026-02-28T06:20:36.785795",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i cant sleep because of exams",
+        "assistant_reply": "I understand that exams can be stressful. Try deep breathing or listening to calming music to help you relax before bed."
+    },
+    {
+        "timestamp": "2026-02-28T06:29:53.164783",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i cant sleep because of exams",
+        "assistant_reply": "I'm sorry to hear that exams are affecting your sleep. It's important to try some relaxation techniques before bed like deep breathing or listening to calming music to help you unwind.",
+        "intent": "stress",
+        "confidence": 0.357,
+        "anxiety_score": 3,
+        "method": "ml-model"
     }
 ]

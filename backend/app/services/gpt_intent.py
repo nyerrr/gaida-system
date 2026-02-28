@@ -10,9 +10,8 @@ Classify the emotional intent of the user's message.
 
 Rules:
 - Return ONLY valid JSON
-- Do NOT explain
-- Do NOT add extra text
-- Do NOT give advice
+- No explanations
+- No extra text
 
 Allowed labels:
 anxiety
@@ -30,44 +29,32 @@ JSON format:
 
 
 def analyze_with_gpt(user_input: str):
-    """
-    Uses OpenAI to classify emotional intent.
-    Returns:
-    {
-        "intent": str,
-        "confidence": float
-    }
-    """
 
-    # Fallback if API not available
     if not client:
         return {"intent": "other", "confidence": 0.5}
 
     try:
         response = client.chat.completions.create(
-            model=OPENAI_MODEL_BASE,
+            model="ft:gpt-3.5-turbo-0125:personal::DDu4xxxR",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_input},
             ],
             temperature=0,
-            max_tokens=60,
+            response_format={"type": "json_object"},  # important
+            max_tokens=50,
         )
-        content = response.choices[0].message.content.strip()
 
-        # Try parsing JSON safely
+        content = response.choices[0].message.content
         result = json.loads(content)
 
-        # Validate structure
-        intent = result.get("intent", "other")
-        confidence = float(result.get("confidence", 0.5))
-
         return {
-            "intent": intent,
-            "confidence": confidence
+            "intent": result.get("intent", "other"),
+            "confidence": float(result.get("confidence", 0.5)),
         }
 
-    except Exception:
+    except Exception as e:
+        print("Intent detection error:", e)
         return {
             "intent": "other",
             "confidence": 0.5
