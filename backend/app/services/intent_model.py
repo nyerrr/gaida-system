@@ -11,6 +11,9 @@ Usage:
 
 import json
 from app.services.openai_client import client
+from app.utils.logger import logger
+from app.utils.retry import exponential_backoff_retry
+from openai import APIError, RateLimitError, APIConnectionError, APITimeoutError
 
 # Your fine-tuned model ID
 FINE_TUNED_MODEL = "ft:gpt-3.5-turbo-0125:personal::DDu4xxxR"
@@ -44,8 +47,9 @@ def predict_intent(user_input: str) -> dict:
     if not user_input or not user_input.strip():
         return {"intent": "neutral", "confidence": 0.5}
 
-    try:
-        response = client.chat.completions.create(
+    def _call_model():
+        """Inner function to call model with retry logic."""
+        return client.chat.completions.create(
             model=FINE_TUNED_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -53,6 +57,17 @@ def predict_intent(user_input: str) -> dict:
             ],
             temperature=0,
             max_tokens=60,
+        )
+
+    try:
+        # Retry on transient errors
+        response = exponential_backoff_retry(
+            _call_model,
+            exception_types=(
+                RateLimitError,
+                APIConnectionError,
+                APITimeoutError,
+            )
         )
 
         content = response.choices[0].message.content.strip()
@@ -74,7 +89,14 @@ def predict_intent(user_input: str) -> dict:
             "confidence": round(confidence, 2)
         }
 
+    except APIError as e:
+        logger.error(f"OpenAI API error after retries in predict_intent: {e}")
+        return {"intent": "neutral", "confidence": 0.5, "error": str(e)}
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse model response as JSON: {e}")
+        return {"intent": "neutral", "confidence": 0.5, "error": str(e)}
     except Exception as e:
+        logger.error(f"Unexpected error in predict_intent: {e}")
         return {"intent": "neutral", "confidence": 0.5, "error": str(e)}
 
 

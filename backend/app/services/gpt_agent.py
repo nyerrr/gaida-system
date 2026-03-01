@@ -3,6 +3,9 @@ import json
 from dotenv import load_dotenv
 from typing import Dict, Any
 from app.core.config import OPENAI_MODEL_BASE
+from app.utils.logger import logger
+from app.utils.retry import exponential_backoff_retry
+from openai import APIError, RateLimitError, APIConnectionError, APITimeoutError
 
 try:
     from openai import OpenAI
@@ -15,8 +18,10 @@ _OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = None
 if OpenAI and _OPENAI_API_KEY:
     try:
-        client = OpenAI(api_key=_OPENAI_API_KEY)
-    except Exception:
+        from app.core.config import OPENAI_TIMEOUT
+        client = OpenAI(api_key=_OPENAI_API_KEY, timeout=OPENAI_TIMEOUT)
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
         client = None
 
 
@@ -36,6 +41,7 @@ def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any
     Returns: {"response": str, "used": bool}
     """
     if not client:
+        logger.warning("OpenAI client not available for response generation")
         return {"response": None, "used": False}
 
     # Build messages: system prompt, then recent session messages if available
@@ -51,12 +57,24 @@ def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any
     # add current user input
     messages.append({"role": "user", "content": user_message})
 
-    try:
-        resp = client.chat.completions.create(
+    def _call_gpt():
+        """Inner function to call OpenAI with retry logic."""
+        return client.chat.completions.create(
             model=OPENAI_MODEL_BASE,
             messages=messages,
             temperature=0.7,
             max_tokens=200,
+        )
+
+    try:
+        # Retry on transient errors
+        resp = exponential_backoff_retry(
+            _call_gpt,
+            exception_types=(
+                RateLimitError,
+                APIConnectionError,
+                APITimeoutError,
+            )
         )
 
         content = None
@@ -68,9 +86,13 @@ def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any
                 content = getattr(choice, "text", None)
 
         if not content:
+            logger.warning("Empty content from GPT response")
             return {"response": None, "used": False}
 
         return {"response": content.strip(), "used": True}
 
-    except Exception:
+    except APIError as e:
+        logger.error(f"OpenAI API error after retries in generate_response_with_gpt: {e}")
         return {"response": None, "used": False}
+    except Exception as e:
+        logger.error(f"Error generating response with GPT: {e}")

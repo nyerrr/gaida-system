@@ -3,6 +3,8 @@ from typing import Dict, Any
 from app.services.openai_client import client
 from backend.app.core.config import OPENAI_FINETUNED_MODEL
 from app.utils.logger import logger
+from app.utils.retry import exponential_backoff_retry
+from openai import APIError, RateLimitError, APIConnectionError, APITimeoutError
 
 SYSTEM_PROMPT = """
 You are an intent classification system for a university mental health support chatbot.
@@ -77,16 +79,28 @@ def analyze_with_gpt(user_input: str) -> Dict[str, Any]:
         logger.warning("OpenAI client not available")
         return {"intent": "other", "confidence": 0.5}
 
-    try:
-        response = client.chat.completions.create(
+    def _call_gpt():
+        """Inner function to call OpenAI with retry logic."""
+        return client.chat.completions.create(
             model=OPENAI_FINETUNED_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_input},
             ],
             temperature=0,
-            response_format={"type": "json_object"},  # important
+            response_format={"type": "json_object"},
             max_tokens=50,
+        )
+
+    try:
+        # Retry on transient errors
+        response = exponential_backoff_retry(
+            _call_gpt,
+            exception_types=(
+                RateLimitError,
+                APIConnectionError,
+                APITimeoutError,
+            )
         )
 
         content = response.choices[0].message.content
@@ -106,6 +120,9 @@ def analyze_with_gpt(user_input: str) -> Dict[str, Any]:
             logger.error(f"Invalid intent response schema: {e}. Data: {result}")
             return {"intent": "other", "confidence": 0.5}
 
+    except APIError as e:
+        logger.error(f"OpenAI API error after retries: {e}")
+        return {"intent": "other", "confidence": 0.5}
     except Exception as e:
         logger.error(f"Intent detection error: {e}")
         return {"intent": "other", "confidence": 0.5}
