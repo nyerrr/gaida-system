@@ -10,11 +10,6 @@
 # =========================
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
 # =========================
 # Node / Frontend
@@ -29,6 +24,9 @@ build/
 # =========================
 __pycache__/
 *.py[cod]
+venv/
+env/
+*.sqlite3
 
 # =========================
 # IDE / Editors
