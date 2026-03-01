@@ -224,8 +224,19 @@ def _count_intensifiers(text: str) -> int:
 
 
 def analyze_with_rules(user_input: str) -> Dict[str, object]:
+    text = normalize_text(user_input)
+
+    # --- Step 2a: Pre-check for meta/language queries ---
+    if any(kw in text for kw in ["tagalog", "nagtatagalog", "do you speak", "english"]):
+        return {
+            "intent": "language_question",
+            "confidence": 1.0,
+            "intensity": 0.0,
+            "matched_keywords": {"language_question": [text]},
+        }
+
+    # --- Step 2b: Existing emotional scoring logic ---
     raw_text = user_input or ""
-    text = normalize_text(raw_text)
     clean_text = remove_stopwords(text)
     tokens = set(clean_text.split())
 
@@ -251,7 +262,7 @@ def analyze_with_rules(user_input: str) -> Dict[str, object]:
                 scores[label] += weight
                 matched[label].append(tag)
 
-    # Hard escalation: suicidal always wins if any keyword matched
+    # Hard escalation for suicidal
     if matched["suicidal"]:
         return {
             "intent": "suicidal",
@@ -275,10 +286,7 @@ def analyze_with_rules(user_input: str) -> Dict[str, object]:
     best_label = max(scores, key=scores.get)
     best_score = scores[best_label]
 
-    # Confidence: share of total weighted score belonging to best label
     confidence = round(best_score / total_score, 3)
-
-    # Intensity: normalized score boosted by intensifier count
     intensifier_boost = _count_intensifiers(text) * 0.15
     raw_intensity = (best_score / 10.0) + intensifier_boost
     intensity = round(min(1.0, raw_intensity), 3)

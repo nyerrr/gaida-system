@@ -178,23 +178,36 @@ def detect_intent_from_text(text: str) -> Tuple[str, float]:
 
 
 def generate_response(intent_data: dict):
-    # Intent dict (from router)
+    # --- 1. If already intent dict ---
     if isinstance(intent_data, dict) and 'intent' in intent_data:
         intent = intent_data.get('intent')
+
+        # Meta / language question handling
+        if intent == "language_question":
+            return "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
+
         return _get_response(intent)
 
-    # Dict with raw text
+    # --- 2. If dict with raw text ---
     if isinstance(intent_data, dict) and 'text' in intent_data:
         text = intent_data.get('text', '')
         intent, confidence = detect_intent_from_text(text)
-        response = _get_response(intent)
+
+        if intent == "language_question":
+            response = "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
+        else:
+            response = _get_response(intent)
+
         if intent_data.get('return_meta'):
             return {'response': response, 'intent': intent, 'confidence': confidence}
         return response
 
-    # Plain string
+    # --- 3. If plain string input ---
     if isinstance(intent_data, str):
         intent, _ = detect_intent_from_text(intent_data)
+        if intent == "language_question":
+            return "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
         return _get_response(intent)
 
+    # --- 4. Fallback ---
     return _get_response("unknown")
