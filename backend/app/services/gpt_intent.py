@@ -35,7 +35,7 @@ def analyze_with_gpt(user_input: str):
 
     try:
         response = client.chat.completions.create(
-            model="ft:gpt-3.5-turbo-0125:personal::DDu4xxxR",
+            model="ft:gpt-3.5-turbo-0125:personal::DEWms9GF",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_input},

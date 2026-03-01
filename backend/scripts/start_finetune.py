@@ -26,7 +26,7 @@ except Exception as e:
 # Start fine-tuning GPT-3.5-turbo
 try:
     job = client.fine_tuning.jobs.create(
-        training_file="file-8YVKRzaFW5tCzQ2biDqcGf",
+        training_file="file-TcGmwe5QPFRJAjkCNzVjvk",
         model="gpt-3.5-turbo"
     )
     print("Fine-tune job started! Job ID:", job.id)
