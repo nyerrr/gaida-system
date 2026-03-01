@@ -95,12 +95,22 @@ KEYWORDS = {
 
 
 def _normalize_text(text: str) -> str:
+    """
+    Normalize input text for fuzzy matching:
+    - Lowercase
+    - Convert fancy quotes to normal quotes
+    - Remove punctuation
+    - Collapse multiple spaces
+    - Remove repeated letters (sooooo -> so)
+    """
     if not isinstance(text, str):
         return ""
+    
     txt = text.lower()
-    txt = re.sub(r"[\u2018\u2019\u201c\u201d]", "'", txt)
-    txt = re.sub(r"[^\w\s']+", ' ', txt)
-    txt = re.sub(r"\s+", ' ', txt).strip()
+    txt = re.sub(r"[\u2018\u2019\u201c\u201d]", "'", txt)        # fancy quotes
+    txt = re.sub(r"[^\w\s']+", ' ', txt)                      # remove punctuation
+    txt = re.sub(r'(.)\1{2,}', r'\1', txt)                   # collapse repeated letters
+    txt = re.sub(r"\s+", ' ', txt).strip()                    # normalize whitespace
     return txt
 
 
