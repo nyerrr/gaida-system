@@ -1,10 +1,30 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from app.utils.consent_checker import has_consent
 
+# Configure structured logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Create logs directory if it doesn't exist
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-LOG_FILE = BASE_DIR / "logs" / "interactions.json"
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
+LOG_FILE = LOG_DIR / "interactions.json"
+LOG_DEBUG_FILE = LOG_DIR / "debug.log"
+
+# File handler for debug logs
+if not logger.handlers:
+    fh = logging.FileHandler(LOG_DEBUG_FILE)
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
 
 
 def log_interaction(

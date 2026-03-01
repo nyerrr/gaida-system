@@ -1,6 +1,8 @@
 import json
+from typing import Dict, Any
 from app.services.openai_client import client
-from backend.app.core.config import OPENAI_MODEL_BASE
+from backend.app.core.config import OPENAI_FINETUNED_MODEL
+from app.utils.logger import logger
 
 SYSTEM_PROMPT = """
 You are an intent classification system for a university mental health support chatbot.
@@ -27,15 +29,57 @@ JSON format:
 }
 """
 
+ALLOWED_INTENTS = {"anxiety", "sadness", "stress", "neutral", "other"}
 
-def analyze_with_gpt(user_input: str):
 
+def _validate_intent_response(data: Any) -> Dict[str, Any]:
+    """
+    Validate and sanitize intent response from model.
+    
+    Args:
+        data: Parsed JSON data from model response
+        
+    Returns:
+        Valid intent dict with intent and confidence keys
+        
+    Raises:
+        ValueError: If data doesn't match expected schema
+    """
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected dict, got {type(data).__name__}")
+    
+    intent = data.get("intent", "").strip()
+    if not intent or intent not in ALLOWED_INTENTS:
+        raise ValueError(f"Invalid intent '{intent}'. Allowed: {ALLOWED_INTENTS}")
+    
+    try:
+        confidence = float(data.get("confidence", 0.5))
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Invalid confidence value: {e}")
+    
+    # Clamp confidence to [0.0, 1.0]
+    confidence = max(0.0, min(1.0, confidence))
+    
+    return {"intent": intent, "confidence": confidence}
+
+
+def analyze_with_gpt(user_input: str) -> Dict[str, Any]:
+    """
+    Analyze user input intent using GPT fine-tuned model.
+    
+    Args:
+        user_input: User message text
+        
+    Returns:
+        Dict with 'intent' (str) and 'confidence' (float in [0.0, 1.0])
+    """
     if not client:
+        logger.warning("OpenAI client not available")
         return {"intent": "other", "confidence": 0.5}
 
     try:
         response = client.chat.completions.create(
-            model="ft:gpt-3.5-turbo-0125:personal::DEWms9GF",
+            model=OPENAI_FINETUNED_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_input},
@@ -46,16 +90,22 @@ def analyze_with_gpt(user_input: str):
         )
 
         content = response.choices[0].message.content
-        result = json.loads(content)
-
-        return {
-            "intent": result.get("intent", "other"),
-            "confidence": float(result.get("confidence", 0.5)),
-        }
+        
+        # Attempt to parse JSON
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse model response as JSON: {e}. Content: {content}")
+            return {"intent": "other", "confidence": 0.5}
+        
+        # Validate schema and values
+        try:
+            validated = _validate_intent_response(result)
+            return validated
+        except ValueError as e:
+            logger.error(f"Invalid intent response schema: {e}. Data: {result}")
+            return {"intent": "other", "confidence": 0.5}
 
     except Exception as e:
-        print("Intent detection error:", e)
-        return {
-            "intent": "other",
-            "confidence": 0.5
-        }
+        logger.error(f"Intent detection error: {e}")
+        return {"intent": "other", "confidence": 0.5}
