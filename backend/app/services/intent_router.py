@@ -28,8 +28,11 @@ _MAX_INFORMATIONAL_WORDS = 20
 def _is_informational(text: str) -> bool:
     stripped = text.strip()
     word_count = len(stripped.split())
+
+    # very short questions must still contain a keyword
     if word_count <= 2:
-        return True
+        return bool(_QUESTION_PATTERN.search(stripped))
+
     return bool(_QUESTION_PATTERN.search(stripped)) and word_count <= _MAX_INFORMATIONAL_WORDS
 
 
