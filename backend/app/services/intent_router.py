@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from app.utils.logger import logger
+from app.utils.logger import log_interaction
 from app.services.session_manager import get_session, start_session, record_interaction
 from app.services.virtual_agent import detect_intent_and_level, _build_result
 from app.services.gpt_agent import generate_response_with_gpt

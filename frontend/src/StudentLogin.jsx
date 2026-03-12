@@ -7,6 +7,7 @@ export default function StudentLogin() {
     student_number: '',
     email: '',
     access_code: '',
+    antibot: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -113,6 +114,21 @@ export default function StudentLogin() {
               required
             />
           </div>
+
+          <div>
+  <label htmlFor="antibot" className="block text-gray-700 text-sm font-medium mb-1.5">
+    Anti-bot Code
+  </label>
+  <input
+    type="text"
+    id="antibot"
+    placeholder="Enter the anti-bot code"
+    value={formData.antibot}
+    onChange={handleChange}
+    className="w-full px-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-colors"
+    required
+  />
+</div>
 
           <div className="flex gap-3">
             <button
