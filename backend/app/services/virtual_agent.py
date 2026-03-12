@@ -95,22 +95,12 @@ KEYWORDS = {
 
 
 def _normalize_text(text: str) -> str:
-    """
-    Normalize input text for fuzzy matching:
-    - Lowercase
-    - Convert fancy quotes to normal quotes
-    - Remove punctuation
-    - Collapse multiple spaces
-    - Remove repeated letters (sooooo -> so)
-    """
     if not isinstance(text, str):
         return ""
-    
     txt = text.lower()
-    txt = re.sub(r"[\u2018\u2019\u201c\u201d]", "'", txt)        # fancy quotes
-    txt = re.sub(r"[^\w\s']+", ' ', txt)                      # remove punctuation
-    txt = re.sub(r'(.)\1{2,}', r'\1', txt)                   # collapse repeated letters
-    txt = re.sub(r"\s+", ' ', txt).strip()                    # normalize whitespace
+    txt = re.sub(r"[\u2018\u2019\u201c\u201d]", "'", txt)
+    txt = re.sub(r"[^\w\s']+", ' ', txt)
+    txt = re.sub(r"\s+", ' ', txt).strip()
     return txt
 
 
@@ -178,36 +168,23 @@ def detect_intent_from_text(text: str) -> Tuple[str, float]:
 
 
 def generate_response(intent_data: dict):
-    # --- 1. If already intent dict ---
+    # Intent dict (from router)
     if isinstance(intent_data, dict) and 'intent' in intent_data:
         intent = intent_data.get('intent')
-
-        # Meta / language question handling
-        if intent == "language_question":
-            return "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
-
         return _get_response(intent)
 
-    # --- 2. If dict with raw text ---
+    # Dict with raw text
     if isinstance(intent_data, dict) and 'text' in intent_data:
         text = intent_data.get('text', '')
         intent, confidence = detect_intent_from_text(text)
-
-        if intent == "language_question":
-            response = "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
-        else:
-            response = _get_response(intent)
-
+        response = _get_response(intent)
         if intent_data.get('return_meta'):
             return {'response': response, 'intent': intent, 'confidence': confidence}
         return response
 
-    # --- 3. If plain string input ---
+    # Plain string
     if isinstance(intent_data, str):
         intent, _ = detect_intent_from_text(intent_data)
-        if intent == "language_question":
-            return "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
         return _get_response(intent)
 
-    # --- 4. Fallback ---
     return _get_response("unknown")

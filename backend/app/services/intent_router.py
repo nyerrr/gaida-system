@@ -2,13 +2,14 @@ import re
 import uuid
 
 from app.services.rule_intent import analyze_with_rules
-from app.services.intent_model import predict_intent  # now uses fine-tuned GPT
+from app.services.intent_model import predict_intent
 from app.services.gpt_agent import generate_response_with_gpt
 from app.services.virtual_agent import generate_response
 from app.utils.logger import log_interaction
 from app.analytics.anxiety_scoring import score_anxiety
 from app.services.session_manager import record_interaction, get_session
 from app.api.counselor import process_alert
+
 
 # ---------------------------------------------------------------------------
 # Informational / FAQ guard
@@ -25,59 +26,50 @@ _QUESTION_PATTERN = re.compile(
 
 _MAX_INFORMATIONAL_WORDS = 20
 
+
 def _is_informational(text: str) -> bool:
     stripped = text.strip()
     word_count = len(stripped.split())
-
-    # very short questions must still contain a keyword
     if word_count <= 2:
-        return bool(_QUESTION_PATTERN.search(stripped))
-
+        return True
     return bool(_QUESTION_PATTERN.search(stripped)) and word_count <= _MAX_INFORMATIONAL_WORDS
 
 
 # ---------------------------------------------------------------------------
-# Main intent analysis (confidence-based selection)
+# Main intent analysis
 # ---------------------------------------------------------------------------
 
 def analyze_intent(user_message: str, session_id: str | None = None, user_id: str | None = None):
 
+    # Step 0: Generate a session ID if none is provided
     if session_id is None:
         session_id = str(uuid.uuid4())
 
-    # --- Rule-based prediction ---
+    # Step 1: Rule-based intent detection first
     rule_result = analyze_with_rules(user_message)
-    if rule_result:
-        rule_intent = rule_result.get("intent") or "other"
-        rule_confidence = float(rule_result.get("confidence", 0.5))
-    else:
-        rule_intent = "other"
-        rule_confidence = 0.0
+    rule_intent = rule_result.get("intent") if rule_result else None
 
-    # --- Informational FAQ guard overrides ---
-    if _is_informational(user_message):
-        rule_intent = "faq"
-        rule_confidence = 0.95
-
-    # --- GPT / ML prediction ---
-    model_result = predict_intent(user_message)
-    model_intent = model_result["intent"]
-    model_confidence = model_result["confidence"]
-
-    # --- Choose the higher confidence result ---
-    if rule_confidence >= model_confidence:
+    if rule_result and rule_intent not in ("neutral", None):
         intent = rule_intent
-        confidence = rule_confidence
+        confidence = rule_result["confidence"]
         method = "rule-based"
+
+    elif _is_informational(user_message):
+        intent = "faq"
+        confidence = 0.95
+        method = "rule-based (informational guard)"
+
     else:
-        intent = model_intent
-        confidence = model_confidence
+        # Step 2: Fall back to ML model
+        model_result = predict_intent(user_message)
+        intent = model_result["intent"]
+        confidence = model_result["confidence"]
         method = "ml-model"
 
-    # --- Anxiety scoring ---
+    # Step 3: Compute anxiety score and map to severity level
     anxiety_score = score_anxiety(intent)
 
-    # --- Counselor alert ---
+    # Step 4: Process severity and trigger counselor alert if High
     counselor_result = process_alert(
         session_id=session_id,
         user_id=user_id,
@@ -88,13 +80,13 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
     severity = counselor_result["severity"]
     alert_sent = counselor_result["alert_sent"]
 
-    # --- Generate fallback response ---
+    # Step 5: Generate static fallback response from virtual_agent
     response_text = generate_response({
         "intent": intent,
         "confidence": confidence
     })
 
-    # --- Enhance with GPT if emotional intent ---
+    # Step 6: Enhance response with GPT only for emotional intents
     try:
         session_ctx = get_session(session_id)
     except Exception:
@@ -105,7 +97,7 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         if gpt_result.get("used") and gpt_result.get("response"):
             response_text = gpt_result["response"]
 
-    # --- Logging ---
+    # Step 7: Log interaction
     log_interaction(
         session_id=session_id,
         user_message=user_message,
@@ -116,16 +108,12 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         method=method
     )
 
-    # --- Record interactions ---
+    # Step 8: Record into session store for counselor live view
     record_interaction(
         session_id=session_id,
         sender="user",
         text=user_message,
-        analysis={
-            "rule": rule_result or {},
-            "model": model_result,
-            "chosen": {"intent": intent, "confidence": confidence}
-        },
+        analysis=rule_result if rule_result else {"intent": intent, "confidence": confidence},
         response=None
     )
 
@@ -143,6 +131,7 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         response=response_text
     )
 
+    # Step 9: Return full payload including severity
     return {
         "session_id": session_id,
         "intent": intent,

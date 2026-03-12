@@ -5,7 +5,6 @@ import CounselorLogin from './CounselorLogin'
 import InformedConsent from './InformedConsent'
 import StudentDashboard from './StudentDashboard'
 import CounselorDashboard from './CounselorDashboard'
-import ForgotPassword from './ForgotPassword'
 
 function App() {
   return (
@@ -14,7 +13,6 @@ function App() {
         <Route path="/" element={<PortalSelection />} />
         <Route path="/student-login" element={<StudentLogin />} />
         <Route path="/counselor-login" element={<CounselorLogin />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/consent" element={<InformedConsent />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
         <Route path="/counselor-dashboard" element={<CounselorDashboard />} />
