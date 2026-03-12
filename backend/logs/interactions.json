@@ -1,0 +1,958 @@
+[
+    {
+        "timestamp": "2026-02-27T12:11:56.045969",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "wala akong halaga",
+        "assistant_reply": "Ikinalulungkot kong marinig na ganito ang iyong nararamdaman. Mahalaga ka at hindi nag-iisa sa iyong nararanasan. Subukang maglaan ng sandali para sa sarili, huminga ng malalim, at alalahanin na may mga tao na handang makinig at tumulong."
+    },
+    {
+        "timestamp": "2026-02-27T15:26:46.772160",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "This app is here to support your mental and emotional wellbeing. Talk to me about what you're feeling, and I'll listen. For urgent concerns, your school counselor is notified."
+    },
+    {
+        "timestamp": "2026-02-27T15:28:08.650686",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i dont knowww",
+        "assistant_reply": "It's okay not to have all the answers right now. Take a few deep breaths and try to focus on one thing you can do to take care of yourself in this moment."
+    },
+    {
+        "timestamp": "2026-02-27T15:28:14.971033",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "anything means nothing",
+        "assistant_reply": "It's understandable to feel overwhelmed when everything feels unclear. Try grounding yourself by focusing on your senses: name 5 things you can see, 4 things you can touch, 3 things you can hear, 2 things you can smell, and 1 thing you can taste."
+    },
+    {
+        "timestamp": "2026-02-27T15:29:18.612906",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "im too lazy to do that nah",
+        "assistant_reply": "That's okay. Maybe just take a moment to pause and breathe deeply. Remember, it's okay to take small steps towards feeling better."
+    },
+    {
+        "timestamp": "2026-02-27T15:29:43.634895",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "im annoyed",
+        "assistant_reply": "GAIDA is a virtual counseling assistant for students. You can share how you're feeling, talk about stress, anxiety, or sadness, and get support anytime. Your counselor can also view sessions to follow up with you."
+    },
+    {
+        "timestamp": "2026-02-27T15:32:23.704343",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i feel short",
+        "assistant_reply": "It's common to feel that way at times. Remember, your worth isn't defined by your height. Focus on the qualities that make you unique and special."
+    },
+    {
+        "timestamp": "2026-02-27T15:32:55.840703",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i feel like this guy named nier doesnt like me",
+        "assistant_reply": "It's natural to feel concerned about how others perceive us. Have you considered talking to Nier to understand his perspective and address any misunderstandings?"
+    },
+    {
+        "timestamp": "2026-02-27T15:33:17.141220",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "no i havent because im scared to communicate",
+        "assistant_reply": "It's okay to feel scared about communication. Maybe you could start with writing down your thoughts or sending a message. Taking small steps can help make it feel less overwhelming."
+    },
+    {
+        "timestamp": "2026-02-27T15:33:35.491829",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "isnt that too much to do",
+        "assistant_reply": "You can break it down into even smaller steps if needed. Maybe start by jotting down your feelings or thoughts. Remember, it's okay to take things at your own pace."
+    },
+    {
+        "timestamp": "2026-02-27T15:34:30.477660",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "but deeply inside, i think im just really scared to confront him of the things i wanna talkg about because i might get hurt",
+        "assistant_reply": "It's understandable to feel afraid of potential rejection or hurt. Your feelings are valid. Consider reaching out for support from a trusted friend or counselor to help you navigate this situation."
+    },
+    {
+        "timestamp": "2026-02-27T15:35:13.737212",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "id rather keep it for myself because for some reason i dont wanna bother anyone about it",
+        "assistant_reply": "It's important to respect your boundaries. Just know that it's okay to seek support when you're ready. Taking care of your mental well-being is essential, so consider finding healthy ways to cope with your emotions, like journaling or practicing self-care."
+    },
+    {
+        "timestamp": "2026-02-27T15:35:22.893002",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "thank you",
+        "assistant_reply": "GAIDA is a virtual counseling assistant for students. You can share how you're feeling, talk about stress, anxiety, or sadness, and get support anytime. Your counselor can also view sessions to follow up with you."
+    },
+    {
+        "timestamp": "2026-02-28T06:20:36.785795",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i cant sleep because of exams",
+        "assistant_reply": "I understand that exams can be stressful. Try deep breathing or listening to calming music to help you relax before bed."
+    },
+    {
+        "timestamp": "2026-02-28T06:29:53.164783",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i cant sleep because of exams",
+        "assistant_reply": "I'm sorry to hear that exams are affecting your sleep. It's important to try some relaxation techniques before bed like deep breathing or listening to calming music to help you unwind.",
+        "intent": "stress",
+        "confidence": 0.357,
+        "anxiety_score": 3,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-01T12:28:01.890491",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "super pressude ako sa thesis",
+        "assistant_reply": "I understand that thesis can be very stressful. Remember to take breaks, practice deep breathing, and break down your tasks into smaller, manageable steps. You can do this.",
+        "intent": "stress",
+        "confidence": 1.0,
+        "anxiety_score": 3,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T12:31:51.275207",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nagtatagalog ka ba?",
+        "assistant_reply": "Hello! This is a safe space where you can talk about anything on your mind. How can I help you today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-01T12:43:12.237884",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nagtatagalog ka ba",
+        "assistant_reply": "Oo, marunong ako mag-Tagalog. Paano kita matutulungan ngayon?",
+        "intent": "language_question",
+        "confidence": 1.0,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T12:46:00.715287",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "ang sakit ng pus ko",
+        "assistant_reply": "Welcome! You can talk to me about how you're feeling, what's stressing you out, or anything that's been on your mind. What brings you here today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-01T12:47:58.835971",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "ang sakit ng puso ko is what i meant",
+        "assistant_reply": "I'm sorry to hear that you're feeling pain in your heart. It's important to take care of yourself during difficult times. Would you like to talk more about what's been causing you emotional pain?",
+        "intent": "sadness",
+        "confidence": 0.85,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-01T12:48:09.094368",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "magtagalog ka",
+        "assistant_reply": "This app is here to support your mental and emotional wellbeing. Talk to me about what you're feeling, and I'll listen. For urgent concerns, your school counselor is notified.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:11:18.278304",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nagtatagalog ka ba",
+        "assistant_reply": "Oo, marunong ako mag-Tagalog. Paano kita matutulungan ngayon?",
+        "intent": "language_question",
+        "confidence": 1.0,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:33:26.611469",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nagtatagalo ka ba",
+        "assistant_reply": "Welcome! You can talk to me about your feelings or stress.",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-01T13:39:55.355879",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:40:05.888764",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nagtatagalog ka ba",
+        "assistant_reply": "Oo, marunong ako mag-Tagalog. Paano kita matutulungan ngayon?",
+        "intent": "language_question",
+        "confidence": 1.0,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:40:26.341687",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:46:39.559837",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:52:02.962172",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi hello",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:52:57.109870",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:53:07.118229",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "wdym you didnt understand",
+        "assistant_reply": "Welcome! You can talk to me about your feelings or stress.",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-01T13:53:11.695487",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "what??",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:53:19.911882",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "what are you talking about",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-01T13:53:25.944870",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "fuck u",
+        "assistant_reply": "Sorry, I didn't understand.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-02T06:37:04.286715",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "GAIDA is a virtual counseling assistant for students. You can share how you're feeling, talk about stress, anxiety, or sadness, and get support anytime. Your counselor can also view sessions to follow up with you.",
+        "intent": "faq",
+        "confidence": 0.95,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-02T06:37:17.079977",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "marunong ka ba magtagalog",
+        "assistant_reply": "Yes, marunong akong mag-Tagalog. Paano kita matutulungan ngayon?",
+        "intent": "language_question",
+        "confidence": 1.0,
+        "anxiety_score": 1,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-02T06:37:28.250127",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "okay sige ilove you",
+        "assistant_reply": "Welcome! You can talk to me about how you're feeling, what's stressing you out, or anything that's been on your mind. What brings you here today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T06:51:36.205412",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "Hi! I'm GAIDA, your virtual counseling assistant. I'm here to listen and support you. How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T06:51:48.059339",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "im feeling stresse",
+        "assistant_reply": "I'm sorry to hear that you're feeling stressed. Have you tried taking a few deep breaths or going for a short walk to help you relax?",
+        "intent": "stress",
+        "confidence": 1.0,
+        "anxiety_score": 3,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-12T06:52:07.523169",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "yes ive one that but i still feel burntout",
+        "assistant_reply": "I'm sorry to hear that. It's important to take breaks and prioritize self-care. Maybe try engaging in activities you enjoy or talking to someone you trust about how you're feeling.",
+        "intent": "stress",
+        "confidence": 1.0,
+        "anxiety_score": 3,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-12T06:52:33.528761",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i feel like im bothering them if i tell them about my feeliongs",
+        "assistant_reply": "It's understandable to feel that way, but sharing your feelings with someone you trust can help lighten the load. They care about you and would want to support you.",
+        "intent": "anxiety",
+        "confidence": 0.9,
+        "anxiety_score": 5,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T06:52:53.927123",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "how would i know if they actually care about me",
+        "assistant_reply": "It can be hard to know for sure, but a good indicator is if they listen to you, show empathy, and are there for you when you need them. Trust your instincts and remember that it's okay to seek support.",
+        "intent": "anxiety",
+        "confidence": 0.9,
+        "anxiety_score": 5,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T12:05:18.349675",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "I'm here for you. This app is designed to support students with their mental and emotional wellbeing. Feel free to share anything.",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T12:05:33.141638",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i am john vincent roxas im so stressed rn",
+        "assistant_reply": "I'm sorry to hear that you're feeling stressed, John Vincent Roxas. Remember to take deep breaths, maybe try some grounding exercises like focusing on your senses or doing a quick mindfulness practice.",
+        "intent": "stress",
+        "confidence": 1.0,
+        "anxiety_score": 3,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-12T12:05:49.948791",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "okay i love you",
+        "assistant_reply": "I'm here for you. This app is designed to support students with their mental and emotional wellbeing. Feel free to share anything.",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T12:06:05.824381",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "naiistress ako sa mga gawain",
+        "assistant_reply": "Naiintindihan kita. Subukan mo maglista ng tasks at gawain para maayos mo ang schedule mo. Huwag kalimutang magpahinga at maglaan ng oras para sa sarili mo.",
+        "intent": "stress",
+        "confidence": 1.0,
+        "anxiety_score": 3,
+        "method": "rule-based"
+    },
+    {
+        "timestamp": "2026-03-12T12:19:45.372298",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Hello",
+        "assistant_reply": "I'm here for you. This app is designed to support students with their mental and emotional wellbeing. Feel free to share anything.",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T12:43:57.917582",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hello",
+        "assistant_reply": "I'm here for you. This app is designed to support students with their mental and emotional wellbeing. Feel free to share anything.",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T12:44:01.562497",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hello",
+        "assistant_reply": "Welcome! You can talk to me about how you're feeling, what's stressing you out, or anything that's been on your mind. What brings you here today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T12:57:18.549743",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nigga",
+        "assistant_reply": "Hello! This is a safe space where you can talk about anything on your mind. How can I help you today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T13:04:06.457221",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "putanginamo",
+        "assistant_reply": "Hi! I'm GAIDA, your virtual counseling assistant. I'm here to listen and support you. How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T13:04:25.781015",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "panget mo chatbot",
+        "assistant_reply": "Hi! I'm GAIDA, your virtual counseling assistant. I'm here to listen and support you. How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T13:20:33.843082",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hello",
+        "assistant_reply": "I'm here for you. This app is designed to support students with their mental and emotional wellbeing. Feel free to share anything.",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T13:20:42.025534",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nigga",
+        "assistant_reply": "Hello! This is a safe space where you can talk about anything on your mind. How can I help you today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T13:40:37.523407",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "2+ 5",
+        "assistant_reply": "Hi! I'm GAIDA, your virtual counseling assistant. I'm here to listen and support you. How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T13:41:00.474746",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Im Jahn Vincent Roxas, and im feeling gay",
+        "assistant_reply": "Welcome! You can talk to me about how you're feeling, what's stressing you out, or anything that's been on your mind. What brings you here today?",
+        "intent": "neutral",
+        "confidence": 0.6,
+        "anxiety_score": 1,
+        "method": "ml-model"
+    },
+    {
+        "timestamp": "2026-03-12T14:25:52.993319",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nigga",
+        "assistant_reply": "Hey there! How are you feeling today? Feel free to share what's on your mind.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:26:01.933942",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nigga?",
+        "assistant_reply": "Hey there! How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:26:41.469818",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "niga",
+        "assistant_reply": "Hey there! How are you doing today? Feel free to share what's on your mind.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:27:40.790242",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "Hello! How are you doing today?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:27:56.232178",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "fuck you",
+        "assistant_reply": "It sounds like you're feeling frustrated. I'm here to listen if you want to talk about what's bothering you.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:28:03.298040",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "nigga",
+        "assistant_reply": "Hey, it sounds like you're feeling upset or frustrated. If you want to talk about what's going on, I'm here to listen.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:28:19.449710",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "im so mad",
+        "assistant_reply": "It sounds like you're really upset. If you feel comfortable sharing, I'm here to listen.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:29:11.071475",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i studied so hard why is my score still very low? WHYYYY",
+        "assistant_reply": "Hey, I can hear the frustration in your words. It's tough when you put in so much effort and don't see the results you expected. Remember, one test score doesn't define your worth or intelligence. Let's figure out together how we can improve next time.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:36:32.413420",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Hello my nigga",
+        "assistant_reply": "Hey there! How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:36:49.815525",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Im feeling lonely",
+        "assistant_reply": "Hey there, I hear you. Loneliness can be tough. Would you like to talk more about what's been on your mind lately?",
+        "intent": "sadness",
+        "confidence": 0.318,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:37:46.324000",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "I feel like my friends havent been interacting with me lately, it makes me really sad",
+        "assistant_reply": "I'm sorry to hear that you're feeling this way. It's tough when it seems like our friends are distant. Have you tried reaching out to them to express how you're feeling? Communication can sometimes help bridge that gap.",
+        "intent": "sadness",
+        "confidence": 0.315,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:38:10.672188",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Im gonna cry",
+        "assistant_reply": "I'm really sorry to hear that you're feeling this way. It's tough when it seems like friends are distant. Remember, it's okay to feel sad and reach out for support. You're not alone in this. Is there something specific on your mind that's been bothering you?",
+        "intent": "sadness",
+        "confidence": 0.312,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:43:53.750877",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "im stressed",
+        "assistant_reply": "It's tough feeling like you're not getting the interaction you need from friends. Remember, it's okay to feel sad and stressed; those emotions are valid. How about trying to reach out to a friend and share how you feel? Sometimes, opening up can lead to a deeper connection.",
+        "intent": "stress",
+        "confidence": 0.34,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:55:19.745509",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Hey man",
+        "assistant_reply": "Hey there! How are you doing today?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:55:44.993255",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "What if yung crush mo may crush sa iba?",
+        "assistant_reply": "Ay, ang sakit talaga ng ganitong sitwasyon. It's normal to feel hurt and disappointed, pero importante na alalahanin mo na hindi ito personal na attack sa'yo. Mahalaga ring mag-focus sa sarili at sa mga bagay na nagpapasaya sa'yo. Kung kailangan mo ng kausap, I'm here for you!",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:56:21.551655",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Tangina, ang sakit",
+        "assistant_reply": "I feel you, ang hirap talaga ng ganun feeling. It's tough when things don't go the way we hope, pero remember, it's okay to feel hurt. Time will heal and you'll find someone who sees your worth.",
+        "intent": "sadness",
+        "confidence": 0.306,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:56:40.849079",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "ang sikip sa puso pre",
+        "assistant_reply": "I feel you, ang hirap talaga ng ganung feeling. It's okay to feel hurt and disappointed. Gusto mo magkwento pa or mag-share ng feelings mo about this?",
+        "intent": "sadness",
+        "confidence": 0.304,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T14:57:26.671460",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Parang gusto ko nalang mawala",
+        "assistant_reply": "I'm really sorry you're feeling that way. It's tough when emotions hit hard like this. Remember, it's okay to feel hurt and it's temporary. Have you thought about talking to someone about what you're going through? Your feelings are valid, and support can help you navigate through this.",
+        "intent": "suicidal",
+        "confidence": 0.99,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-12T15:59:20.331294",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Hey man",
+        "assistant_reply": "Hey there! What's going on?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T15:59:32.129642",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "My gf just broke up with me",
+        "assistant_reply": "I'm really sorry to hear that. Breakups can be tough. Do you feel like talking about what happened?",
+        "intent": "sadness",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T15:59:55.809747",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "and i cant focus, we have exams coming up",
+        "assistant_reply": "I'm really sorry to hear that you're going through a tough time right now. Breakups can be really hard, especially with exams approaching. It's okay to feel overwhelmed. Have you thought about taking short breaks to clear your mind before studying again? It might help you focus better.",
+        "intent": "sadness",
+        "confidence": 0.304,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:00:30.030738",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Im worried i might fail",
+        "assistant_reply": "I'm really sorry to hear about your breakup. Breakups can be tough, especially when you have exams to focus on. It's normal to feel overwhelmed right now. Remember to take care of yourself amidst the stress. Would you like to talk more about how you're feeling?",
+        "intent": "anxiety",
+        "confidence": 0.306,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:00:57.213955",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i havent studied recently so im really worried",
+        "assistant_reply": "I'm really sorry to hear about your breakup. Breakups can be tough, especially with exams around the corner. It's understandable to feel worried about your exams, but remember, it's okay to give yourself some time to process your emotions. When you feel ready, try to create a study plan that breaks down your topics into manageable chunks. Is there a particular subject you're struggling with?",
+        "intent": "anxiety",
+        "confidence": 0.311,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:17:02.015562",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "Hello",
+        "assistant_reply": "Hi there! How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:17:04.791994",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "I need help",
+        "assistant_reply": "Hey there, I'm here for you. What's going on? Feel free to share, I'm here to listen.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:17:12.904933",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "my chest is tight",
+        "assistant_reply": "It sounds like you might be feeling anxious or overwhelmed. Take a deep breath with me. Inhale slowly for 4 seconds, hold for 4, then exhale for 4. Remember, you're not alone in this. Would you like to share more about what's been weighing on you?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:17:45.234240",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "I cant control my breathing",
+        "assistant_reply": "It sounds like you're feeling overwhelmed. Take slow, deep breaths. Inhale for 4 counts, hold for 4, then exhale for 4. You're not alone in this; I'm here with you.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:22:45.645674",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "My chest is tight",
+        "assistant_reply": "I'm sorry to hear you're feeling that way. It can be really unsettling to feel tightness in your chest. Take a moment to pause, breathe slowly, and try to relax your body. Would you like to share more about what might be causing this feeling?",
+        "intent": "anxiety",
+        "confidence": 0.463,
+        "anxiety_score": 1,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T16:23:04.502235",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i cant control my breathing",
+        "assistant_reply": "I'm really sorry you're feeling this way. Let's try a simple breathing exercise together: breathe in slowly for 4 seconds, hold for 4, then exhale for 4. Repeat a few times. Remember, I'm here with you. Your counselor is aware and ready to support you too.",
+        "intent": "anxiety",
+        "confidence": 0.665,
+        "anxiety_score": 3,
+        "method": "gpt",
+        "severity": "Moderate"
+    },
+    {
+        "timestamp": "2026-03-12T16:23:21.494220",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "my chest is tight",
+        "assistant_reply": "I'm so sorry to hear you're feeling this way. It sounds really tough. Let's try a breathing exercise together. Take a slow breath in for 4 counts, hold for 4 counts, then exhale for 4 counts. Repeat a few times. You're not alone in this.",
+        "intent": "anxiety",
+        "confidence": 0.739,
+        "anxiety_score": 3,
+        "method": "gpt",
+        "severity": "Moderate"
+    },
+    {
+        "timestamp": "2026-03-12T16:23:34.014656",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "i cant control my breathing",
+        "assistant_reply": "I'm here with you. It sounds like you're feeling overwhelmed. Let's try taking slow, deep breaths together. Inhale for 4 counts, hold for 4, then exhale for 4. You're not alone in this.",
+        "intent": "anxiety",
+        "confidence": 0.803,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-12T16:33:32.404832",
+        "session_id": "e4f22fc9-bb81-4701-8356-ffb0a4f807d4",
+        "user_message": "hi",
+        "assistant_reply": "Hi there. It sounds like you're feeling overwhelmed. Take a moment to pause and try some deep breathing. Inhale slowly for 4 seconds, hold for 7, then exhale for 8. Remember, you're not alone. Feel free to share more if you'd like.",
+        "intent": "anxiety",
+        "confidence": 0.551,
+        "anxiety_score": 1,
+        "method": "gpt",
+        "severity": "Low"
+    },
+    {
+        "timestamp": "2026-03-12T16:34:01.267165",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "hi",
+        "assistant_reply": "Hello! How are you doing today? Feel free to share anything on your mind.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:34:47.614823",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "i have a problem, its a love triangle. Im worried of what might happen to our friendship of the 3 of us",
+        "assistant_reply": "Hey there! I hear you're dealing with a tricky situation with a love triangle. It's normal to worry about how it might affect your friendship. Have you had a chance to talk to anyone involved about your feelings or concerns?",
+        "intent": "anxiety",
+        "confidence": 0.342,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:37:06.929420",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "i wanna talk to with this one person, becuase i like her and the other girl like me",
+        "assistant_reply": "It sounds like a tricky situation to navigate, especially with feelings involved. It's important to communicate openly and honestly with everyone involved to avoid misunderstandings. Have you thought about how you can approach the conversation in a way that values everyone's feelings and maintains your friendships?",
+        "intent": "anxiety",
+        "confidence": 0.321,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:37:58.833812",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "i havent, can you help me? because i am stressing out",
+        "assistant_reply": "It sounds like you're in a tough spot with this love triangle. It's normal to feel stressed about potentially affecting your friendships. When you're ready, talking openly and honestly with them might help clear things up. Just remember, honesty and respect are key in situations like this. Take a deep breath, you got this!",
+        "intent": "anxiety",
+        "confidence": 0.31,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:38:50.967863",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "so i gotta be honest with them? about my feelings?",
+        "assistant_reply": "It's completely normal to feel nervous about being honest with your friends about your feelings. It's important to communicate openly and respectfully. Just remember, honesty is key in any relationship, and your true friends will understand and appreciate your honesty. If you need help with what to say, feel free to share more.",
+        "intent": "anxiety",
+        "confidence": 0.305,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-12T16:39:38.490470",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "IM GONNA KILL MYSELF",
+        "assistant_reply": "I'm here with you. Your feelings are valid, but please remember that there are people who care about you. It's important to reach out for help right now. Can you call the National Crisis Hotline at 1553 or In Touch Crisis Line at (02) 893-7603 immediately? Your life matters, and there are resources to support you through this.",
+        "intent": "suicidal",
+        "confidence": 0.99,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-12T16:40:04.546983",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "just kidding",
+        "assistant_reply": "I'm really glad you're still here. It's important to take these feelings seriously. If you're feeling overwhelmed, please consider reaching out for support. You are not alone in this. Let's talk more about what's going on.",
+        "intent": "suicidal",
+        "confidence": 0.645,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-12T16:40:24.850649",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "thank you for your help",
+        "assistant_reply": "I'm here for you if you ever need to talk. Remember, it's okay to feel overwhelmed, but please reach out for help if things get too much. Take care!",
+        "intent": "suicidal",
+        "confidence": 0.541,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-12T16:40:31.109908",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "im feeling a bit better now",
+        "assistant_reply": "I'm glad to hear you're feeling a bit better now. It's essential to take care of yourself during times of stress. Remember, it's okay to feel overwhelmed, but please reach out for help if you need it. Your well-being matters.",
+        "intent": "suicidal",
+        "confidence": 0.469,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-12T16:40:48.714119",
+        "session_id": "1d33408d-116e-4bab-9115-21f84838ed1b",
+        "user_message": "why is the anxiety level still high, whem im already calm",
+        "assistant_reply": "I'm glad you're feeling better now. Sometimes, even after feeling calmer, the anxiety level might still be high due to the intensity of the situation earlier. It's okay to take some time to fully relax and process everything. If you need more support or just someone to talk to, I'm here for you.",
+        "intent": "suicidal",
+        "confidence": 0.418,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
+    }
+]
