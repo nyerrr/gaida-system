@@ -10,22 +10,11 @@ from app.utils.consent_checker import has_consent
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 _SUBSCRIBERS: List[Callable] = []
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-LOG_FILE = BASE_DIR / "logs" / "interactions.json"
+LOG_FILE = Path("logs/interactions.json")
 
 
-def start_session(user_id: str | None = None, session_id: str | None = None) -> str:
-    """Create a new session record.
-
-    If ``session_id`` is provided we use it verbatim; otherwise we generate a
-    fresh UUID.  This guarantees that callers who already know their ID
-    (e.g. ``analyze_intent``) will not have it silently replaced by a random
-    value later in ``record_interaction``.
-    """
-
-    if session_id is None:
-        session_id = str(uuid.uuid4())
-
+def start_session(user_id: str | None = None) -> str:
+    session_id = str(uuid.uuid4())
     SESSIONS[session_id] = {
         "session_id": session_id,
         "user_id": user_id,
@@ -87,10 +76,8 @@ def _persist_entry(entry: Dict[str, Any]):
 def record_interaction(session_id: str, sender: str, text: str, analysis: Dict | None = None, response: str | None = None):
     session = SESSIONS.get(session_id)
     if session is None:
-        # create ephemeral session if missing.  respect any ID the caller
-        # supplied so that all interactions in a single conversation use the
-        # same identifier.
-        session_id = start_session(None, session_id=session_id)
+        # create ephemeral session if missing
+        session_id = start_session(None)
         session = SESSIONS[session_id]
 
     entry = {

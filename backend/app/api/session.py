@@ -1,14 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from typing import Dict, Any
-from app.services.session_manager import (
-    start_session as svc_start,
-    get_session,
-    list_active_sessions,
-    record_interaction,
-    end_session,
-    subscribe,
-)
+from app.services.session_manager import start_session as svc_start, get_session, list_active_sessions, record_interaction, end_session
 from app.services.rule_intent import analyze_with_rules
 
 router = APIRouter(prefix="/api/session", tags=["session"])
@@ -32,19 +25,12 @@ def start_session(payload: SessionCreate):
 
 @router.post("/message")
 def post_message(payload: MessagePayload):
+    # Analyze user text when sender is 'user'
     analysis = None
-    if payload.sender == "user":
+    if payload.sender == 'user':
         analysis = analyze_with_rules(payload.text)
 
-    # record_interaction now handles consent check + logging internally
-    # No need to call log_interaction here — session_manager does it
-    record_interaction(
-        payload.session_id,
-        payload.sender,
-        payload.text,
-        analysis=analysis,
-    )
-
+    record_interaction(payload.session_id, payload.sender, payload.text, analysis=analysis)
     return {"ok": True}
 
 
@@ -67,7 +53,7 @@ def close_session(session_id: str):
     return {"ok": True}
 
 
-# WebSocket manager for live counselor updates
+# Simple WebSocket manager for live updates (counselor connects to a session)
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, list[WebSocket]] = {}
@@ -90,14 +76,18 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+manager = ConnectionManager()
+
+# Register session_manager subscriber to broadcast new interactions
+from app.services.session_manager import subscribe
 
 
 async def _broadcast_callback(session_id: str, entry: dict):
+    # send the entry to all websocket clients connected to this session
     await manager.broadcast(session_id, entry)
 
 
 subscribe(_broadcast_callback)
-
 
 @router.websocket("/ws/{session_id}")
 async def session_ws(websocket: WebSocket, session_id: str):
@@ -105,6 +95,7 @@ async def session_ws(websocket: WebSocket, session_id: str):
     try:
         while True:
             data = await websocket.receive_json()
+            # Accept messages from counselor client and broadcast to others if needed
             await manager.broadcast(session_id, data)
     except WebSocketDisconnect:
         manager.disconnect(session_id, websocket)

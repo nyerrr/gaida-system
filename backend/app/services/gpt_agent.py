@@ -2,10 +2,6 @@ import os
 import json
 from dotenv import load_dotenv
 from typing import Dict, Any
-from app.core.config import OPENAI_MODEL_BASE
-from app.utils.logger import logger
-from app.utils.retry import exponential_backoff_retry
-from openai import APIError, RateLimitError, APIConnectionError, APITimeoutError
 
 try:
     from openai import OpenAI
@@ -18,10 +14,8 @@ _OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = None
 if OpenAI and _OPENAI_API_KEY:
     try:
-        from app.core.config import OPENAI_TIMEOUT
-        client = OpenAI(api_key=_OPENAI_API_KEY, timeout=OPENAI_TIMEOUT)
-    except Exception as e:
-        logger.error(f"Failed to initialize OpenAI client: {e}")
+        client = OpenAI(api_key=_OPENAI_API_KEY)
+    except Exception:
         client = None
 
 
@@ -98,7 +92,6 @@ def generate_response_with_gpt(
     Returns: {"response": str, "used": bool}
     """
     if not client:
-        logger.warning("OpenAI client not available for response generation")
         return {"response": None, "used": False}
 
     # Build messages: system prompt first
@@ -160,13 +153,11 @@ def generate_response_with_gpt(
                 content = getattr(choice, "text", None)
 
         if not content:
-            logger.warning("Empty content from GPT response")
             return {"response": None, "used": False}
 
         return {"response": content.strip(), "used": True}
 
-    except APIError as e:
-        logger.error(f"OpenAI API error after retries in generate_response_with_gpt: {e}")
+    except Exception:
         return {"response": None, "used": False}
     except Exception as e:
         logger.error(f"Error generating response with GPT: {e}")

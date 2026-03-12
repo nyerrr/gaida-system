@@ -13,17 +13,13 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
-  const silenceTimerRef = useRef(null);
-  const SILENCE_TIMEOUT = 2000;
 
-  // Unified status setter — updates parent and local state
   const pushStatus = (text) => {
     onStatusChange?.(text);
   };
 
   useEffect(() => {
     return () => {
-      clearTimeout(silenceTimerRef.current);
       stopAll();
     };
   }, []);
@@ -35,7 +31,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       try { mediaRecorderRef.current.stop(); } catch (e) { void e; }
     }
-    clearTimeout(silenceTimerRef.current);
   };
 
   // ── Method 1: Web Speech API ───────────────────────────────────────────────
@@ -45,7 +40,7 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
 
     recognition.lang = "fil-PH";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
 
     let finalTranscript = "";
@@ -56,19 +51,7 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       setError(null);
     };
 
-    recognition.onspeechstart = () => {
-      clearTimeout(silenceTimerRef.current);
-      pushStatus("Listening...");
-    };
-
-    recognition.onspeechend = () => {
-      silenceTimerRef.current = setTimeout(() => {
-        recognition.stop();
-      }, SILENCE_TIMEOUT);
-    };
-
     recognition.onresult = (event) => {
-      clearTimeout(silenceTimerRef.current);
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const t = event.results[i][0].transcript;
@@ -83,7 +66,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
 
     recognition.onend = async () => {
       setRecording(false);
-      clearTimeout(silenceTimerRef.current);
 
       if (!finalTranscript.trim()) {
         pushStatus("");
@@ -98,7 +80,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
 
     recognition.onerror = (e) => {
       setRecording(false);
-      clearTimeout(silenceTimerRef.current);
       pushStatus("");
       if (e.error === "no-speech") {
         setError("No speech detected. Try again.");
@@ -126,33 +107,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
-      const audioCtx = new AudioContext();
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      source.connect(analyser);
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      let silenceStart = null;
-
-      const checkSilence = () => {
-        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") return;
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-
-        if (avg < 5) {
-          if (!silenceStart) silenceStart = Date.now();
-          else if (Date.now() - silenceStart > SILENCE_TIMEOUT) {
-            mediaRecorder.stop();
-            audioCtx.close();
-            return;
-          }
-        } else {
-          silenceStart = null;
-        }
-        requestAnimationFrame(checkSilence);
-      };
-
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
@@ -168,7 +122,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       mediaRecorder.start();
       setRecording(true);
       pushStatus("Listening...");
-      requestAnimationFrame(checkSilence);
     } catch {
       setError("Mic access denied. Allow microphone in browser settings.");
     }
@@ -274,7 +227,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
         )}
       </button>
 
-      {/* Error tooltip only — status is now rendered by the parent */}
       {error && (
         <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 border border-red-700 text-red-400 text-xs px-2 py-1 rounded-lg whitespace-nowrap z-10">
           {error}

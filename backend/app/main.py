@@ -19,21 +19,17 @@ from backend.app.services.rate_limiter import check_rate_limit
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 from app.services.intent_router import analyze_intent
 from app.api import auth
-from frontend.src.voice import router as audio_router
+from app.api.voice import router as audio_router
 
-# ----------------------------
-# FastAPI app
-# ----------------------------
 app = FastAPI(title="GAIDA Backend")
 
 # Include API routers
 app.include_router(auth.router)
 app.include_router(audio_router)
 
-# Enable CORS
+# Enable CORS for local frontend during development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,9 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ----------------------------
-# Pydantic model
-# ----------------------------
+# accept optional session_id
 class UserInput(BaseModel):
     message: str
     session_id: str | None = None
@@ -105,6 +99,7 @@ def log_interaction(
 @app.get("/")
 def root():
     return {"status": "ok", "message": "GAIDA Backend"}
+
 
 
 @app.post("/virtual-agent")

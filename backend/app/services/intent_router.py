@@ -5,6 +5,7 @@ from app.services.virtual_agent import detect_intent_and_level, _build_result
 from app.services.gpt_agent import generate_response_with_gpt
 from app.api.counselor import process_alert
 
+
 # ---------------------------------------------------------------------------
 # Cumulative confidence weights
 # 50% history, 50% current message — more responsive than before
@@ -194,6 +195,7 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
     except Exception as e:
         logger.error(f"Failed to record interaction: {e}")
 
+    # Step 9: Return full payload including severity
     return {
         "session_id": session_id,
         "intent": intent,
