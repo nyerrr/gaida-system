@@ -5,11 +5,32 @@ export default function InformedConsent() {
   const navigate = useNavigate();
   const [isChecked, setIsChecked] = useState(false);
 
-const handleAccept = (e) => {
+const handleAccept = async (e) => {
   e.preventDefault();
-  if (isChecked) {
+  if (!isChecked) return;
+
+  try {
+    // Get session_id from localStorage (set during login)
+    const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
+
+    const response = await fetch('http://127.0.0.1:8000/consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        consent_given: true,
+      }),
+    });
+
+    if (!response.ok) throw new Error('Failed to record consent');
+
     localStorage.setItem('consent_given', 'true');
+    localStorage.setItem('session_id', sessionId);
     navigate('/student-dashboard');
+
+  } catch (error) {
+    console.error('Consent error:', error);
+    alert('Failed to record consent. Please try again.');
   }
 };
 

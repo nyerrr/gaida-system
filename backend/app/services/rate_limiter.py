@@ -1,31 +1,27 @@
 # backend/app/services/rate_limiter.py
 
 import time
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 
-# Simple in-memory rate limiting
-# Keyed by user IP, value is last request timestamp
-RATE_LIMIT = 5          # number of requests
-TIME_WINDOW = 60        # time window in seconds
+RATE_LIMIT = 5
+TIME_WINDOW = 60
 
 users_requests = {}
 
-def check_rate_limit(request: Request):
-    """Raises HTTPException if user exceeds rate limit."""
-    user_ip = request.client.host
+def check_rate_limit(session_id: str):  # ← changed from request: Request
+    """Raises HTTPException if session exceeds rate limit."""
     current_time = time.time()
-    
-    if user_ip not in users_requests:
-        users_requests[user_ip] = []
+
+    if session_id not in users_requests:
+        users_requests[session_id] = []
 
     # Remove requests older than TIME_WINDOW
-    users_requests[user_ip] = [
-        timestamp for timestamp in users_requests[user_ip]
+    users_requests[session_id] = [
+        timestamp for timestamp in users_requests[session_id]
         if current_time - timestamp < TIME_WINDOW
     ]
 
-    if len(users_requests[user_ip]) >= RATE_LIMIT:
+    if len(users_requests[session_id]) >= RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    # Record this request
-    users_requests[user_ip].append(current_time)
+    users_requests[session_id].append(current_time)

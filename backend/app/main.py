@@ -15,21 +15,27 @@ if project_root not in sys.path:
 # ----------------------------
 # Imports
 # ----------------------------
-from backend.app.services.rate_limiter import check_rate_limit
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 from app.services.intent_router import analyze_intent
+from app.services.rate_limiter import check_rate_limit
+from app.utils.consent_checker import log_consent
 from app.api import auth
 from app.api.voice import router as audio_router
 
 app = FastAPI(title="GAIDA Backend")
 
-# Include API routers
+# ----------------------------
+# Routers
+# ----------------------------
 app.include_router(auth.router)
 app.include_router(audio_router)
 
-# Enable CORS for local frontend during development
+# ----------------------------
+# CORS
+# ----------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,10 +44,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# accept optional session_id
+# ----------------------------
+# Models
+# ----------------------------
 class UserInput(BaseModel):
     message: str
     session_id: str | None = None
+
+class ConsentInput(BaseModel):
+    session_id: str
+    consent_given: bool
 
 # ----------------------------
 # Logging setup
@@ -101,10 +113,19 @@ def root():
     return {"status": "ok", "message": "GAIDA Backend"}
 
 
+@app.post("/consent")
+def record_consent(input: ConsentInput):
+    """Called when user accepts or revokes terms and conditions."""
+    log_consent(session_id=input.session_id, consent_given=input.consent_given)
+    return {
+        "status": "ok",
+        "session_id": input.session_id,
+        "consent_given": input.consent_given,
+    }
+
 
 @app.post("/virtual-agent")
 def virtual_agent(input: UserInput):
-
     # Rate limiting
     check_rate_limit(input.session_id or "anonymous")
 
@@ -126,14 +147,12 @@ def virtual_agent(input: UserInput):
         severity=result.get("severity"),
     )
 
-    # Return response to frontend
-    # NOTE: severity is now included so the sidebar updates correctly
     return {
         "session_id": result.get("session_id"),
         "intent": result.get("intent"),
         "confidence": result.get("confidence"),
         "anxiety_level": result.get("anxiety_level"),
-        "severity": result.get("severity"),        # ← was missing before, now included
+        "severity": result.get("severity"),
         "anxiety_score": result.get("anxiety_score"),
         "response": result.get("response"),
         "method": result.get("method"),
