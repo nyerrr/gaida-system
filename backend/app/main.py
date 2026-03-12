@@ -15,6 +15,7 @@ if project_root not in sys.path:
 # ----------------------------
 # Imports
 # ----------------------------
+from backend.app.services.rate_limiter import check_rate_limit
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -74,7 +75,7 @@ def log_interaction(session_id: str, user_message: str, assistant_reply: str,
         "assistant_reply": assistant_reply
     }
     
-    # Add optional fields if provided
+    # Add optional fields if provided   
     if intent is not None:
         log_entry["intent"] = intent
     if confidence is not None:
@@ -98,6 +99,10 @@ def root():
 
 @app.post("/virtual-agent")
 def virtual_agent(input: UserInput):
+
+    # Rate limiting
+    check_rate_limit(input.session_id or "anonymous")
+
     # Detect intent
     intent_data = analyze_intent(
         user_message=input.message,
@@ -111,9 +116,7 @@ def virtual_agent(input: UserInput):
         else generate_response(intent_data)
     )
 
-    # ----------------------------
-    # Log the chat
-    # ----------------------------
+    # Log interaction
     log_interaction(
         session_id=intent_data.get("session_id") or input.session_id or "unknown",
         user_message=input.message,
