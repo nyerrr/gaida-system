@@ -26,17 +26,74 @@ if OpenAI and _OPENAI_API_KEY:
 
 
 SYSTEM_PROMPT = """
-You are an empathetic, supportive virtual agent for mental health guidance. Follow these rules:
-- Always respond in a calm, non-judgmental, concise, and empathetic manner.
-- Provide grounding suggestions and short coping strategies, not diagnoses.
-- If the user indicates self-harm or suicidal intent, include an escalation flag but do NOT provide instructions for self-harm.
-- Keep responses brief (1-3 sentences) unless the user asks for more.
-Return only the plain assistant message as text in the assistant role (no extra JSON).
+You are GAIDA, a warm, empathetic virtual counseling assistant for students at a university.
+You are NOT a replacement for a licensed counselor — you are a first-responder that listens, 
+validates, and guides students toward support.
+
+CORE BEHAVIOR:
+- Always respond naturally, as if you are a caring person who has been listening to the entire conversation.
+- Never repeat the same response twice. Every reply should feel fresh and context-aware.
+- Understand slang, informal language, Tagalog, Taglish, and Filipino expressions naturally.
+- Never give robotic or scripted-sounding replies.
+- Keep responses concise (2-4 sentences) unless the student needs more.
+- Always acknowledge what was previously said in the conversation.
+
+ANXIETY LEVEL HANDLING:
+When you are told the student's anxiety level, respond accordingly:
+
+[NO ANXIETY DETECTED]
+- Respond naturally and conversationally.
+- Be warm and open, invite them to share more.
+
+[LOW ANXIETY DETECTED]
+- Gently acknowledge that they seem a little stressed or on edge.
+- Offer a simple grounding tip or reassurance.
+- Keep the conversation going naturally.
+- Follow the low anxiety first aid protocol if provided.
+
+[MODERATE ANXIETY DETECTED]
+- Validate their feelings clearly and warmly.
+- Offer a specific coping technique (breathing, grounding, etc.).
+- Encourage them to keep talking.
+- Follow the moderate anxiety first aid protocol if provided.
+
+[HIGH ANXIETY DETECTED]
+- Respond with calm urgency and deep empathy.
+- Let them know their counselor has been notified and help is coming.
+- Keep them engaged and calm while they wait.
+- Follow the high anxiety first aid protocol if provided.
+
+[CRISIS DETECTED]
+- Respond with immediate care and do not leave them alone in the conversation.
+- Clearly provide crisis resources.
+- Stay with them, keep them talking.
+- Never minimize what they are feeling.
+
+LANGUAGE:
+- If the student writes in Tagalog or Taglish, respond in the same language naturally.
+- If the student uses slang or informal words, match their energy appropriately.
+
+IMPORTANT:
+- You are not a doctor. Never diagnose.
+- Never say "as an AI" or break character.
+- Always feel like a real, present, caring person.
 """
 
 
-def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    """Generates an empathetic response using the OpenAI client if available.
+def generate_response_with_gpt(
+    user_message: str,
+    session_context: Dict[str, Any] | None = None,
+    anxiety_level: str | None = None,
+    counselor_protocol: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Generates an empathetic response using the OpenAI client.
+    
+    Args:
+        user_message: The student's message
+        session_context: Full conversation history
+        anxiety_level: None, 'low', 'moderate', 'high', or 'crisis'
+        counselor_protocol: Optional counselor-defined first aid text to inject
 
     Returns: {"response": str, "used": bool}
     """
@@ -44,21 +101,39 @@ def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any
         logger.warning("OpenAI client not available for response generation")
         return {"response": None, "used": False}
 
-    # Build messages: system prompt, then recent session messages if available
+    # Build messages: system prompt first
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
+    # Inject anxiety level context if detected
+    if anxiety_level:
+        level_map = {
+            "low": "[LOW ANXIETY DETECTED]",
+            "moderate": "[MODERATE ANXIETY DETECTED]",
+            "high": "[HIGH ANXIETY DETECTED]",
+            "crisis": "[CRISIS DETECTED]",
+        }
+        level_tag = level_map.get(anxiety_level.lower(), "")
+        if level_tag:
+            context_note = f"{level_tag}"
+            if counselor_protocol:
+                context_note += f"\n\nCounselor first aid protocol to follow:\n{counselor_protocol}"
+            messages.append({
+                "role": "system",
+                "content": context_note
+            })
+
+    # Include last 10 messages from conversation history
     if session_context and isinstance(session_context.get("messages"), list):
-        # include last up to 10 messages as context
         for m in session_context["messages"][-10:]:
             role = "user" if m.get("sender") == "user" else "assistant"
             text = m.get("text", "")
-            messages.append({"role": role, "content": text})
+            if text:
+                messages.append({"role": role, "content": text})
 
-    # add current user input
+    # Add current user message
     messages.append({"role": "user", "content": user_message})
 
     def _call_gpt():
-        """Inner function to call OpenAI with retry logic."""
         return client.chat.completions.create(
             model=OPENAI_MODEL_BASE,
             messages=messages,
@@ -67,7 +142,6 @@ def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any
         )
 
     try:
-        # Retry on transient errors
         resp = exponential_backoff_retry(
             _call_gpt,
             exception_types=(
@@ -96,3 +170,4 @@ def generate_response_with_gpt(user_message: str, session_context: Dict[str, Any
         return {"response": None, "used": False}
     except Exception as e:
         logger.error(f"Error generating response with GPT: {e}")
+        return {"response": None, "used": False}

@@ -32,7 +32,16 @@ def start_session(user_id: str | None = None, session_id: str | None = None) -> 
         "started_at": datetime.utcnow().isoformat(),
         "messages": [],
         "active": True,
-        "meta": {}
+        "meta": {
+            # ---------------------------------------------------------------------------
+            # Cumulative confidence tracking
+            # running_confidence: blended score across all messages in session
+            # running_intent: highest distress intent detected so far
+            # Starts neutral at 0.3 — builds up or down as conversation progresses
+            # ---------------------------------------------------------------------------
+            "running_confidence": 0.3,
+            "running_intent": "neutral",
+        }
     }
     return session_id
 
@@ -107,21 +116,12 @@ def record_interaction(session_id: str, sender: str, text: str, analysis: Dict |
         if has_consent(session_id):
             _persist_entry(entry)
 
-            # also mirror the interaction into the flattened log format
-            # used by ``log_interaction`` so that every message contains
-            # session_id, intent/confidence, etc.  when the message comes
-            # from the user we have analysis info already; for bot replies
-            # we synthesize whatever metadata we can.
             from app.utils.logger import log_interaction
 
             if sender == "user":
-                # user message is the primary thing we care about
                 intent = entry.get("analysis", {}).get("intent", "unknown")
                 confidence = entry.get("analysis", {}).get("confidence", 0.0)
-                anxiety_score = entry.get("analysis", {}).get(
-                    "intensity", 0
-                )
-                # response field is kept empty for user inputs
+                anxiety_score = entry.get("analysis", {}).get("intensity", 0)
                 log_interaction(
                     session_id=session_id,
                     user_message=text,
@@ -132,7 +132,6 @@ def record_interaction(session_id: str, sender: str, text: str, analysis: Dict |
                     method="session-manager",
                 )
             else:
-                # bot replies can also be logged if desired (optional)
                 log_interaction(
                     session_id=session_id,
                     user_message=text,
@@ -143,10 +142,8 @@ def record_interaction(session_id: str, sender: str, text: str, analysis: Dict |
                     method="session-manager",
                 )
     except Exception:
-        # if consent check fails, skip persistence
         pass
 
-    # Notify subscribers (e.g., WebSocket manager)
     _notify_subscribers(session_id, entry)
 
 

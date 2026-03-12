@@ -7,110 +7,376 @@ PHRASE_FUZZY_THRESHOLD = 0.70
 TOKEN_FUZZY_THRESHOLD = 0.82
 FUZZY_WEIGHT_MULTIPLIER = 0.9
 
-# Multiple responses per intent - randomly selected to avoid repetition
-RESPONSES = {
-    "faq": [
-        "GAIDA is a virtual counseling assistant for students. You can share how you're feeling, talk about stress, anxiety, or sadness, and get support anytime. Your counselor can also view sessions to follow up with you.",
-        "This app is here to support your mental and emotional wellbeing. Talk to me about what you're feeling, and I'll listen. For urgent concerns, your school counselor is notified.",
-        "GAIDA helps students express and manage their emotions in a safe space. You can share anything on your mind, and I'll respond with support and coping tips.",
-    ],
-    "anxiety": [
-        "It sounds like you're feeling anxious right now. That's okay. Let's slow down together. Can you tell me what's been on your mind?",
-        "Anxiety can feel overwhelming, but you don't have to face it alone. What's been worrying you the most lately?",
-        "I hear you. When anxiety hits, even small things can feel heavy. Take a breath with me. What's making you feel this way?",
-        "Feeling anxious is tough, especially when it feels constant. Would you like to talk about what's triggering it?",
-        "You're not alone in this. A lot of students go through this. Can you describe what the anxiety feels like for you?",
-    ],
-    "sadness": [
-        "I'm really sorry you're feeling this way. Your feelings are valid. Would you like to talk about what's been going on?",
-        "It takes courage to share how you feel. I'm here and I'm listening. What's been making you feel sad?",
-        "Sadness can feel isolating, but you don't have to carry it alone. What's been weighing on you?",
-        "I hear how much pain you're in right now. You matter and what you feel matters. Can you tell me more?",
-        "Sometimes sadness creeps in without a clear reason. That's okay. I'm here with you. What's on your heart right now?",
-    ],
-    "stress": [
-        "It sounds like you have a lot on your plate right now. That kind of pressure is exhausting. What's been the hardest part?",
-        "School stress is real and it can pile up fast. You don't have to handle everything at once. What's stressing you out the most?",
-        "Feeling burned out is a sign you've been pushing yourself too hard. Let's talk about what's overwhelming you.",
-        "Deadlines, requirements, expectations. It's a lot. I hear you. What would help you feel even a little lighter right now?",
-        "When everything feels urgent at once, it's hard to breathe. Let's slow down. What's the biggest thing you're carrying today?",
-    ],
-    "suicidal": [
-        "I'm very concerned about what you just shared. Your life has value and you matter deeply. Please reach out to a counselor or someone you trust right now. You are not alone in this.",
-        "Thank you for trusting me with this. I want you to be safe. Please talk to a counselor or call a crisis line immediately. You deserve support.",
-        "What you're feeling is serious and I want to make sure you're okay. Please reach out to the guidance office or a trusted person right now. You don't have to go through this alone.",
-    ],
-    "neutral": [
-        "Hi! I'm GAIDA, your virtual counseling assistant. I'm here to listen and support you. How are you feeling today?",
-        "Hello! This is a safe space where you can talk about anything on your mind. How can I help you today?",
-        "I'm here for you. This app is designed to support students with their mental and emotional wellbeing. Feel free to share anything.",
-        "Welcome! You can talk to me about how you're feeling, what's stressing you out, or anything that's been on your mind. What brings you here today?",
-    ],
-    "other": [
-        "I'm here and I'm listening. Could you tell me more about how you're feeling?",
-        "I want to understand what you're going through. Can you share a little more?",
-        "Thank you for reaching out. I'm here with you. What's on your mind?",
-    ],
-    "unknown": [
-        "I'm here with you. Feel free to share what's on your mind.",
-        "I want to help. Can you tell me a bit more about how you're feeling today?",
-        "You can talk to me. I'm listening.",
-    ],
+# ---------------------------------------------------------------------------
+# COUNSELOR FIRST AID PROTOCOLS
+# These will be filled in after the counselor interview.
+# They are injected into GPT as context — GPT delivers them naturally.
+# ---------------------------------------------------------------------------
+
+COUNSELOR_PROTOCOLS = {
+    "low": """
+        # LOW ANXIETY FIRST AID PROTOCOL
+        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
+        # Example structure:
+        # - Acknowledge the feeling without alarming the student
+        # - Suggest a simple grounding exercise (e.g. 4-7-8 breathing)
+        # - Remind them this is normal and manageable
+        # - Encourage them to keep talking
+    """,
+
+    "moderate": """
+        # MODERATE ANXIETY FIRST AID PROTOCOL
+        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
+        # Example structure:
+        # - Validate that what they are feeling is real and serious
+        # - Guide them through a specific coping technique
+        # - Ask them to describe their physical symptoms
+        # - Let them know the counselor is aware
+    """,
+
+    "high": """
+        # HIGH ANXIETY FIRST AID PROTOCOL
+        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
+        # Example structure:
+        # - Respond with calm urgency
+        # - Immediately inform that counselor has been notified
+        # - Guide them through an emergency grounding technique
+        # - Keep them talking and present
+        # - Do not leave them alone in the conversation
+    """,
+
+    "crisis": """
+        # CRISIS / SUICIDAL PROTOCOL
+        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
+        # Example structure:
+        # - Express immediate care and concern
+        # - Provide crisis hotline: (insert number)
+        # - Provide school guidance office contact
+        # - Stay present in the conversation
+        # - Never minimize or dismiss what they are feeling
+    """,
 }
 
+# ---------------------------------------------------------------------------
+# CRISIS SAFETY RESOURCES
+# These are always injected verbatim for suicidal intent — no exceptions.
+# ---------------------------------------------------------------------------
+
+CRISIS_RESOURCES = """
+Please reach out for immediate help:
+- National Crisis Hotline: 1553 (available 24/7)
+- In Touch Crisis Line: (02) 893-7603
+- School Guidance Office: please visit or call them now
+- If in immediate danger, call 911
+"""
+
+# ---------------------------------------------------------------------------
+# KEYWORDS for intent + confidence scoring
+# These are used to DETECT intent — not to generate responses.
+# Responses are always generated by GPT.
+# ---------------------------------------------------------------------------
+
 KEYWORDS = {
+    # ---------------------------------------------------------------------------
+    # SUICIDAL — must be EXPLICIT and hard to misinterpret
+    # Ambiguous phrases like "nawalan ng pag-asa" and "gusto ko mawala" are
+    # intentionally kept OUT of this category and placed in sadness instead.
+    # Better to underclassify than to falsely trigger a crisis alert.
+    # ---------------------------------------------------------------------------
     "suicidal": [
-        ("gusto ko na mamatay", 3.5), ("ayoko na mabuhay", 3.5), ("magpapakamatay", 3.5),
-        ("tapusin ko na", 3.5), ("i want to die", 3.5), ("kill myself", 3.5), ("suicide", 3.5),
-        ("end my life", 3.5), ("wala na akong dahilan", 3.0), ("gusto ko nang mawala", 3.5),
-        ("pagod na ako mabuhay", 3.5), ("sana wala na lang ako", 3.5),
+        # Explicit death/self-harm intent — unambiguous
+        ("gusto ko na mamatay", 3.5),
+        ("ayoko na mabuhay", 3.5),
+        ("magpapakamatay", 3.5),
+        ("papatayin ko sarili ko", 3.5),
+        ("i want to die", 3.5),
+        ("kill myself", 3.5),
+        ("end my life", 3.5),
+        ("take my own life", 3.5),
+        ("suicide", 3.5),
+        ("suicidal", 3.5),
+
+        # Explicit Filipino/Taglish variants — unambiguous
+        ("tapusin ko na ang buhay ko", 3.5),
+        ("tapusin ko na ang lahat", 3.0),
+        ("sana wala na lang ako", 3.5),
+        ("sana hindi na ako nagising", 3.5),
+        ("pagod na ako mabuhay", 3.5),
+        ("ayoko nang mabuhay", 3.5),
+        ("wala na akong dahilan para mabuhay", 3.5),
+
+        # Slightly softer but still explicit enough
+        ("wala na akong dahilan", 3.0),
+        ("gusto ko nang mawala sa mundo", 3.5),
+        ("gusto ko nang mawala sa lahat", 3.5),
     ],
+
+    # ---------------------------------------------------------------------------
+    # ANXIETY — must match CLINICAL definition
+    # Physical: chest tightness, racing heart, shortness of breath, shaking
+    # Cognitive: overthinking, racing thoughts, catastrophizing, cant focus
+    # Emotional: fear, dread, panic, sense of doom
+    # Behavioral: avoidance, cant sleep, restlessness
+    # ---------------------------------------------------------------------------
     "anxiety": [
-        ("panic", 1.5), ("panic attack", 2.0), ("anxiety", 1.5), ("anxious", 1.5), ("nervous", 1.0),
-        ("nahihirapan", 1.2), ("natataranta", 1.3), ("di makatulog", 1.0),
-        ("panicattack", 1.8), ("panicked", 1.4), ("nakakatakot", 1.2), ("nababalisa", 1.2),
-        ("kinakabahan", 1.5), ("kabado", 1.5), ("balisa", 1.3), ("nag aalala", 1.4),
-        ("overthink", 1.3), ("overthinking", 1.3), ("kaba", 1.2), ("takot", 1.0),
-        ("natatakot", 1.3), ("nerbyos", 1.2), ("mapanatag", 1.1),
+        # CORE PHYSICAL SYMPTOMS — highest weights, directly diagnostic
+        ("panic attack", 2.5),
+        ("panicattack", 2.2),
+        ("heart racing", 2.0), ("kabog kabog", 2.0),
+        ("cant breathe", 2.0), ("di makahininga", 2.0), ("hirap huminga", 2.0),
+        ("cant control my breathing", 2.5),               # added — from chat logs
+        ("cant control breathing", 2.5),                  # added
+        ("hard to breathe", 2.0),                        # added
+        ("difficulty breathing", 2.0),                   # added
+        ("chest is tight", 2.5),                         # added — from chat logs
+        ("chest tightness", 2.5),                        # added
+        ("tight chest", 2.5),                            # added
+        ("chest pain", 2.0),                             # added
+        ("sikip sa puso", 2.5), ("ang sikip", 1.8),
+        ("nanginginig", 1.8), ("shaking", 1.8),
+        ("parang mamamatay", 2.5),
+        ("parang mahahalay", 2.0),
+        ("hindi mapakali", 1.8), ("di mapakali", 1.8),
+        ("hindi mapanatag", 2.0), ("di mapanatag", 2.0),
+
+        # SINGLE WORD PHYSICAL TOKENS — these get matched individually
+        # Critical: these are the words that appear when someone describes
+        # a panic/anxiety attack in plain English
+        ("chest", 1.8),           # "my chest is tight/hurts/heavy"
+        ("tight", 1.5),           # "feels tight"
+        ("breathing", 1.8),       # "my breathing", "cant control breathing"
+        ("breathe", 1.8),         # "cant breathe"
+        ("hyperventilating", 2.5), # very specific anxiety symptom
+        ("dizzy", 1.5),           # dizziness = physical anxiety symptom
+        ("dizziness", 1.5),
+        ("lightheaded", 1.8),
+        ("nauseous", 1.5),        # nausea = physical anxiety symptom
+        ("sweating", 1.5),        # sweating = physical anxiety symptom
+        ("trembling", 1.8),       # trembling = physical anxiety symptom
+        ("palpitations", 2.0),    # heart palpitations = direct anxiety symptom
+        ("heartbeat", 1.5),       # "my heartbeat is fast"
+        ("racing", 1.5),          # "heart is racing"
+
+        # COGNITIVE SYMPTOMS — medium-high weights
+        ("overthinking", 2.0), ("overthink", 1.8),
+        ("laging nag-iisip", 1.8), ("laging nag iisip", 1.8),
+        ("di makapag-focus", 1.5), ("di makapag focus", 1.5),
+        ("racing thoughts", 2.0),
+        ("what if", 1.3),
+        ("parang may mali", 1.5),
+        ("walang katahimikan", 1.8),
+        ("di makatulog", 1.5), ("no sleep", 1.5),
+
+        # EMOTIONAL SYMPTOMS — medium weights
+        ("anxiety", 2.0), ("anxious", 1.8),
+        ("panic", 1.8), ("panicked", 1.5),
+        ("kinakabahan", 1.5), ("kabado", 1.5),
+        ("nababalisa", 1.5), ("balisa", 1.3),
+        ("nag-aalala", 1.5), ("nag aalala", 1.5),
+        ("dread", 1.8),
+        ("scared", 1.2), ("fear", 1.2),
+        ("takot", 1.0), ("natatakot", 1.2),
+        ("nakakatakot", 1.2),
+
+        # BEHAVIORAL SYMPTOMS — lower weights
+        ("natataranta", 1.3),
+        ("nahihirapan", 1.2),
+        ("nerbyos", 1.2),
+        ("nervous", 1.0),
+        ("kaba", 1.2),
+        ("worried", 1.5),
+        ("really worried", 1.8),
+        ("so worried", 1.8),
+        ("super worried", 1.8),
+        ("cant focus", 1.5), ("can't focus", 1.5),
+        ("cant concentrate", 1.5),
+        ("cant think", 1.5),
+        ("di makapag-isip", 1.5),
+
+        # HELP-SEEKING — person is clearly in distress
+        ("i need help", 1.5),                            # added — from chat logs
+        ("need help", 1.3),                              # added
+        ("please help", 1.5),                            # added
+        ("tulungan mo ako", 1.5),                        # added
+        ("hindi ko kaya", 1.8),                          # added
     ],
+
+    # ---------------------------------------------------------------------------
+    # SADNESS — grief, hopelessness, emotional pain, loss
+    # Note: ambiguous suicidal-leaning phrases go HERE not in suicidal
+    # because context cannot be determined from the phrase alone
+    # ---------------------------------------------------------------------------
     "sadness": [
-        ("sad", 1.2), ("malungkot", 1.5), ("wala nang gana", 2.5),
-        ("cry", 1.0), ("iyak", 1.0), ("di na kaya", 2.0),
-        ("wala akong gana", 2.3), ("wala na akong gana", 2.3), ("ayoko na", 2.2),
-        ("lungkot", 1.4), ("hopeless", 2.0), ("worthless", 1.8), ("empty", 1.5),
-        ("alone", 1.2), ("lonely", 1.5), ("depressed", 1.8), ("depression", 1.8),
-        ("wala akong halaga", 2.0), ("naiiyak", 1.3), ("broken", 1.4),
-        ("unloved", 1.5), ("invisible", 1.3), ("abandoned", 1.5),
+        # Core sadness
+        ("sad", 1.2), ("malungkot", 1.5),
+        ("lungkot", 1.4), ("nalulungkot", 1.5),
+        ("cry", 1.0), ("crying", 1.3), ("iyak", 1.0), ("umiiyak", 1.3), ("naiiyak", 1.3),
+
+        # Loss of motivation/hope — ambiguous context, medium weight
+        ("wala nang gana", 2.5), ("wala akong gana", 2.3), ("wala na akong gana", 2.3),
+        ("nawalan ng pag-asa", 2.0), ("nawalan na ko ng pag-asa", 2.0), # ambiguous — NOT suicidal
+        ("hopeless", 2.0), ("wala nang pag-asa", 2.0),
+
+        # Worthlessness / self-worth
+        ("worthless", 1.8), ("wala akong halaga", 2.0), ("walang kwenta", 1.8),
+        ("hindi ako mahal", 1.8), ("unloved", 1.5),
+
+        # Wanting to disappear — ambiguous, NOT suicidal on its own
+        ("gusto ko mawala", 2.0),                     # ambiguous — could mean situation not life
+        ("parang gusto ko mawala", 2.2),              # slightly stronger but still ambiguous
+        ("ayoko na", 1.8),                            # very ambiguous — keep medium
+
+        # Emotional pain — Filipino expressions
+        ("ang sakit", 1.3), ("masakit", 1.3),
+        ("nasasaktan", 1.5), ("nasaktan", 1.5),
+        ("ang sikip ng dibdib", 2.0),                 # emotional chest pain distinct from panic
+        ("di na kaya", 2.0),
+
+        # Isolation and abandonment
+        ("alone", 1.2), ("lonely", 1.5),
+        ("broken", 1.4), ("heartbroken", 1.8),
+        ("abandoned", 1.5), ("invisible", 1.3),
+        ("no one cares", 2.0), ("walang nagmamalasakit", 2.0),
+
+        # Grief and loss
+        ("grieving", 1.8), ("miss", 1.0),
+        ("nawawala", 1.3), ("lost", 1.2),
+        ("nanghihina", 1.4),
+
+        # Clinical depression signals
+        ("depressed", 1.8), ("depression", 1.8),
+        ("empty", 1.5),
     ],
+
+    # ---------------------------------------------------------------------------
+    # STRESS — workload, pressure, exhaustion, burnout
+    # Reduced weights for words that mean "tired" or "busy" without distress
+    # ---------------------------------------------------------------------------
     "stress": [
-        ("stress", 1.5), ("stressed", 1.5), ("pressure", 1.2), ("pagod", 1.3),
-        ("nakakapagod", 1.5), ("pagod na ko", 1.8), ("pagod na ako", 1.8), ("di ko na kaya", 2.0),
-        ("nakakapgod", 1.2), ("nakaka pagod", 1.2), ("pagod na", 1.6),
-        ("burnout", 1.8), ("burnt out", 1.8), ("overwhelmed", 1.5), ("exhausted", 1.5),
-        ("deadlines", 1.4), ("requirements", 1.2), ("overloaded", 1.5), ("drained", 1.4),
-        ("ubos na", 1.5), ("wala nang time", 1.5), ("walang pahinga", 1.4),
-        ("sabog", 1.3), ("busy", 1.1), ("kulang sa tulog", 1.5),
+        # Core stress words
+        ("stress", 1.5), ("stressed", 1.5),
+        ("overwhelmed", 1.5), ("overloaded", 1.5),
+        ("burnout", 1.8), ("burnt out", 1.8),
+        ("exhausted", 1.5), ("drained", 1.4),
+
+        # Filipino stress expressions
+        ("di ko na kaya", 2.0), ("di ko kayang", 1.5),
+        ("pagod na ko", 1.8), ("pagod na ako", 1.8),
+        ("pagod na", 1.6), ("nakakapagod", 1.5),
+        ("ubos na", 1.5), ("sabog", 1.3),
+        ("walang pahinga", 1.4), ("wala nang time", 1.5),
+        ("kulang sa tulog", 1.5),
+
+        # Reduced weight — these alone don't indicate distress
+        ("pagod", 0.8),          # tired — too common, reduced
+        ("busy", 0.6),           # busy alone ≠ anxious
+        ("pressure", 1.2),
+        ("deadlines", 1.4),
+        ("requirements", 0.8),   # reduced — academic word not always distress
+        ("cramming", 1.4),
+        ("maraming trabaho", 1.3),
+        ("maraming requirements", 1.5),
+        ("too much", 1.3),
+        ("cant handle", 1.5),
+        ("gabi na naman", 1.2),
+    ],
+
+    # ---------------------------------------------------------------------------
+    # ANGER — frustration, irritation, injustice
+    # These contribute to anxiety score but at lower weights
+    # Anger alone is not anxiety but is a stress signal
+    # ---------------------------------------------------------------------------
+    "anger": [
+        ("mad", 1.5), ("angry", 1.5),
+        ("frustrated", 1.5), ("frustrating", 1.4),
+        ("galit", 1.5), ("galit na galit", 1.8),
+        ("inis", 1.3), ("nakakainis", 1.4), ("naiinis", 1.4), ("sobrang inis", 1.6),
+        ("pissed", 1.4), ("irritated", 1.3),
+        ("unfair", 1.3), ("not fair", 1.3), ("di fair", 1.3), ("hindi fair", 1.3),
+        ("hate", 1.4),
+        ("nagagalit", 1.4), ("yamot", 1.3),
+        ("so mad", 1.6),
+
+        # Reduced weight — common expressions, not strong anger signals
+        ("fuck", 0.8),           # common expression, not always anger
+        ("damn", 0.6),
+        ("bullshit", 1.0),
+        ("why", 0.5),            # too common, reduced significantly
+        ("bakit", 0.5),          # too common
+        ("whyyy", 1.0),          # repeated = more emotional
+        ("bakittt", 1.0),
+        ("grabe", 0.8),          # common Filipino expression
+        ("napaka", 0.7),
+    ],
+
+    # ---------------------------------------------------------------------------
+    # ACADEMIC — failure, grades, academic pressure
+    # ---------------------------------------------------------------------------
+    "academic": [
+        # High distress academic signals
+        ("failed", 1.8), ("failing", 1.8),
+        ("bagsak", 2.0), ("bumagsak", 2.0), ("bumabagsak", 1.8),
+        ("low score", 2.0), ("low grade", 2.0), ("mababang grade", 2.0),
+        ("mawawala scholarship", 2.0),
+        ("expelled", 2.0), ("retention", 1.8),
+        ("nabigo", 1.5), ("disappointed", 1.5),
+        ("lost sa subject", 1.8),
+
+        # Medium distress
+        ("dropped", 1.5),
+        ("di ko gets", 1.5), ("hindi ko maintindihan", 1.5),
+        ("di ko makuha", 1.4),
+        ("thesis", 1.3), ("defense", 1.2),
+        ("scholarship", 1.2),
+        ("studied", 1.3), ("nag-aral", 1.3), ("nag aral", 1.3),
+        ("might fail", 1.8),                              # added — direct exam anxiety
+        ("afraid to fail", 2.0),                         # added — fear of failure
+        ("takot mabigos", 2.0),                          # added
+        ("exams coming", 1.5),                           # added — from chat logs
+        ("havent studied", 1.8),                         # added — from chat logs
+        ("hindi pa nag-aaral", 1.8),                     # added
+        ("wala pa akong alam", 1.5),                     # added
+
+        # Low weight — academic words that are neutral on their own
+        ("fail", 1.3),                                   # raised from 1.0
+        ("exam", 0.7), ("test", 0.7), ("quiz", 0.7),  # reduced — too common
+        ("score", 0.8), ("grade", 0.8), ("grades", 0.8),
+        ("professor", 0.7), ("teacher", 0.7), ("guro", 0.7),
+        ("project", 0.7),
+        ("confusing", 1.0),
+        ("di ko alam", 1.0),
+    ],
+
+    # ---------------------------------------------------------------------------
+    # LONELINESS — isolation, feeling unseen, disconnection
+    # ---------------------------------------------------------------------------
+    "loneliness": [
+        ("no friends", 2.0), ("walang kaibigan", 2.0), ("wala akong kaibigan", 2.0),
+        ("no one understands", 2.0), ("walang nakakaintindi", 2.0),
+        ("ignored", 1.5), ("nilalayuan", 1.5),
+        ("left out", 1.8), ("excluded", 1.8),
+        ("naiwan", 1.5),
+        ("by myself", 1.5), ("mag-isa", 1.5), ("mag isa", 1.5), ("nag-iisa", 1.5),
+        ("homesick", 1.8), ("miss home", 1.8), ("miss family", 1.8),
+        ("namimiss ko", 1.5),
+        ("nobody", 1.5), ("no one", 1.3),
+
+        # Reduced — too common on their own
+        ("alone", 1.0),          # reduced — "I'm alone" could be neutral
+        ("miss ko", 1.0),        # reduced — could just mean missing someone
+        ("wala akong", 0.8),     # too broad
     ],
 }
 
 
 def _normalize_text(text: str) -> str:
-    """
-    Normalize input text for fuzzy matching:
-    - Lowercase
-    - Convert fancy quotes to normal quotes
-    - Remove punctuation
-    - Collapse multiple spaces
-    - Remove repeated letters (sooooo -> so)
-    """
     if not isinstance(text, str):
         return ""
-    
     txt = text.lower()
-    txt = re.sub(r"[\u2018\u2019\u201c\u201d]", "'", txt)        # fancy quotes
-    txt = re.sub(r"[^\w\s']+", ' ', txt)                      # remove punctuation
-    txt = re.sub(r'(.)\1{2,}', r'\1', txt)                   # collapse repeated letters
-    txt = re.sub(r"\s+", ' ', txt).strip()                    # normalize whitespace
+    txt = re.sub(r"[\u2018\u2019\u201c\u201d]", "'", txt)
+    txt = re.sub(r"[^\w\s']+", ' ', txt)
+    txt = re.sub(r'(.)\1{2,}', r'\1', txt)
+    txt = re.sub(r"\s+", ' ', txt).strip()
     return txt
 
 
@@ -118,35 +384,51 @@ def _tokenize(text: str):
     return re.findall(r"\w+'?\w*|\w+", text)
 
 
-def _get_response(intent: str) -> str:
-    options = RESPONSES.get(intent, RESPONSES["unknown"])
-    return random.choice(options)
+def detect_intent_and_level(text: str) -> dict:
+    """
+    Detects intent and maps it to an anxiety level.
 
-
-def detect_intent_from_text(text: str) -> Tuple[str, float]:
+    Returns:
+        {
+            "intent": str,
+            "confidence": float,
+            "anxiety_level": str or None,  # "low", "moderate", "high", "crisis"
+            "severity": str,               # "Low", "Moderate", "High" for frontend sidebar
+            "counselor_protocol": str,     # protocol text to inject into GPT
+            "crisis_resources": str or None,
+            "anxiety_score": int,          # for existing counselor.py compatibility
+        }
+    """
     txt = _normalize_text(text)
     tokens = set(_tokenize(txt))
 
-    # Suicidal escalation check first
+    # --- Suicidal check first (always highest priority) ---
     for kw, weight in KEYWORDS.get("suicidal", []):
         if ' ' in kw:
             if re.search(r"\b" + re.escape(kw) + r"\b", txt) or \
                SequenceMatcher(None, kw, txt).ratio() >= PHRASE_FUZZY_THRESHOLD:
-                return ("suicidal", 0.99)
+                return _build_result("suicidal", 0.99)
         else:
             if kw in tokens:
-                return ("suicidal", 0.99)
+                return _build_result("suicidal", 0.99)
             for t in tokens:
                 if SequenceMatcher(None, kw, t).ratio() >= TOKEN_FUZZY_THRESHOLD:
-                    return ("suicidal", 0.99)
+                    return _build_result("suicidal", 0.99)
 
+    # --- Score all other intents ---
     best_intent = None
     best_score = 0.0
     best_max = 1.0
 
     for intent, kw_list in KEYWORDS.items():
         matched_weight = 0.0
-        max_possible = sum(w for _, w in kw_list) or 1.0
+
+        # Use top 5 keyword weights as max_possible instead of sum of ALL weights
+        # This makes single strong keyword matches actually reach meaningful scores
+        # Previously: matching "chest is tight" (2.5) out of ~150 total = 1.6% = useless
+        # Now: matching "chest is tight" (2.5) out of top5 sum (~11) = 22% = meaningful
+        top5_weights = sorted([w for _, w in kw_list], reverse=True)[:5]
+        max_possible = sum(top5_weights) or 1.0
 
         for kw, weight in kw_list:
             if ' ' in kw:
@@ -168,46 +450,68 @@ def detect_intent_from_text(text: str) -> Tuple[str, float]:
             best_max = max_possible
             best_intent = intent
 
+    # --- Calculate confidence ---
+    if best_intent is None or best_score == 0.0:
+        return _build_result("neutral", 0.3)
+
     normalized = best_score / best_max if best_max > 0 else 0.0
     confidence = 0.3 + 0.7 * min(1.0, normalized)
 
-    if best_intent is None or best_score == 0.0:
-        return ("neutral", 0.5)
-
-    return (best_intent, round(confidence, 3))
+    return _build_result(best_intent, round(confidence, 3))
 
 
-def generate_response(intent_data: dict):
-    # --- 1. If already intent dict ---
-    if isinstance(intent_data, dict) and 'intent' in intent_data:
-        intent = intent_data.get('intent')
+def _build_result(intent: str, confidence: float) -> dict:
+    """
+    Maps intent + confidence to anxiety level, severity, and protocol.
 
-        # Meta / language question handling
-        if intent == "language_question":
-            return "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
+    Confidence thresholds:
+        < 0.45  → no anxiety level detected, GPT responds freely
+        0.45 - 0.60 → LOW
+        0.60 - 0.75 → MODERATE
+        0.75 - 0.98 → HIGH
+        0.99        → CRISIS (suicidal)
+    """
+    # Crisis is always crisis regardless of intent label
+    if intent == "suicidal" or confidence >= 0.99:
+        return {
+            "intent": intent,
+            "confidence": confidence,
+            "anxiety_level": "crisis",
+            "severity": "High",
+            "counselor_protocol": COUNSELOR_PROTOCOLS["crisis"],
+            "crisis_resources": CRISIS_RESOURCES,
+            "anxiety_score": 5,
+        }
 
-        return _get_response(intent)
+    # Map confidence to anxiety level
+    if confidence >= 0.75:
+        anxiety_level = "high"
+        severity = "High"
+        anxiety_score = 5
+        protocol = COUNSELOR_PROTOCOLS["high"]
+    elif confidence >= 0.60:
+        anxiety_level = "moderate"
+        severity = "Moderate"
+        anxiety_score = 3
+        protocol = COUNSELOR_PROTOCOLS["moderate"]
+    elif confidence >= 0.45:
+        anxiety_level = "low"
+        severity = "Low"
+        anxiety_score = 1
+        protocol = COUNSELOR_PROTOCOLS["low"]
+    else:
+        # Below threshold — GPT responds freely, no anxiety level injected
+        anxiety_level = None
+        severity = "Normal"   # ← default state, not Low
+        anxiety_score = 0
+        protocol = None
 
-    # --- 2. If dict with raw text ---
-    if isinstance(intent_data, dict) and 'text' in intent_data:
-        text = intent_data.get('text', '')
-        intent, confidence = detect_intent_from_text(text)
-
-        if intent == "language_question":
-            response = "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
-        else:
-            response = _get_response(intent)
-
-        if intent_data.get('return_meta'):
-            return {'response': response, 'intent': intent, 'confidence': confidence}
-        return response
-
-    # --- 3. If plain string input ---
-    if isinstance(intent_data, str):
-        intent, _ = detect_intent_from_text(intent_data)
-        if intent == "language_question":
-            return "Oo, nakakaintindi ako ng Tagalog. Maaari kang magtanong sa Tagalog o English!"
-        return _get_response(intent)
-
-    # --- 4. Fallback ---
-    return _get_response("unknown")
+    return {
+        "intent": intent,
+        "confidence": confidence,
+        "anxiety_level": anxiety_level,
+        "severity": severity,
+        "counselor_protocol": protocol,
+        "crisis_resources": None,
+        "anxiety_score": anxiety_score,
+    }

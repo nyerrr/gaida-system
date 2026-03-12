@@ -7,7 +7,7 @@ export default function StudentDashboard() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [severity, setSeverity] = useState('Low');
+  const [severity, setSeverity] = useState('Normal');
   const [sessionTime, setSessionTime] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState(''); // CHANGE 1: added voiceStatus state
@@ -43,16 +43,20 @@ export default function StudentDashboard() {
   };
 
   const getSeverityColor = (level) => {
-    if (level === 'High') return { bar: 'bg-red-500', text: 'text-red-400', border: 'border-red-800', glow: 'shadow-red-500/20' };
-    if (level === 'Moderate') return { bar: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-800', glow: 'shadow-yellow-500/20' };
-    return { bar: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-800', glow: 'shadow-emerald-500/20' };
-  };
+  if (level === 'High') return { bar: 'bg-red-500', text: 'text-red-400', border: 'border-red-800', glow: 'shadow-red-500/20' };
+  if (level === 'Moderate') return { bar: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-800', glow: 'shadow-yellow-500/20' };
+  if (level === 'Low') return { bar: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-800', glow: 'shadow-emerald-500/20' };
+  // Normal — default neutral gray
+  return { bar: 'bg-gray-500', text: 'text-gray-400', border: 'border-gray-700', glow: 'shadow-gray-500/10' };
+};
 
   const getSeverityWidth = (level) => {
-    if (level === 'High') return 'w-4/5';
-    if (level === 'Moderate') return 'w-2/4';
-    return 'w-1/4';
-  };
+  if (level === 'High') return 'w-4/5';
+  if (level === 'Moderate') return 'w-2/4';
+  if (level === 'Low') return 'w-1/4';
+  return 'w-0';  // Normal — empty bar
+};
+
 
   const sendMessage = async () => {
     const text = input.trim();
