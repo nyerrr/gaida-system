@@ -16,14 +16,15 @@ export default function PortalSelection() {
       <div className="relative z-10 bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md mx-4">
 
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <img
-            src="https://www.ue.edu.ph/mla/wp-content/uploads/2023/04/uesocialogp.png"
-            alt="University of the East"
-            className="w-24 h-24 object-cover object-right rounded-full mb-4 shadow-lg border-4 border-red-700"
-          />
-          <h1 className="text-3xl font-bold text-gray-900">GAIDA</h1>
-          <p className="text-gray-500 text-sm text-center mt-1">Guidance System with Multimodal Anxiety Detection</p>
+                 <div className="flex flex-col items-center mb-7">
+          <div className="w-20 h-20 rounded-full mb-4 shadow-lg border-3 border-red-400 overflow-hidden">
+  <img
+    src="https://i.ytimg.com/vi/kfKz0miI36s/maxresdefault.jpg"
+    alt="University of the East"
+    className="w-full h-full object-cover object-center"
+    style={{ transform: 'scale(1.8)', transformOrigin: 'center' }}
+  />
+</div>
         </div>
 
         {/* Portal buttons */}

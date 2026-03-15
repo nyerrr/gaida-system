@@ -108,15 +108,18 @@ export default function CounselorLogin() {
       />
 
       {/* White card */}
-      <div className="relative z-10 bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md mx-4">
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-7">
-          <img
-            src="https://www.ue.edu.ph/mla/wp-content/uploads/2023/04/uesocialogp.png"
-            alt="University of the East"
-            className="w-20 h-20 object-cover object-right rounded-full mb-4 shadow-lg border-4 border-red-700"
-          />
+<div className="w-20 h-20 rounded-full mb-4 shadow-lg border-3 border-red-300 overflow-hidden">
+  <img
+    src="https://i.ytimg.com/vi/kfKz0miI36s/maxresdefault.jpg"
+    alt="University of the East"
+    className="w-full h-full object-cover object-center"
+    style={{ transform: 'scale(1.8)', transformOrigin: 'center' }}
+  />
+</div>
           <h2 className="text-2xl font-bold text-gray-900">Counselor Login</h2>
           <p className="text-gray-400 text-sm mt-1">Sign in to access the dashboard</p>
         </div>
@@ -173,27 +176,30 @@ export default function CounselorLogin() {
               disabled={loading}
               className="w-full px-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-colors disabled:opacity-50"
             />
-            {showCaptcha && (
-              <div className="flex items-center gap-3 mt-2">
-                <canvas
-                  ref={canvasRef}
-                  width={148}
-                  height={44}
-                  className="rounded-lg border border-gray-200"
-                />
-                <button
-                  type="button"
-                  onClick={handleRefreshCaptcha}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 text-gray-400 hover:text-red-600 text-xs transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh
-                </button>
-              </div>
-            )}
+
+            {/* CAPTCHA area — always in layout, hidden until focused */}
+            <div
+              className="flex items-center gap-3 mt-2"
+              style={{ visibility: showCaptcha ? 'visible' : 'hidden', height: '44px' }}
+            >
+              <canvas
+                ref={canvasRef}
+                width={148}
+                height={44}
+                className="rounded-lg border border-gray-200"
+              />
+              <button
+                type="button"
+                onClick={handleRefreshCaptcha}
+                disabled={loading}
+                className="flex items-center gap-1.5 text-gray-400 hover:text-red-600 text-xs transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-3">

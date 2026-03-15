@@ -56,13 +56,14 @@ export default function StudentLogin() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-7">
-          <img
-            src="https://www.ue.edu.ph/mla/wp-content/uploads/2023/04/uesocialogp.png"
-            alt="University of the East"
-            className="w-20 h-20 object-cover object-right rounded-full mb-4 shadow-lg border-4 border-red-700"
-          />
-          <h2 className="text-2xl font-bold text-gray-900">Student Login</h2>
-          <p className="text-gray-400 text-sm mt-1">Sign in to access your account</p>
+          <div className="w-20 h-20 rounded-full mb-4 shadow-lg border-3 border-red-400 overflow-hidden">
+  <img
+    src="https://i.ytimg.com/vi/kfKz0miI36s/maxresdefault.jpg"
+    alt="University of the East"
+    className="w-full h-full object-cover object-center"
+    style={{ transform: 'scale(1.8)', transformOrigin: 'center' }}
+  />
+</div>
         </div>
 
         {error && (
