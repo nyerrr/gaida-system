@@ -42,3 +42,6 @@ htmlcov/
 .nox/
 .pytest_cache/
 .mypy_cache/
+
+# Runtime data files
+consents.json

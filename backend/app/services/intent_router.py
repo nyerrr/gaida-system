@@ -66,8 +66,8 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
     if session_id and get_session(session_id):
         session = get_session(session_id)
     else:
-        session_id = start_session(session_id=session_id)
-        session = get_session(session_id)
+        session_id = start_session()  # always generates a new UUID internally
+        session = get_session(session_id)   
 
     # --- Step 2: Detect intent + raw confidence from current message only ---
     detection = detect_intent_and_level(user_message)

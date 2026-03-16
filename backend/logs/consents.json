@@ -20,5 +20,11 @@
     "consent_given": true,
     "recorded_at": "2026-03-13T04:32:09.183312",
     "updated_at": "2026-03-13T04:32:09.183312"
+  },
+  {
+    "session_id": "13f41c75-5c6a-494f-8a45-1c5de5a89977",
+    "consent_given": true,
+    "recorded_at": "2026-03-16T11:21:08.903467",
+    "updated_at": "2026-03-16T11:21:08.903467"
   }
 ]
