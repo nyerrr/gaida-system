@@ -1075,5 +1075,16 @@
         "anxiety_score": 5,
         "method": "gpt",
         "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-17T12:42:29.313166",
+        "session_id": "264ed890-666c-4115-8c44-018d24987989",
+        "user_message": "thank you",
+        "assistant_reply": "You're welcome! How are you feeling today?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
     }
 ]

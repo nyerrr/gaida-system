@@ -45,3 +45,4 @@ htmlcov/
 
 # Runtime data files
 consents.json
+interactions.json
