@@ -954,5 +954,126 @@
         "anxiety_score": 5,
         "method": "gpt",
         "severity": "High"
+    },
+    {
+        "timestamp": "2026-03-16T03:31:20.244370",
+        "session_id": "e1eb3b70-48c8-49e2-8d13-2b7381c8b67d",
+        "user_message": "testing",
+        "assistant_reply": "I'm here with you. Can you tell me more about how you're feeling?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "fallback",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-16T03:31:45.490405",
+        "session_id": "e1eb3b70-48c8-49e2-8d13-2b7381c8b67d",
+        "user_message": "im feeling not very good today",
+        "assistant_reply": "I'm here with you. Can you tell me more about how you're feeling?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "fallback",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-16T03:36:21.081473",
+        "session_id": "0e35619c-2a3d-484a-af12-51ee3ef2753e",
+        "user_message": "testing",
+        "assistant_reply": "I'm here with you. Can you tell me more about how you're feeling?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "fallback",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:29:09.079926",
+        "session_id": "372ff73d-d094-469a-9aed-2d5b9e0d2ba7",
+        "user_message": "testing",
+        "assistant_reply": "I'm here with you. Can you tell me more about how you're feeling?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "fallback",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:34:03.490656",
+        "session_id": "73ea3e17-d34d-4cdf-aa64-b71f004691f7",
+        "user_message": "testing",
+        "assistant_reply": "I'm here with you. Can you tell me more about how you're feeling?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "fallback",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:34:09.344469",
+        "session_id": "73ea3e17-d34d-4cdf-aa64-b71f004691f7",
+        "user_message": "tesst",
+        "assistant_reply": "I'm here with you. Can you tell me more about how you're feeling?",
+        "intent": "academic",
+        "confidence": 0.322,
+        "anxiety_score": 0,
+        "method": "fallback",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:34:11.638171",
+        "session_id": "73ea3e17-d34d-4cdf-aa64-b71f004691f7",
+        "user_message": "are u real",
+        "assistant_reply": "I'm here with you. Can you tell me more about how you're feeling?",
+        "intent": "academic",
+        "confidence": 0.311,
+        "anxiety_score": 0,
+        "method": "fallback",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:38:55.353619",
+        "session_id": "bff110dd-15bb-48dd-a5b2-3776e8df9bff",
+        "user_message": "testing",
+        "assistant_reply": "Hi there! What are we testing today? Feel free to share what's on your mind.",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:39:04.553410",
+        "session_id": "bff110dd-15bb-48dd-a5b2-3776e8df9bff",
+        "user_message": "just testing if you are working",
+        "assistant_reply": "Hey there! I'm here and ready to chat. What's on your mind today?",
+        "intent": "neutral",
+        "confidence": 0.3,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:39:14.772456",
+        "session_id": "bff110dd-15bb-48dd-a5b2-3776e8df9bff",
+        "user_message": "im feeling stressed",
+        "assistant_reply": "I'm here for you. What's been causing you stress? Sometimes just talking about it can help lighten the load.",
+        "intent": "stress",
+        "confidence": 0.408,
+        "anxiety_score": 0,
+        "method": "gpt",
+        "severity": "Normal"
+    },
+    {
+        "timestamp": "2026-03-17T12:40:45.200646",
+        "session_id": "bff110dd-15bb-48dd-a5b2-3776e8df9bff",
+        "user_message": "ive been thinking about suicide",
+        "assistant_reply": "I'm deeply concerned about what you're going through right now. Your feelings are valid, and it's crucial to get help. Please reach out to the National Crisis Hotline at 1553 or In Touch Crisis Line at (02) 893-7603 immediately. You can also contact your school's Guidance Office or call 911 if you're in immediate danger. Your well-being matters, and support is available for you.",
+        "intent": "suicidal",
+        "confidence": 0.99,
+        "anxiety_score": 5,
+        "method": "gpt",
+        "severity": "High"
     }
 ]

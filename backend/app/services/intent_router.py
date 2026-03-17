@@ -4,6 +4,9 @@ from app.services.session_manager import get_session, start_session, record_inte
 from app.services.virtual_agent import detect_intent_and_level, _build_result
 from app.services.gpt_agent import generate_response_with_gpt
 from app.api.counselor import process_alert
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -161,10 +164,9 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
         response_text = gpt_result["response"]
         method = "gpt"
     else:
-        logger.warning("GPT unavailable, using safe fallback response")
+        logger.warning("GPT unavailable, using safe fallback response. Result: %s", gpt_result)
         response_text = "I'm here with you. Can you tell me more about how you're feeling?"
         method = "fallback"
-
     # --- Step 8: Fire counselor alert for HIGH and CRISIS ---
     if anxiety_level in ("high", "crisis"):
         try:

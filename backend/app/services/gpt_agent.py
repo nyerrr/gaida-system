@@ -1,7 +1,8 @@
 import os
-import json
+import logging
 from dotenv import load_dotenv
 from typing import Dict, Any
+from openai import RateLimitError, APIConnectionError, APITimeoutError
 
 try:
     from openai import OpenAI
@@ -10,12 +11,17 @@ except Exception:
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 _OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL_BASE = "gpt-3.5-turbo"
+
 client = None
 if OpenAI and _OPENAI_API_KEY:
     try:
         client = OpenAI(api_key=_OPENAI_API_KEY)
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to initialize OpenAI client: %s", e)
         client = None
 
 
@@ -80,18 +86,8 @@ def generate_response_with_gpt(
     anxiety_level: str | None = None,
     counselor_protocol: str | None = None,
 ) -> Dict[str, Any]:
-    """
-    Generates an empathetic response using the OpenAI client.
-    
-    Args:
-        user_message: The student's message
-        session_context: Full conversation history
-        anxiety_level: None, 'low', 'moderate', 'high', or 'crisis'
-        counselor_protocol: Optional counselor-defined first aid text to inject
-
-    Returns: {"response": str, "used": bool}
-    """
     if not client:
+        logger.error("OpenAI client is not initialized")
         return {"response": None, "used": False}
 
     # Build messages: system prompt first
@@ -107,13 +103,10 @@ def generate_response_with_gpt(
         }
         level_tag = level_map.get(anxiety_level.lower(), "")
         if level_tag:
-            context_note = f"{level_tag}"
+            context_note = level_tag
             if counselor_protocol:
                 context_note += f"\n\nCounselor first aid protocol to follow:\n{counselor_protocol}"
-            messages.append({
-                "role": "system",
-                "content": context_note
-            })
+            messages.append({"role": "system", "content": context_note})
 
     # Include last 10 messages from conversation history
     if session_context and isinstance(session_context.get("messages"), list):
@@ -126,39 +119,24 @@ def generate_response_with_gpt(
     # Add current user message
     messages.append({"role": "user", "content": user_message})
 
-    def _call_gpt():
-        return client.chat.completions.create(
+    try:
+        resp = client.chat.completions.create(
             model=OPENAI_MODEL_BASE,
             messages=messages,
             temperature=0.7,
             max_tokens=200,
         )
 
-    try:
-        resp = exponential_backoff_retry(
-            _call_gpt,
-            exception_types=(
-                RateLimitError,
-                APIConnectionError,
-                APITimeoutError,
-            )
-        )
-
         content = None
         if hasattr(resp, "choices") and len(resp.choices) > 0:
-            choice = resp.choices[0]
-            if hasattr(choice, "message") and choice.message is not None:
-                content = getattr(choice.message, "content", None) or choice.message.get("content")
-            else:
-                content = getattr(choice, "text", None)
+            content = resp.choices[0].message.content
 
         if not content:
+            logger.warning("GPT returned empty content")
             return {"response": None, "used": False}
 
         return {"response": content.strip(), "used": True}
 
-    except Exception:
-        return {"response": None, "used": False}
     except Exception as e:
-        logger.error(f"Error generating response with GPT: {e}")
+        logger.error("GPT call failed: %s", e)
         return {"response": None, "used": False}

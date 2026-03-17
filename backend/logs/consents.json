@@ -25,6 +25,24 @@
     "session_id": "13f41c75-5c6a-494f-8a45-1c5de5a89977",
     "consent_given": true,
     "recorded_at": "2026-03-16T11:21:08.903467",
-    "updated_at": "2026-03-16T11:21:08.903467"
+    "updated_at": "2026-03-16T11:31:18.246418"
+  },
+  {
+    "session_id": "e1eb3b70-48c8-49e2-8d13-2b7381c8b67d",
+    "consent_given": true,
+    "recorded_at": "2026-03-16T11:36:15.540315",
+    "updated_at": "2026-03-16T11:36:15.540315"
+  },
+  {
+    "session_id": "0e35619c-2a3d-484a-af12-51ee3ef2753e",
+    "consent_given": true,
+    "recorded_at": "2026-03-17T20:29:00.214405",
+    "updated_at": "2026-03-17T20:29:00.214405"
+  },
+  {
+    "session_id": "73ea3e17-d34d-4cdf-aa64-b71f004691f7",
+    "consent_given": true,
+    "recorded_at": "2026-03-17T20:38:48.397679",
+    "updated_at": "2026-03-17T20:38:48.397679"
   }
 ]
