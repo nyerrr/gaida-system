@@ -1,11 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import json
-from pathlib import Path
 from datetime import datetime
+from app.database.database import supabase
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-CONSENT_FILE = Path("logs/consents.json")
 
 # Temporary test credentials for development/testing
 TEST_CREDENTIALS = {
@@ -73,7 +71,12 @@ def login(payload: LoginRequest):
     
     # Generate a simple session token (in production, use JWT)
     session_token = f"token_{student_number}_{int(__import__('time').time())}"
-    
+    supabase.table("sessions").insert({
+        "student_id": student_number,
+        "session_token": session_token,
+        "is_counselor": student_number.startswith("COUNSELOR")
+    }).execute()
+
     return LoginResponse(
         success=True,
         message="Login successful",
@@ -87,35 +90,30 @@ def record_consent(payload: ConsentRequest):
     """
     Record user consent for logging interactions.
     """
-    # Load existing consents
-    if CONSENT_FILE.exists():
-        with open(CONSENT_FILE, "r", encoding="utf-8") as f:
-            consents = json.load(f)
+    existing = supabase.table("consents")\
+        .select("*")\
+        .eq("session_id", payload.session_id)\
+        .execute()
+    
+    if existing.data:
+        supabase.table("consents")\
+            .update({
+                "consent_given": payload.consent_given,
+                "updated_at": datetime.utcnow().isoformat()
+            })\
+            .eq("session_id", payload.session_id)\
+            .execute()
     else:
-        consents = []
-    
-    # Check if session already has consent recorded
-    existing = next((c for c in consents if c.get("session_id") == payload.session_id), None)
-    
-    if existing:
-        existing["consent_given"] = payload.consent_given
-        existing["updated_at"] = datetime.utcnow().isoformat()
-    else:
-        consents.append({
-            "session_id": payload.session_id,
-            "consent_given": payload.consent_given,
-            "recorded_at": datetime.utcnow().isoformat()
-        })
-    
-    # Save consents
-    CONSENT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONSENT_FILE, "w", encoding="utf-8") as f:
-        json.dump(consents, f, indent=2)
-    
+        supabase.table("consents")\
+            .insert({
+                "session_id": payload.session_id,
+                "consent_given": payload.consent_given,
+            })\
+            .execute()
     return {
         "success": True,
         "message": f"Consent recorded: {payload.consent_given}",
-        "session_id": payload.session_id
+        "session_id": payload.session_id,
     }
 
 
@@ -145,5 +143,10 @@ def get_test_credentials():
                 "access_code": "ACCESS789",
                 "antibot": "GAIDA",
             },
+            {
+                "email": "counselor@ue.edu.ph",
+                "access_code": "COUNSEL123",
+                "antibot": "GAIDA",
+            }
         ]
     }

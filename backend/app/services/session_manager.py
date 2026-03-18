@@ -1,8 +1,7 @@
 from typing import Dict, Any, List, Callable
 from datetime import datetime
 import uuid
-import json
-from pathlib import Path
+from app.database.database import supabase
 import asyncio
 
 from app.utils.consent_checker import has_consent
@@ -10,7 +9,6 @@ from app.utils.consent_checker import has_consent
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 _SUBSCRIBERS: List[Callable] = []
 
-LOG_FILE = Path("logs/interactions.json")
 
 
 def start_session(user_id: str | None = None) -> str:
@@ -58,19 +56,15 @@ def _notify_subscribers(session_id: str, entry: Dict[str, Any]):
 
 def _persist_entry(entry: Dict[str, Any]):
     try:
-        if LOG_FILE.exists():
-            with open(LOG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            data = []
-    except Exception:
-        data = []
-
-    data.append(entry)
-
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        supabase.table("interactions").insert({
+            "session_id": entry.get("session_id"),
+            "student_id": entry.get("session_id"),  
+            "message": entry.get("text"),
+            "response": entry.get("response") or "",
+            "timestamp": entry.get("timestamp"),
+        }).execute()
+    except Exception as e:
+        print(f"Supabase insert error: {e}")
 
 
 def record_interaction(session_id: str, sender: str, text: str, analysis: Dict | None = None, response: str | None = None):

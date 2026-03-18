@@ -1,9 +1,8 @@
 # backend/app/main.py
 import sys
 import os
-from pathlib import Path
-import json
 from datetime import datetime
+from app.database.database import supabase
 
 # ----------------------------
 # Add project root to Python path
@@ -55,15 +54,10 @@ class ConsentInput(BaseModel):
     session_id: str
     consent_given: bool
 
-# ----------------------------
-# Logging setup
-# ----------------------------
-LOG_FILE = Path("logs/interactions.json")
-LOG_FILE.parent.mkdir(exist_ok=True)
-if not LOG_FILE.exists():
-    LOG_FILE.write_text("[]")
 
-
+# ----------------------------
+# Logging
+# ----------------------------
 def log_interaction(
     session_id: str,
     user_message: str,
@@ -74,35 +68,20 @@ def log_interaction(
     method: str = None,
     severity: str = None,
 ):
-    """Append each interaction to interactions.json"""
     try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            logs = json.load(f)
-    except json.JSONDecodeError:
-        logs = []
-
-    log_entry = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "session_id": session_id,
-        "user_message": user_message,
-        "assistant_reply": assistant_reply,
-    }
-
-    if intent is not None:
-        log_entry["intent"] = intent
-    if confidence is not None:
-        log_entry["confidence"] = confidence
-    if anxiety_score is not None:
-        log_entry["anxiety_score"] = anxiety_score
-    if method is not None:
-        log_entry["method"] = method
-    if severity is not None:
-        log_entry["severity"] = severity
-
-    logs.append(log_entry)
-
-    with open(LOG_FILE, "w", encoding="utf-8") as f:
-        json.dump(logs, f, indent=4)
+        supabase.table("interactions").insert({
+            "session_id": session_id,
+            "student_id": session_id,
+            "message": user_message,
+            "response": assistant_reply,
+            "intent": intent,
+            "confidence": confidence,
+            "anxiety_score": anxiety_score,
+            "method": method,
+            "severity": severity,
+        }).execute()
+    except Exception as e:
+        print(f"Supabase log error: {e}")
 
 
 # ----------------------------
@@ -115,7 +94,6 @@ def root():
 
 @app.post("/consent")
 def record_consent(input: ConsentInput):
-    """Called when user accepts or revokes terms and conditions."""
     log_consent(session_id=input.session_id, consent_given=input.consent_given)
     return {
         "status": "ok",
@@ -126,16 +104,13 @@ def record_consent(input: ConsentInput):
 
 @app.post("/virtual-agent")
 def virtual_agent(input: UserInput):
-    # Rate limiting
     check_rate_limit(input.session_id or "anonymous")
 
-    # Detect intent + anxiety level + generate GPT response
     result = analyze_intent(
         user_message=input.message,
         session_id=input.session_id,
     )
 
-    # Log interaction
     log_interaction(
         session_id=result.get("session_id") or input.session_id or "unknown",
         user_message=input.message,
