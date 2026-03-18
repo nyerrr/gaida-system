@@ -196,6 +196,17 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
         )
     except Exception as e:
         logger.error(f"Failed to record interaction: {e}")
+        
+    try:
+        record_interaction(
+            session_id=session_id,
+            sender="assistant",
+            text=response_text,
+            analysis={},
+            response=None,
+        )
+    except Exception as e:
+        logger.error(f"Failed to record assistant interaction: {e}")
 
     # Step 9: Return full payload including severity
     return {
