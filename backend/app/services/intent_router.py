@@ -1,13 +1,11 @@
 from typing import Dict, Any
-from app.utils.logger import log_interaction
+import logging
 from app.services.session_manager import get_session, start_session, record_interaction
 from app.services.virtual_agent import detect_intent_and_level, _build_result
 from app.services.gpt_agent import generate_response_with_gpt
 from app.api.counselor import process_alert
-import logging
 
 logger = logging.getLogger(__name__)
-
 
 # ---------------------------------------------------------------------------
 # Cumulative confidence weights
@@ -31,11 +29,36 @@ CALMING_KEYWORDS = [
     "panatag na", "hindi na", "wala na", "okay na ko", "okay na ako",
 ]
 
+# ---------------------------------------------------------------------------
+# Urgent physical symptom keywords
+# These are immediate, observable anxiety symptoms
+# When detected, current message gets 70% weight instead of 50%
+# so confidence jumps faster regardless of history
+# ---------------------------------------------------------------------------
+URGENT_PHYSICAL_KEYWORDS = [
+    "cant breathe", "can't breathe", "cannot breathe",
+    "chest is tight", "tight chest", "chest tightness", "chest pain",
+    "shaking", "trembling", "nanginginig",
+    "hyperventilating", "hyperventilation",
+    "panic attack", "panicattack",
+    "cant control my breathing", "cant control breathing",
+    "dizzy", "lightheaded",
+    "palpitations", "heart racing",
+    "sikip sa puso", "hirap huminga",
+    "di makahininga",
+]
+
 
 def _detect_calming(text: str) -> bool:
     """Returns True if the message contains calming/recovery signals."""
     txt = text.lower()
     return any(kw in txt for kw in CALMING_KEYWORDS)
+
+
+def _detect_urgent(text: str) -> bool:
+    """Returns True if the message contains urgent physical anxiety symptoms."""
+    txt = text.lower()
+    return any(kw in txt for kw in URGENT_PHYSICAL_KEYWORDS)
 
 
 def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str, Any]:
@@ -69,8 +92,8 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
     if session_id and get_session(session_id):
         session = get_session(session_id)
     else:
-        session_id = start_session()  # always generates a new UUID internally
-        session = get_session(session_id)   
+        session_id = start_session()
+        session = get_session(session_id)
 
     # --- Step 2: Detect intent + raw confidence from current message only ---
     detection = detect_intent_and_level(user_message)
@@ -81,21 +104,28 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
     # --- Step 3: Crisis is always immediate — bypass cumulative scoring ---
     if intent == "suicidal" or raw_confidence >= 0.99:
         running_confidence = 0.99
+        if "meta" not in session:
+            session["meta"] = {}
         session["meta"]["running_confidence"] = running_confidence
-        session["meta"]["running_intent"] = intent
+        session["meta"]["running_intent"] = "suicidal"
+        session["meta"]["post_crisis"] = True  # ← flag stays for entire session
     else:
         # Get previous running confidence from session (default 0.3 = neutral start)
         previous_confidence = session.get("meta", {}).get("running_confidence", 0.3)
         previous_intent = session.get("meta", {}).get("running_intent", "neutral")
+        post_crisis = session.get("meta", {}).get("post_crisis", False)
 
         # --- Step 4: Check for calming signals ---
         if _detect_calming(user_message):
-            # Student seems to be calming down — reduce confidence toward neutral
-            running_confidence = (previous_confidence * 0.7) + (0.3 * 0.3)
+            if post_crisis:
+                # After crisis — drop faster (50/50) but floor at 0.3
+                running_confidence = (previous_confidence * 0.5) + (0.3 * 0.5)
+            else:
+                # Normal calming — also faster now (50/50 instead of 70/30)
+                running_confidence = (previous_confidence * 0.5) + (0.3 * 0.5)
             running_confidence = max(0.3, round(running_confidence, 3))
         else:
             # Apply repetition boost if same distress intent repeats
-            # Repetition signals escalation — student keeps expressing same distress
             boosted_raw = raw_confidence
             if (
                 intent == previous_intent
@@ -104,9 +134,7 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
             ):
                 boosted_raw = min(0.98, raw_confidence * REPETITION_BOOST)
 
-            # Cross-intent boost — when two related distress intents appear together
-            # e.g. student mentions sadness then anxiety, or anxiety then academic stress
-            # Switching between related emotions = escalation signal
+            # Cross-intent boost
             RELATED_INTENTS = {
                 "anxiety":    ("stress", "sadness", "academic"),
                 "sadness":    ("anxiety", "loneliness", "stress"),
@@ -119,29 +147,44 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
             if (
                 previous_intent in related
                 and raw_confidence > 0.3
-                and boosted_raw == raw_confidence  # only if not already boosted above
+                and boosted_raw == raw_confidence
             ):
-                boosted_raw = min(0.98, raw_confidence * 1.15)  # softer 15% cross-intent boost
+                boosted_raw = min(0.98, raw_confidence * 1.15)
 
-            # Blend history (50%) with current message (50%)
-            running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
+            # Blend history vs current message
+            # Urgent physical symptoms get 70% weight — jump faster
+            # Normal messages get 50% weight — build gradually
+            if _detect_urgent(user_message):
+                running_confidence = (previous_confidence * 0.3) + (boosted_raw * 0.7)
+            else:
+                running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
             running_confidence = round(running_confidence, 3)
 
-        # Keep intent as the most distressed detected so far
-        # (intent only upgrades, never downgrades mid-session)
+        # Intent priority — after crisis, allow downgrade when calming detected
+        # Before this fix: intent was locked to "suicidal" forever
+        # Now: if student is clearly calming, allow intent to reflect current state
         intent_priority = ["neutral", "academic", "loneliness", "anger", "stress", "sadness", "anxiety", "suicidal"]
         prev_priority = intent_priority.index(previous_intent) if previous_intent in intent_priority else 0
         curr_priority = intent_priority.index(intent) if intent in intent_priority else 0
-        intent = intent if curr_priority >= prev_priority else previous_intent
+
+        if post_crisis and _detect_calming(user_message):
+            # Allow downgrade after crisis when student is calming
+            # Intent follows current detection, not locked to suicidal
+            pass  # intent stays as currently detected
+        else:
+            # Normal behavior — intent only upgrades
+            intent = intent if curr_priority >= prev_priority else previous_intent
 
         # Save updated running values back to session
         if "meta" not in session:
             session["meta"] = {}
         session["meta"]["running_confidence"] = running_confidence
         session["meta"]["running_intent"] = intent
+        session["meta"]["post_crisis"] = post_crisis  # preserve flag
 
     # --- Step 5: Map blended confidence to anxiety level ---
-    final_detection = _build_result(intent, running_confidence)
+    post_crisis = session.get("meta", {}).get("post_crisis", False)
+    final_detection = _build_result(intent, running_confidence, post_crisis=post_crisis)
     anxiety_level = final_detection["anxiety_level"]
     severity = final_detection["severity"]
     counselor_protocol = final_detection["counselor_protocol"]
@@ -164,9 +207,10 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
         response_text = gpt_result["response"]
         method = "gpt"
     else:
-        logger.warning("GPT unavailable, using safe fallback response. Result: %s", gpt_result)
+        logger.warning("GPT unavailable, using safe fallback response")
         response_text = "I'm here with you. Can you tell me more about how you're feeling?"
         method = "fallback"
+
     # --- Step 8: Fire counselor alert for HIGH and CRISIS ---
     if anxiety_level in ("high", "crisis"):
         try:
@@ -196,19 +240,7 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
         )
     except Exception as e:
         logger.error(f"Failed to record interaction: {e}")
-        
-    try:
-        record_interaction(
-            session_id=session_id,
-            sender="assistant",
-            text=response_text,
-            analysis={},
-            response=None,
-        )
-    except Exception as e:
-        logger.error(f"Failed to record assistant interaction: {e}")
 
-    # Step 9: Return full payload including severity
     return {
         "session_id": session_id,
         "intent": intent,

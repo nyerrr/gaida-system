@@ -460,19 +460,24 @@ def detect_intent_and_level(text: str) -> dict:
     return _build_result(best_intent, round(confidence, 3))
 
 
-def _build_result(intent: str, confidence: float) -> dict:
+def _build_result(intent: str, confidence: float, post_crisis: bool = False) -> dict:
     """
     Maps intent + confidence to anxiety level, severity, and protocol.
 
     Confidence thresholds:
-        < 0.45  → no anxiety level detected, GPT responds freely
+        < 0.45  → Normal (no anxiety detected)
         0.45 - 0.60 → LOW
         0.60 - 0.75 → MODERATE
         0.75 - 0.98 → HIGH
-        0.99        → CRISIS (suicidal)
+        >= 0.99     → CRISIS (suicidal)
+
+    post_crisis: if True, severity floor is "Low" — never drops to Normal
+    even if student calms down completely. Counselor stays aware.
     """
-    # Crisis is always crisis regardless of intent label
-    if intent == "suicidal" or confidence >= 0.99:
+    # Crisis ONLY triggers at confidence >= 0.99
+    # NOT based on intent label alone
+    # This allows severity to drop naturally as confidence decreases
+    if confidence >= 0.99:
         return {
             "intent": intent,
             "confidence": confidence,
@@ -500,11 +505,21 @@ def _build_result(intent: str, confidence: float) -> dict:
         anxiety_score = 1
         protocol = COUNSELOR_PROTOCOLS["low"]
     else:
-        # Below threshold — GPT responds freely, no anxiety level injected
+        # Below threshold — GPT responds freely
         anxiety_level = None
-        severity = "Normal"   # ← default state, not Low
         anxiety_score = 0
         protocol = None
+
+        # Post-crisis floor — once crisis was triggered in this session,
+        # severity never drops back to Normal
+        # Counselor remains aware even after student calms down
+        if post_crisis:
+            severity = "Low"
+            anxiety_level = "low"
+            anxiety_score = 1
+            protocol = COUNSELOR_PROTOCOLS["low"]
+        else:
+            severity = "Normal"
 
     return {
         "intent": intent,

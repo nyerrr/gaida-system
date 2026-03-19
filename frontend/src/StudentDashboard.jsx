@@ -355,14 +355,25 @@ export default function StudentDashboard() {
                 }}
                 onStatusChange={setVoiceStatus}
               />
+
+              {/* Send button — always visible, icon changes based on state */}
               <button
                 onClick={sendMessage}
                 disabled={sending || !input.trim()}
-                className="w-8 h-8 sm:w-9 sm:h-9 bg-red-700 hover:bg-red-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
+                className={`
+                  w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all duration-200 flex-shrink-0
+                  ${input.trim()
+                    ? 'bg-white hover:bg-gray-400 text-gray-900'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'}
+                `}
               >
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
+                {sending ? (
+                  <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                )}
               </button>
             </div>
           </div>
