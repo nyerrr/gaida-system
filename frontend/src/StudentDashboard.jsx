@@ -261,14 +261,41 @@ export default function StudentDashboard() {
                   <span className="text-white text-xs font-bold">G</span>
                 </div>
               )}
-              <div className={`
-                px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-sm leading-relaxed
-                max-w-[78%] sm:max-w-[72%] lg:max-w-[65%]
-                ${m.role === 'user'
-                  ? 'bg-red-700 text-white rounded-tr-sm'
-                  : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm'}
-              `}>
-                {m.text}
+              <div className="flex flex-col gap-1 max-w-[78%] sm:max-w-[72%] lg:max-w-[65%]">
+                <div className={`
+                  px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-sm leading-relaxed
+                  ${m.role === 'user'
+                    ? 'bg-red-700 text-white rounded-tr-sm'
+                    : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm'}
+                `}>
+                  {m.isVoice && (
+                    <div className="flex items-center gap-1 mb-1 opacity-60">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0020 11h-2a6 6 0 01-12 0H4a8.001 8.001 0 007 7.93z"/>
+                      </svg>
+                      <span className="text-xs">Voice</span>
+                    </div>
+                  )}
+                  {m.text}
+                </div>
+
+                {m.role === 'bot' && m.acoustic && (
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-xs text-gray-500">Voice detected:</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium border
+                      ${m.acoustic.emotion === 'anxious' ? 'text-yellow-400 border-yellow-800 bg-yellow-900/30' :
+                        m.acoustic.emotion === 'sad' ? 'text-blue-400 border-blue-800 bg-blue-900/30' :
+                        m.acoustic.emotion === 'angry' ? 'text-red-400 border-red-800 bg-red-900/30' :
+                        m.acoustic.emotion === 'stressed' ? 'text-orange-400 border-orange-800 bg-orange-900/30' :
+                        m.acoustic.emotion === 'calm' ? 'text-emerald-400 border-emerald-800 bg-emerald-900/30' :
+                        m.acoustic.emotion === 'withdrawn' ? 'text-purple-400 border-purple-800 bg-purple-900/30' :
+                        'text-gray-400 border-gray-700 bg-gray-800/30'}
+                    `}>
+                      {m.acoustic.emotion}
+                    </span>
+                    <span className="text-xs text-gray-600">{m.acoustic.severity}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -316,10 +343,15 @@ export default function StudentDashboard() {
               <VoiceInput
                 sessionId={localStorage.getItem('session_id')}
                 onTranscript={(text) => setInput(text)}
-                onAgentResponse={(data) => {
+                onAgentResponse={(data, transcript) => {
                   if (data.session_id) localStorage.setItem('session_id', data.session_id);
                   if (data.severity) setSeverity(data.severity);
-                  setMessages(prev => [...prev, { role: 'bot', text: data.response }]);
+                  setMessages(prev => [
+                    ...prev,
+                    ...(transcript ? [{ role: 'user', text: transcript, isVoice: true }] : []),
+                    { role: 'bot', text: data.response, acoustic: data.acoustic },
+                  ]);
+                  setInput('');
                 }}
                 onStatusChange={setVoiceStatus}
               />
