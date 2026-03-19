@@ -384,6 +384,55 @@ def _tokenize(text: str):
     return re.findall(r"\w+'?\w*|\w+", text)
 
 
+# ---------------------------------------------------------------------------
+# NEGATIVE CONTEXT PATTERNS
+# These patterns indicate a keyword is being used in a NON-distress context
+# When matched, the keyword weight is reduced by a multiplier
+# This prevents false positives like "dying of laughter" or "killed it"
+# ---------------------------------------------------------------------------
+
+NEGATIVE_CONTEXTS = [
+    # Past tense / historical — "I used to feel anxious"
+    (re.compile(r"\b(used to|before|last time|yesterday|last week|last month|dati|noon|noong)\b"), 0.3),
+
+    # Positive outcome — "I was stressed but I'm better now"
+    (re.compile(r"\b(but (im|i'm|i am) (better|okay|fine|good)|better now|okay na|ayos na)\b"), 0.2),
+
+    # Negation before keyword — "I'm not stressed", "hindi ako anxious"
+    (re.compile(r"\b(not|no longer|never|wala|hindi|hindi na|di na|wala na)\b"), 0.4),
+
+    # Humor/exaggeration expressions
+    (re.compile(r"\b(dying of (laughter|boredom|cuteness)|dead (tired|serious)|i('m| am) dead|lol|haha|hehe|joke|kidding|char)\b"), 0.1),
+
+    # Achievement expressions — "killed it", "crushed it"
+    (re.compile(r"\b(killed it|crushing it|nailed it|aced it|passed|pumasa|pumasa ako)\b"), 0.1),
+
+    # Asking about others — "my friend is stressed"
+    (re.compile(r"\b(my (friend|classmate|roommate|sister|brother|mom|dad|kaibigan|kaklase))\b"), 0.3),
+
+    # Questions — "do you feel anxious?", "are you stressed?"
+    (re.compile(r"^(do you|are you|can you|have you|did you|would you)\b"), 0.2),
+
+    # Hypothetical — "if I were stressed"
+    (re.compile(r"\b(if (i|you) (were|was|feel|felt)|hypothetically|parang kung)\b"), 0.3),
+]
+
+
+def _get_negative_context_multiplier(txt: str) -> float:
+    """
+    Returns a multiplier (0.1 - 1.0) based on negative context patterns.
+    1.0 = no negative context, full weight applied
+    0.1 = strong negative context, weight heavily reduced
+
+    Multiple patterns stack — the lowest multiplier wins.
+    """
+    multiplier = 1.0
+    for pattern, reduction in NEGATIVE_CONTEXTS:
+        if pattern.search(txt):
+            multiplier = min(multiplier, reduction)
+    return multiplier
+
+
 def detect_intent_and_level(text: str) -> dict:
     """
     Detects intent and maps it to an anxiety level.
@@ -403,6 +452,8 @@ def detect_intent_and_level(text: str) -> dict:
     tokens = set(_tokenize(txt))
 
     # --- Suicidal check first (always highest priority) ---
+    # Note: negative context does NOT apply to suicidal keywords
+    # Better to over-flag crisis than to miss it
     for kw, weight in KEYWORDS.get("suicidal", []):
         if ' ' in kw:
             if re.search(r"\b" + re.escape(kw) + r"\b", txt) or \
@@ -415,6 +466,11 @@ def detect_intent_and_level(text: str) -> dict:
                 if SequenceMatcher(None, kw, t).ratio() >= TOKEN_FUZZY_THRESHOLD:
                     return _build_result("suicidal", 0.99)
 
+    # --- Get negative context multiplier for this message ---
+    # This reduces keyword weights when context suggests non-distress usage
+    # Example: "dying of laughter" → multiplier 0.1 → anxiety score near zero
+    neg_multiplier = _get_negative_context_multiplier(txt)
+
     # --- Score all other intents ---
     best_intent = None
     best_score = 0.0
@@ -424,25 +480,25 @@ def detect_intent_and_level(text: str) -> dict:
         matched_weight = 0.0
 
         # Use top 5 keyword weights as max_possible instead of sum of ALL weights
-        # This makes single strong keyword matches actually reach meaningful scores
-        # Previously: matching "chest is tight" (2.5) out of ~150 total = 1.6% = useless
-        # Now: matching "chest is tight" (2.5) out of top5 sum (~11) = 22% = meaningful
         top5_weights = sorted([w for _, w in kw_list], reverse=True)[:5]
         max_possible = sum(top5_weights) or 1.0
 
         for kw, weight in kw_list:
+            # Apply negative context multiplier to all weights
+            effective_weight = weight * neg_multiplier
+
             if ' ' in kw:
                 if re.search(r"\b" + re.escape(kw) + r"\b", txt):
-                    matched_weight += weight
+                    matched_weight += effective_weight
                 elif SequenceMatcher(None, kw, txt).ratio() >= PHRASE_FUZZY_THRESHOLD:
-                    matched_weight += weight * FUZZY_WEIGHT_MULTIPLIER
+                    matched_weight += effective_weight * FUZZY_WEIGHT_MULTIPLIER
             else:
                 if kw in tokens:
-                    matched_weight += weight
+                    matched_weight += effective_weight
                 else:
                     for t in tokens:
                         if SequenceMatcher(None, kw, t).ratio() >= TOKEN_FUZZY_THRESHOLD:
-                            matched_weight += weight * FUZZY_WEIGHT_MULTIPLIER
+                            matched_weight += effective_weight * FUZZY_WEIGHT_MULTIPLIER
                             break
 
         if matched_weight > best_score:
