@@ -190,6 +190,44 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
     counselor_protocol = final_detection["counselor_protocol"]
     anxiety_score = final_detection["anxiety_score"]
 
+    # --- Step 5b: Fuse with acoustic features if available ---
+    # When user spoke before typing, acoustic features are saved in session
+    # We take the higher of text severity vs acoustic severity
+    pending_acoustic = session.get("meta", {}).get("pending_acoustic")
+    if pending_acoustic:
+        try:
+            from app.analytics.acoustic_features import fuse_with_text_severity
+            acoustic_severity = pending_acoustic.get("severity", "Normal")
+            acoustic_emotion = pending_acoustic.get("emotion", "neutral")
+            acoustic_confidence = pending_acoustic.get("confidence", 0.0)
+
+            fused_severity = fuse_with_text_severity(
+                acoustic_severity=acoustic_severity,
+                text_severity=severity,
+                acoustic_emotion=acoustic_emotion,
+            )
+
+            # If acoustic bumped severity up — update anxiety level too
+            severity_order = {"Normal": 0, "Low": 1, "Moderate": 2, "High": 3}
+            if severity_order.get(fused_severity, 0) > severity_order.get(severity, 0):
+                severity = fused_severity
+                # Remap anxiety_level and anxiety_score from new severity
+                severity_to_level = {
+                    "Low": ("low", 1),
+                    "Moderate": ("moderate", 3),
+                    "High": ("high", 5),
+                }
+                if fused_severity in severity_to_level:
+                    anxiety_level, anxiety_score = severity_to_level[fused_severity]
+                    counselor_protocol = final_detection.get("counselor_protocol")
+
+            # Clear pending acoustic after use
+            session["meta"]["pending_acoustic"] = None
+
+            logger.info(f"Acoustic fusion: text={final_detection['severity']} acoustic={acoustic_severity} fused={severity}")
+        except Exception as e:
+            logger.error(f"Acoustic fusion error: {e}")
+
     # --- Step 6: Build GPT context ---
     gpt_protocol = counselor_protocol
     if crisis_resources:

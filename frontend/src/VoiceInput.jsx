@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const BACKEND_URL = "";
+const BACKEND_URL = "http://127.0.0.1:8000";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const hasSpeechRecognition = !!SpeechRecognition;
@@ -15,6 +15,7 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const finalTranscriptRef = useRef("");
+  const streamRef = useRef(null);
 
   const pushStatus = (text) => onStatusChange?.(text);
 
@@ -27,10 +28,15 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     if (mediaRecorderRef.current?.state !== "inactive") {
       try { mediaRecorderRef.current?.stop(); } catch (e) { void e; }
     }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
   };
 
-  // ── Cancel recording — discard everything ─────────────────────────────────
+  // ── Cancel — discard everything ──────────────────────────────────────────
   const handleCancel = () => {
+    chunksRef.current = [];
     stopAll();
     setRecording(false);
     setLiveTranscript("");
@@ -39,118 +45,112 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     setError(null);
   };
 
-  // ── Confirm recording — send transcript to input box ──────────────────────
+  // ── Confirm — stop recording, send audio to backend, put transcript in box
   const handleConfirm = () => {
-    const text = finalTranscriptRef.current.trim() || liveTranscript.trim();
-    if (!text) {
-      setError("No speech detected. Try again.");
-      handleCancel();
+    try { recognitionRef.current?.stop(); } catch (e) { void e; }
+
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current.stop(); // triggers onstop → sends audio
+    } else {
+      // MediaRecorder already stopped — just put transcript in input box
+      const text = finalTranscriptRef.current.trim() || liveTranscript.trim();
+      if (text) onTranscript?.(text);
+      else setError("No speech detected. Try again.");
+      setRecording(false);
+      setLiveTranscript("");
+      finalTranscriptRef.current = "";
+      pushStatus("");
+    }
+  };
+
+  // ── Start recording ───────────────────────────────────────────────────────
+  const handleStart = async () => {
+    setError(null);
+    setLiveTranscript("");
+    finalTranscriptRef.current = "";
+    chunksRef.current = [];
+
+    // Get mic stream
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+    } catch {
+      setError("Mic access denied. Allow microphone in browser settings.");
       return;
     }
-    stopAll();
-    setRecording(false);
-    setLiveTranscript("");
-    finalTranscriptRef.current = "";
-    pushStatus("");
-    // Send to input box — user decides to send or not
-    if (onTranscript) onTranscript(text);
-  };
 
-  // ── Method 1: Web Speech API ───────────────────────────────────────────────
-  const startWithSpeechRecognition = () => {
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
-
-    recognition.lang = "fil-PH";
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.maxAlternatives = 1;
-
-    finalTranscriptRef.current = "";
-
-    recognition.onstart = () => {
-      setRecording(true);
-      pushStatus("Listening...");
-      setError(null);
-    };
-
-    recognition.onresult = (event) => {
-      let interim = "";
-      let final = finalTranscriptRef.current;
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += t;
-        } else {
-          interim = t;
-        }
-      }
-      finalTranscriptRef.current = final;
-      setLiveTranscript(final || interim);
-      pushStatus(final || interim || "Listening...");
-    };
-
-    recognition.onend = () => {
-      // Don't auto-confirm — user must click checkmark
-      // Only auto-stop if they didn't manually cancel
-      if (recording) {
-        setRecording(false);
-        pushStatus("");
-      }
-    };
-
-    recognition.onerror = (e) => {
-      setRecording(false);
-      pushStatus("");
-      setLiveTranscript("");
-      if (e.error === "no-speech") setError("No speech detected. Try again.");
-      else if (e.error === "not-allowed") setError("Mic access denied. Allow microphone in browser settings.");
-      else setError(`Error: ${e.error}`);
-    };
-
+    // Start MediaRecorder — always, for acoustic feature extraction
     try {
-      recognition.start();
-    } catch {
-      recognition.lang = "en-US";
-      recognition.start();
-    }
-  };
-
-  // ── Method 2: MediaRecorder + Whisper ─────────────────────────────────────
-  const startWithMediaRecorder = async () => {
-    setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        // Only process if not cancelled
+        stream.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+
         if (chunksRef.current.length > 0) {
-          pushStatus("Transcribing...");
-          const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-          await transcribeAudio(blob);
+          // Send audio to backend for acoustic extraction
+          // Put transcript in input box for user review
+          await extractAcousticsAndSetTranscript();
         }
       };
 
       mediaRecorder.start();
-      setRecording(true);
-      pushStatus("Listening...");
     } catch {
-      setError("Mic access denied. Allow microphone in browser settings.");
+      setError("Recording failed. Try again.");
+      stream.getTracks().forEach(t => t.stop());
+      return;
     }
+
+    // Start Web Speech API for live transcript preview
+    if (hasSpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.lang = "fil-PH";
+      recognition.interimResults = true;
+      recognition.continuous = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        let final = finalTranscriptRef.current;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const t = event.results[i][0].transcript;
+          if (event.results[i].isFinal) final += t;
+          else interim = t;
+        }
+        finalTranscriptRef.current = final;
+        setLiveTranscript(final || interim);
+        pushStatus(final || interim || "Listening...");
+      };
+
+      recognition.onerror = () => {};
+
+      try { recognition.start(); } catch { }
+    }
+
+    setRecording(true);
+    pushStatus("Listening...");
   };
 
-  // ── Transcribe audio — puts result in input box ───────────────────────────
-  const transcribeAudio = async (blob) => {
+  // ── Send audio to backend for acoustic extraction ─────────────────────────
+  // Acoustic features saved to session on backend
+  // Transcript put in input box for user to review before sending
+  const extractAcousticsAndSetTranscript = async () => {
     setLoading(true);
+    pushStatus("Extracting voice features...");
+
     try {
+      const mimeType = chunksRef.current[0]?.type || "audio/webm";
+      const blob = new Blob(chunksRef.current, { type: mimeType });
+      chunksRef.current = [];
+
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
       if (sessionId) formData.append("session_id", sessionId);
@@ -160,54 +160,37 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Transcription failed.");
+      if (!res.ok) throw new Error("Voice analysis failed.");
       const data = await res.json();
+
       if (!data.transcript) throw new Error("No speech detected.");
 
       pushStatus("");
       setRecording(false);
       setLiveTranscript("");
+      finalTranscriptRef.current = "";
 
-      // Put transcript in input box — user decides to send or not
-      if (onTranscript) onTranscript(data.transcript);
+      // Put transcript in input box — user reviews and decides to send
+      // Acoustic features already saved to session on backend
+      onTranscript?.(data.transcript);
 
     } catch (err) {
       setError(err.message);
       pushStatus("");
       setRecording(false);
+
+      // Fallback — use Web Speech transcript if available
+      const fallback = finalTranscriptRef.current.trim() || liveTranscript.trim();
+      if (fallback) onTranscript?.(fallback);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Start recording ───────────────────────────────────────────────────────
-  const handleStart = () => {
-    setError(null);
-    setLiveTranscript("");
-    finalTranscriptRef.current = "";
-    if (hasSpeechRecognition) {
-      startWithSpeechRecognition();
-    } else {
-      startWithMediaRecorder();
-    }
-  };
-
-  // ── MediaRecorder confirm — stop and transcribe ───────────────────────────
-  const handleMediaConfirm = () => {
-    if (mediaRecorderRef.current?.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-      pushStatus("");
-    }
-  };
-
   return (
     <div className="relative flex items-center gap-1">
-
-      {/* While recording — show X and ✓ buttons */}
       {recording ? (
         <>
-          {/* Cancel button */}
           <button
             onClick={handleCancel}
             title="Cancel recording"
@@ -218,14 +201,12 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
             </svg>
           </button>
 
-          {/* Live transcript preview pill */}
           {liveTranscript && (
             <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-600 text-gray-300 text-xs px-3 py-1.5 rounded-xl whitespace-nowrap max-w-[200px] truncate z-10">
               {liveTranscript}
             </div>
           )}
 
-          {/* Mic button — pulsing while recording */}
           <button
             disabled
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-red-600 animate-pulse flex-shrink-0"
@@ -235,10 +216,9 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
             </svg>
           </button>
 
-          {/* Confirm button */}
           <button
-            onClick={hasSpeechRecognition ? handleConfirm : handleMediaConfirm}
-            title="Done — send to input"
+            onClick={handleConfirm}
+            title="Done — analyze voice and review transcript"
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-emerald-700 hover:bg-emerald-600 transition-all duration-200 flex-shrink-0"
           >
             <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -247,7 +227,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
           </button>
         </>
       ) : (
-        /* Not recording — show mic button */
         <button
           onClick={handleStart}
           disabled={loading}
@@ -273,3 +252,4 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     </div>
   );
 }
+

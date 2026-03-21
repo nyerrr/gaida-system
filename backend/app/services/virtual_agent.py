@@ -436,24 +436,30 @@ def _get_negative_context_multiplier(txt: str) -> float:
 def detect_intent_and_level(text: str) -> dict:
     """
     Detects intent and maps it to an anxiety level.
+    
+    Uses a HYBRID approach:
+    1. Suicidal keyword check first (safety — never rely on ML for crisis)
+    2. ML classifier for intent detection (primary)
+    3. Keyword scoring as fallback if ML unavailable
+    4. Negative context multiplier applied to keyword fallback only
 
     Returns:
         {
             "intent": str,
             "confidence": float,
-            "anxiety_level": str or None,  # "low", "moderate", "high", "crisis"
-            "severity": str,               # "Low", "Moderate", "High" for frontend sidebar
-            "counselor_protocol": str,     # protocol text to inject into GPT
+            "anxiety_level": str or None,
+            "severity": str,
+            "counselor_protocol": str,
             "crisis_resources": str or None,
-            "anxiety_score": int,          # for existing counselor.py compatibility
+            "anxiety_score": int,
         }
     """
     txt = _normalize_text(text)
     tokens = set(_tokenize(txt))
 
-    # --- Suicidal check first (always highest priority) ---
-    # Note: negative context does NOT apply to suicidal keywords
-    # Better to over-flag crisis than to miss it
+    # --- Step 1: Suicidal keyword check ALWAYS runs first ---
+    # We never rely on ML for crisis detection
+    # Better to over-flag than to miss a real emergency
     for kw, weight in KEYWORDS.get("suicidal", []):
         if ' ' in kw:
             if re.search(r"\b" + re.escape(kw) + r"\b", txt) or \
@@ -466,25 +472,46 @@ def detect_intent_and_level(text: str) -> dict:
                 if SequenceMatcher(None, kw, t).ratio() >= TOKEN_FUZZY_THRESHOLD:
                     return _build_result("suicidal", 0.99)
 
-    # --- Get negative context multiplier for this message ---
-    # This reduces keyword weights when context suggests non-distress usage
-    # Example: "dying of laughter" → multiplier 0.1 → anxiety score near zero
+    # --- Step 2: Try ML classifier first ---
+    try:
+        from app.services.ml_classifier import classify_intent
+        ml_result = classify_intent(text)
+        ml_intent = ml_result["intent"]
+        ml_confidence = ml_result["confidence"]
+
+        # Neutral intent always returns Normal — no anxiety level
+        # regardless of how confident the model is
+        if ml_intent == "neutral":
+            return _build_result("neutral", 0.3)
+
+        # Apply negative context multiplier to ML confidence
+        neg_multiplier = _get_negative_context_multiplier(txt)
+        ml_confidence = round(ml_confidence * neg_multiplier, 3)
+
+        # Map ML confidence to our scoring scale
+        # ML gives 0.0-1.0 probability, we need 0.3-0.99 scale
+        scaled_confidence = 0.3 + 0.7 * ml_confidence
+        scaled_confidence = round(min(0.98, scaled_confidence), 3)
+
+        return _build_result(ml_intent, scaled_confidence)
+
+    except Exception as e:
+        # --- Step 3: Fallback to keyword scoring if ML unavailable ---
+        pass
+
+    # --- Keyword scoring fallback ---
     neg_multiplier = _get_negative_context_multiplier(txt)
 
-    # --- Score all other intents ---
     best_intent = None
     best_score = 0.0
     best_max = 1.0
 
     for intent, kw_list in KEYWORDS.items():
         matched_weight = 0.0
-
-        # Use top 5 keyword weights as max_possible instead of sum of ALL weights
         top5_weights = sorted([w for _, w in kw_list], reverse=True)[:5]
         max_possible = sum(top5_weights) or 1.0
 
         for kw, weight in kw_list:
-            # Apply negative context multiplier to all weights
             effective_weight = weight * neg_multiplier
 
             if ' ' in kw:
@@ -506,7 +533,6 @@ def detect_intent_and_level(text: str) -> dict:
             best_max = max_possible
             best_intent = intent
 
-    # --- Calculate confidence ---
     if best_intent is None or best_score == 0.0:
         return _build_result("neutral", 0.3)
 
@@ -569,6 +595,7 @@ def _build_result(intent: str, confidence: float, post_crisis: bool = False) -> 
         # Post-crisis floor — once crisis was triggered in this session,
         # severity never drops back to Normal
         # Counselor remains aware even after student calms down
+
         if post_crisis:
             severity = "Low"
             anxiety_level = "low"

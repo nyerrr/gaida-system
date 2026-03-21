@@ -1,0 +1,547 @@
+{"text": "I feel tense in my whole body", "label": "anxiety"}
+{"text": "I have been hurting myself", "label": "suicidal"}
+{"text": "what should i do, if you we me in this situation. What would you do", "label": "anger"}
+{"text": "nakakatakot ang nararamdaman ko", "label": "anxiety"}
+{"text": "I might lose my financial aid", "label": "academic"}
+{"text": "pagod na ako mabuhay", "label": "suicidal"}
+{"text": "I feel like a burden to everyone", "label": "sadness"}
+{"text": "I want to take my own life", "label": "suicidal"}
+{"text": "too much pressure from school and family", "label": "stress"}
+{"text": "my grades are so low", "label": "academic"}
+{"text": "im okay now", "label": "neutral"}
+{"text": "I feel like an outsider", "label": "loneliness"}
+{"text": "im gonna kill myself", "label": "suicidal"}
+{"text": "I cant eat because of my anxiety", "label": "anxiety"}
+{"text": "I cant keep up with the lessons", "label": "academic"}
+{"text": "I cant sleep because of stress", "label": "stress"}
+{"text": "I cant stand this anymore", "label": "anger"}
+{"text": "I dont feel anything anymore", "label": "sadness"}
+{"text": "this is so unfair", "label": "anger"}
+{"text": "I cant find time to breathe", "label": "stress"}
+{"text": "cramming na naman ako", "label": "stress"}
+{"text": "I cant keep up with everything", "label": "stress"}
+{"text": "thank you", "label": "suicidal"}
+{"text": "I want to give up because nothing is fair", "label": "anger"}
+{"text": "I feel like crying for no reason", "label": "sadness"}
+{"text": "pinagsamantalahan nila ako", "label": "anger"}
+{"text": "I hate everything", "label": "anger"}
+{"text": "i can't breathe", "label": "anxiety"}
+{"text": "im feeling stressed", "label": "stress"}
+{"text": "nakipagmasaya kami ng mga kaibigan", "label": "neutral"}
+{"text": "thank you im fine now", "label": "neutral"}
+{"text": "kinakabahan ako", "label": "anxiety"}
+{"text": "I cant understand the lessons", "label": "academic"}
+{"text": "they excluded me from the group", "label": "loneliness"}
+{"text": "wala akong mapagkakatiwalaan", "label": "loneliness"}
+{"text": "nakakainis ka", "label": "anxiety"}
+{"text": "i feel like im not good enough", "label": "sadness"}
+{"text": "wala akong halaga", "label": "sadness"}
+{"text": "lagi akong nag-iisip na tapusin na ang lahat", "label": "suicidal"}
+{"text": "maganda ang araw ko", "label": "neutral"}
+{"text": "di ko alam kung kakayanin ko pa", "label": "stress"}
+{"text": "baka mawala na ang scholarship ko", "label": "academic"}
+{"text": "im so depressed", "label": "sadness"}
+{"text": "I said goodbye to my family without them knowing", "label": "suicidal"}
+{"text": "I learned something new today", "label": "neutral"}
+{"text": "nobody checks on me", "label": "loneliness"}
+{"text": "that was so funny", "label": "neutral"}
+{"text": "parang ayaw nila ako", "label": "loneliness"}
+{"text": "I cant believe they did that to me", "label": "anger"}
+{"text": "my GWA dropped so much this semester", "label": "academic"}
+{"text": "I cry myself to sleep every night", "label": "sadness"}
+{"text": "Im exhausted but I still have so much to do", "label": "stress"}
+{"text": "miss na miss ko ang pamilya ko", "label": "loneliness"}
+{"text": "wala na akong nagagawang masaya", "label": "sadness"}
+{"text": "nobody talks to me", "label": "loneliness"}
+{"text": "wala akong masabihan ng problema ko", "label": "loneliness"}
+{"text": "what are you btw?]", "label": "neutral"}
+{"text": "I feel nauseous from nervousness", "label": "anxiety"}
+{"text": "this is interesting", "label": "neutral"}
+{"text": "I might lose my scholarship", "label": "academic"}
+{"text": "I sit alone in class every day", "label": "loneliness"}
+{"text": "I feel trapped and the only way out is death", "label": "suicidal"}
+{"text": "im shaking", "label": "anxiety"}
+{"text": "I have anxiety", "label": "anxiety"}
+{"text": "I feel like Im always running out of time", "label": "stress"}
+{"text": "I'm gonna kill my I'm gonna kill mysel", "label": "neutral"}
+{"text": "feeling better", "label": "neutral"}
+{"text": "I feel like Im going to fail this semester", "label": "academic"}
+{"text": "what kind of support your doing to me", "label": "neutral"}
+{"text": "nailed my presentation today", "label": "neutral"}
+{"text": "what can you do", "label": "neutral"}
+{"text": "I feel like I might get sick from stress", "label": "stress"}
+{"text": "kulang na kulang ang tulog ko", "label": "stress"}
+{"text": "I had fun with my friends", "label": "neutral"}
+{"text": "nobody loves me", "label": "sadness"}
+{"text": "im good", "label": "neutral"}
+{"text": "I feel like exploding", "label": "anger"}
+{"text": "Im going to end my life", "label": "suicidal"}
+{"text": "I feel like giving up on everything", "label": "sadness"}
+{"text": "walang respeto sa akin", "label": "anger"}
+{"text": "im so afraid to fail", "label": "academic"}
+{"text": "I cant relax no matter what I do", "label": "anxiety"}
+{"text": "i cant breathe", "label": "anxiety"}
+{"text": "who are you", "label": "neutral"}
+{"text": "overloaded na ako", "label": "stress"}
+{"text": "hindi ako mapanatag", "label": "anxiety"}
+{"text": "I feel so dumb in class", "label": "academic"}
+{"text": "I feel relieved", "label": "neutral"}
+{"text": "I feel unwanted", "label": "loneliness"}
+{"text": "I feel so nervous I cant think straight", "label": "anxiety"}
+{"text": "hindi ko na makontrol ang galit ko", "label": "anger"}
+{"text": "I miss the person I used to be", "label": "sadness"}
+{"text": "hindi ko maintindihan ang mga lesson", "label": "academic"}
+{"text": "I miss how things used to be", "label": "sadness"}
+{"text": "I feel disconnected from everyone around me", "label": "loneliness"}
+{"text": "I feel overwhelmed", "label": "stress"}
+{"text": "I feel happy today", "label": "neutral"}
+{"text": "so you can help me with my anxiety huh?", "label": "anxiety"}
+{"text": "I cant focus I keep thinking of bad things", "label": "anxiety"}
+{"text": "di ko na naiintindihan ang subject", "label": "academic"}
+{"text": "talking to my adviser feels intimidating", "label": "stress"}
+{"text": "my breathing is getting faster", "label": "anxiety"}
+{"text": "nagpaalam na ako sa pamilya ko nang hindi nila alam", "label": "suicidal"}
+{"text": "sinulat ko na ang huling liham ko", "label": "suicidal"}
+{"text": "I cant sleep because of my thoughts", "label": "anxiety"}
+{"text": "I cant see any future for myself", "label": "suicidal"}
+{"text": "nothing makes me happy anymore", "label": "sadness"}
+{"text": "Im so done with people", "label": "anger"}
+{"text": "lagi akong kulang sa oras", "label": "stress"}
+{"text": "I passed my exam", "label": "neutral"}
+{"text": "wala na akong time para sa sarili ko", "label": "stress"}
+{"text": "gusto ko na mamatay", "label": "suicidal"}
+{"text": "I feel like nobody listens to me", "label": "anger"}
+{"text": "im feeling stressed now", "label": "stress"}
+{"text": "natatakot ako sa darating na exams", "label": "academic"}
+{"text": "good morning", "label": "neutral"}
+{"text": "nakakarelax", "label": "neutral"}
+{"text": "handa na akong sumuko sa buhay", "label": "suicidal"}
+{"text": "I feel content", "label": "neutral"}
+{"text": "ang hirap ng mawalan ng mahal sa buhay", "label": "sadness"}
+{"text": "i cant breathe", "label": "anxiety"}
+{"text": "im dying of laughter", "label": "neutral"}
+{"text": "ang dami kong responsibilidad", "label": "stress"}
+{"text": "ang dami kong responsibilities", "label": "stress"}
+{"text": "grabe ang inis ko ngayon", "label": "anger"}
+{"text": "wala namang problema", "label": "neutral"}
+{"text": "I want to disappear from this world forever", "label": "suicidal"}
+{"text": "feeling better now", "label": "neutral"}
+{"text": "chill lang", "label": "neutral"}
+{"text": "I feel so alone and sad", "label": "sadness"}
+{"text": "wala na akong gana sa buhay", "label": "sadness"}
+{"text": "gusto ko na sumigaw", "label": "anger"}
+{"text": "malungkot na malungkot ako", "label": "sadness"}
+{"text": "walang problema", "label": "neutral"}
+{"text": "I am ready to give up on life", "label": "suicidal"}
+{"text": "ang sama ng loob ko", "label": "anger"}
+{"text": "my anxiety is getting worse", "label": "anxiety"}
+{"text": "just kidding", "label": "neutral"}
+{"text": "I wish I had someone to talk to", "label": "loneliness"}
+{"text": "I sit in a room full of people but feel alone", "label": "loneliness"}
+{"text": "ayoko na ng lahat", "label": "sadness"}
+{"text": "ang daming inaasahan sa akin", "label": "stress"}
+{"text": "binibigo nila ako lagi", "label": "loneliness"}
+{"text": "HELP ME I CAN'T BREATHE", "label": "anxiety"}
+{"text": "I feel so heartbroken", "label": "sadness"}
+{"text": "nasusuka ako sa kaka-nervous", "label": "anxiety"}
+{"text": "nasasaktan ako sobra", "label": "sadness"}
+{"text": "lagi nilang dinadisrespeto ako", "label": "anger"}
+{"text": "I'm gonna kill myself right now", "label": "suicidal"}
+{"text": "walang nakakaintindi sa akin", "label": "loneliness"}
+{"text": "lagi akong nag-iisip ng kamatayan", "label": "suicidal"}
+{"text": "all my friends moved on without me", "label": "loneliness"}
+{"text": "galit na galit talaga ako", "label": "anger"}
+{"text": "I think about death a lot", "label": "suicidal"}
+{"text": "my heart is racing", "label": "anxiety"}
+{"text": "I feel like everyone would be better off without me", "label": "suicidal"}
+{"text": "galit na galit ako", "label": "anger"}
+{"text": "I feel drained all the time", "label": "stress"}
+{"text": "I killed it in the exam", "label": "neutral"}
+{"text": "my girlfriend broke up with me", "label": "sadness"}
+{"text": "I feel so behind in school", "label": "academic"}
+{"text": "ang sikip sa puso ko", "label": "anxiety"}
+{"text": "I feel mentally and physically exhausted", "label": "stress"}
+{"text": "down worry", "label": "neutral"}
+{"text": "I keep imagining worst case scenarios", "label": "anxiety"}
+{"text": "why does this always happen to me", "label": "anger"}
+{"text": "my mind wont stop racing", "label": "anxiety"}
+{"text": "sweating ako sobra at natatakot", "label": "anxiety"}
+{"text": "thast why im asking you", "label": "anger"}
+{"text": "I feel like I cannot go on anymore", "label": "suicidal"}
+{"text": "I just want someone to be there for me", "label": "loneliness"}
+{"text": "parang walang naramdaman", "label": "sadness"}
+{"text": "good afternoon", "label": "neutral"}
+{"text": "nahuhuli na ako sa pag-aaral", "label": "academic"}
+{"text": "do you understand tagalog", "label": "neutral"}
+{"text": "I keep overthinking everything", "label": "anxiety"}
+{"text": "im shaking so much", "label": "anxiety"}
+{"text": "my stomach is in knots from worry", "label": "anxiety"}
+{"text": "im hyperventilating", "label": "anxiety"}
+{"text": "walang nagtatanong kung okay ako", "label": "loneliness"}
+{"text": "parang malapit na akong sumabog", "label": "stress"}
+{"text": "i feel thankful", "label": "neutral"}
+{"text": "parang pabigat lang ako sa lahat", "label": "sadness"}
+{"text": "ang hirap maging estudyante", "label": "stress"}
+{"text": "nawalan na ako ng interes sa lahat", "label": "sadness"}
+{"text": "im fine now", "label": "neutral"}
+{"text": "I got a good grade", "label": "neutral"}
+{"text": "I might get kicked out of school", "label": "academic"}
+{"text": "I feel so deeply sad", "label": "sadness"}
+{"text": "I slept well last night", "label": "neutral"}
+{"text": "I have been alone for so long", "label": "loneliness"}
+{"text": "sana may kasama akong makausap", "label": "loneliness"}
+{"text": "im stressed about my thesis", "label": "stress"}
+{"text": "natapos ko na ang project ko", "label": "neutral"}
+{"text": "di na kaya ng puso ko", "label": "sadness"}
+{"text": "hindi na ako makakayang magpatuloy", "label": "suicidal"}
+{"text": "wala na akong dahilan para mabuhay", "label": "suicidal"}
+{"text": "wala na akong time kumain ng maayos", "label": "stress"}
+{"text": "Im pissed off", "label": "anger"}
+{"text": "i wanna kill myself", "label": "suicidal"}
+{"text": "I feel taken advantage of", "label": "anger"}
+{"text": "di ko na kaya", "label": "anxiety"}
+{"text": "I gave away my things because I wont need them anymore", "label": "suicidal"}
+{"text": "parang walang nagmamalasakit sa akin", "label": "loneliness"}
+{"text": "I dont have time for myself anymore", "label": "stress"}
+{"text": "my professor failed me", "label": "academic"}
+{"text": "happy ako ngayon", "label": "neutral"}
+{"text": "I havent had a break in weeks", "label": "stress"}
+{"text": "im fine now im calm", "label": "suicidal"}
+{"text": "hindi talaga ako makapagpahinga", "label": "anxiety"}
+{"text": "i have a big crush on this friend of mine, a girl. and idk if shes just beign friendly with me or shes showing me romantic signals. Weve been friends for about 8 months. Sometimes it feels like she just sees me as a friend but when we call like once in a blue moon. It feels a bit more like that. Im full of questions", "label": "neutral"}
+{"text": "lagi na lang akong tulog dahil malungkot", "label": "sadness"}
+{"text": "Im so done with this situation", "label": "anger"}
+{"text": "I failed my thesis proposal", "label": "academic"}
+{"text": "kabado na kabado ako", "label": "anxiety"}
+{"text": "I cant stop crying", "label": "sadness"}
+{"text": "what i feel like i'm gonna beat my self up literally", "label": "suicidal"}
+{"text": "I miss having someone to talk to", "label": "loneliness"}
+{"text": "ang bilis ng tibok ng puso ko", "label": "anxiety"}
+{"text": "pagod na pagod na ako", "label": "stress"}
+{"text": "hindi ko alam kung mapapasa ko pa", "label": "academic"}
+{"text": "I feel like Im about to break down", "label": "stress"}
+{"text": "I failed my exam", "label": "academic"}
+{"text": "ginagamit lang nila ako", "label": "anger"}
+{"text": "ayos na", "label": "neutral"}
+{"text": "I feel so mad I cant think", "label": "anger"}
+{"text": "I'm okay", "label": "neutral"}
+{"text": "malalim ang lungkot ko", "label": "sadness"}
+{"text": "I have thought about how to end my life", "label": "suicidal"}
+{"text": "bakit ako palaging talo", "label": "anger"}
+{"text": "im feeling a bit stressed", "label": "stress"}
+{"text": "I feel like dying is the only way out", "label": "suicidal"}
+{"text": "this situation makes me so angry", "label": "anger"}
+{"text": "wala namang masama", "label": "neutral"}
+{"text": "I feel so much pressure from everyone", "label": "stress"}
+{"text": "you dont get it, im gonna go hurt myself", "label": "suicidal"}
+{"text": "Im homesick and I feel so lonely", "label": "loneliness"}
+{"text": "pinagtataksilan ako", "label": "anger"}
+{"text": "baka hindi ako makagraduate sa tamang oras", "label": "academic"}
+{"text": "I am so irritated today", "label": "anger"}
+{"text": "my hands are trembling", "label": "anxiety"}
+{"text": "okay im feeling a little bit calmer now", "label": "neutral"}
+{"text": "I wish I was never born", "label": "suicidal"}
+{"text": "miss ko na ang dati", "label": "sadness"}
+{"text": "I feel invisible", "label": "sadness"}
+{"text": "I cant answer any questions in class", "label": "academic"}
+{"text": "I studied so hard but still failed", "label": "academic"}
+{"text": "I cant calm down", "label": "anxiety"}
+{"text": "ayoko na mabuhay", "label": "suicidal"}
+{"text": "i can't breathe", "label": "neutral"}
+{"text": "i do that, and shes showing it liek she likes me or something", "label": "anger"}
+{"text": "pagod ang katawan at isip ko", "label": "stress"}
+{"text": "I spend every weekend alone", "label": "loneliness"}
+{"text": "I just want to cry all day", "label": "sadness"}
+{"text": "I feel like im going to faint", "label": "anxiety"}
+{"text": "I feel like my heart is going to explode", "label": "anxiety"}
+{"text": "palagi akong mag-isa tuwing weekend", "label": "loneliness"}
+{"text": "ang daming requirements hindi ko alam kung kakayanin ko", "label": "academic"}
+{"text": "my adviser keeps rejecting my work", "label": "stress"}
+{"text": "nagigising ako na kabado", "label": "anxiety"}
+{"text": "I feel like something terrible is about to happen", "label": "anxiety"}
+{"text": "pagod na ko pero marami pa akong gagawin", "label": "stress"}
+{"text": "I might fail my thesis defense", "label": "academic"}
+{"text": "Im so stressed", "label": "stress"}
+{"text": "gusto ko nang mawala sa mundo", "label": "suicidal"}
+{"text": "i cant breathe", "label": "neutral"}
+{"text": "pababa nang pababa ang grades ko", "label": "academic"}
+{"text": "I feel worthless", "label": "sadness"}
+{"text": "what kind of suppoer", "label": "neutral"}
+{"text": "just kidding", "label": "suicidal"}
+{"text": "kahit maraming tao paligid ko nag-iisa pa rin ako", "label": "loneliness"}
+{"text": "I cant breathe", "label": "anxiety"}
+{"text": "I have been thinking about suicide", "label": "suicidal"}
+{"text": "I feel like nobody sees how much Im hurting", "label": "sadness"}
+{"text": "sana wala na lang ako", "label": "suicidal"}
+{"text": "bago ako dito wala pa akong kilala", "label": "loneliness"}
+{"text": "I havent slept in days because of work", "label": "stress"}
+{"text": "di ko mapigilan ang pag-iisip ko", "label": "anxiety"}
+{"text": "my professor gave me a very low grade", "label": "academic"}
+{"text": "im okay now", "label": "suicidal"}
+{"text": "I lost someone I love", "label": "sadness"}
+{"text": "I have exams tomorrow and I havent studied", "label": "academic"}
+{"text": "because my crush talks to me today", "label": "neutral"}
+{"text": "I feel broken", "label": "sadness"}
+{"text": "sabog na ang utak ko", "label": "stress"}
+{"text": "I feel abandoned by everyone", "label": "sadness"}
+{"text": "nilalayuan nila ako", "label": "loneliness"}
+{"text": "umiiyak ako", "label": "sadness"}
+{"text": "papatayin ko na ang sarili ko", "label": "suicidal"}
+{"text": "everything is fine", "label": "neutral"}
+{"text": "i'm feeling a bit stressed", "label": "stress"}
+{"text": "I feel great today", "label": "neutral"}
+{"text": "i want ot kill myself", "label": "suicidal"}
+{"text": "okay lang ako", "label": "neutral"}
+{"text": "the pressure is too much", "label": "stress"}
+{"text": "I feel like Im carrying everything alone", "label": "stress"}
+{"text": "I think Im having a panic attack please help", "label": "anxiety"}
+{"text": "di ako makatulog sa kakaisip", "label": "anxiety"}
+{"text": "ang sakit ng nararamdaman ko", "label": "sadness"}
+{"text": "natataranta na ako", "label": "anxiety"}
+{"text": "my academic performance is getting worse", "label": "academic"}
+{"text": "I feel like there is no point in living", "label": "suicidal"}
+{"text": "I wrote a goodbye letter", "label": "suicidal"}
+{"text": "hindi ako mahal ng sinuman", "label": "sadness"}
+{"text": "Im struggling with my thesis", "label": "academic"}
+{"text": "I feel betrayed", "label": "anger"}
+{"text": "my chest is tight", "label": "anxiety"}
+{"text": "I feel like something bad is going to happen", "label": "anxiety"}
+{"text": "bina-bagsak ako ng professor ko", "label": "academic"}
+{"text": "not yet im scared", "label": "anxiety"}
+{"text": "I feel like screaming", "label": "anger"}
+{"text": "iniwan nila ako", "label": "sadness"}
+{"text": "hindi fair ang nangyari", "label": "anger"}
+{"text": "I used to feel anxious but im better now", "label": "neutral"}
+{"text": "parang wala akong natututunan", "label": "academic"}
+{"text": "I cant control my breathing", "label": "anxiety"}
+{"text": "HELP ME I CANT BREATHE", "label": "anxiety"}
+{"text": "hindi ako mapakali", "label": "anxiety"}
+{"text": "I feel numb", "label": "sadness"}
+{"text": "okay na ako", "label": "neutral"}
+{"text": "life is good", "label": "neutral"}
+{"text": "im gonna go kill myself", "label": "suicidal"}
+{"text": "I keep having what if thoughts", "label": "anxiety"}
+{"text": "parang hindi ako kasama sa grupo", "label": "loneliness"}
+{"text": "hi what can u help me with?", "label": "neutral"}
+{"text": "people keep disrespecting me", "label": "anger"}
+{"text": "I lost interest in things I used to love", "label": "sadness"}
+{"text": "bakit lagi na lang ganito", "label": "anger"}
+{"text": "I cant handle everything anymore", "label": "stress"}
+{"text": "nag-iisa na lang ako lagi", "label": "loneliness"}
+{"text": "i feel like dying", "label": "anxiety"}
+{"text": "walang tigil ang trabaho ko", "label": "stress"}
+{"text": "gusto ko mawala sa lahat", "label": "sadness"}
+{"text": "im shaking", "label": "anxiety"}
+{"text": "burnt out na ako", "label": "stress"}
+{"text": "I feel left out", "label": "loneliness"}
+{"text": "I feel overwhelmed by responsibilities", "label": "stress"}
+{"text": "hey", "label": "neutral"}
+{"text": "I want to kill myself", "label": "suicidal"}
+{"text": "I just want to rest but I cant", "label": "stress"}
+{"text": "good evening", "label": "neutral"}
+{"text": "parang hindi nila ako nakikita", "label": "loneliness"}
+{"text": "I have no one to share my problems with", "label": "loneliness"}
+{"text": "what are you focued on for your user", "label": "neutral"}
+{"text": "I always eat lunch alone", "label": "loneliness"}
+{"text": "ubos na ang lakas ko", "label": "stress"}
+{"text": "ang sikip sa puso ko", "label": "anxiety"}
+{"text": "umiiyak ako kahit walang dahilan", "label": "sadness"}
+{"text": "sunod sunod ang deadlines ko", "label": "stress"}
+{"text": "bukas na ang exam wala pa akong alam", "label": "academic"}
+{"text": "I keep thinking about ending everything", "label": "suicidal"}
+{"text": "I feel so empty inside", "label": "sadness"}
+{"text": "Im scared of failing", "label": "academic"}
+{"text": "Im so angry right now", "label": "anger"}
+{"text": "im feeling good", "label": "neutral"}
+{"text": "I am so behind in my studies", "label": "academic"}
+{"text": "nag-iisip ako kung paano ko sarili ko masisaktan", "label": "suicidal"}
+{"text": "testing ang testing you testing", "label": "neutral"}
+{"text": "ang dami kong nararamdamang sakit", "label": "sadness"}
+{"text": "im shaking", "label": "anxiety"}
+{"text": "matagal na akong nalulungkot", "label": "sadness"}
+{"text": "I feel like the world would be better without me", "label": "suicidal"}
+{"text": "like she gives me attention in the call even though shes out doing something. Making time for me when i ask, but i dont do that alot anymore because i feel like im taking her time. But yeah, its one of those", "label": "anger"}
+{"text": "everything makes me angry lately", "label": "anger"}
+{"text": "I feel paralyzed with fear", "label": "anxiety"}
+{"text": "Im looking forward to the weekend", "label": "neutral"}
+{"text": "bakit palaging mali ang ginagawa nila", "label": "anger"}
+{"text": "I feel hopeless", "label": "sadness"}
+{"text": "I have too much to do", "label": "stress"}
+{"text": "parang may maling mangyayari", "label": "anxiety"}
+{"text": "I have been researching ways to die", "label": "suicidal"}
+{"text": "I need help im panicking", "label": "anxiety"}
+{"text": "parang bobo lang ako sa klase", "label": "academic"}
+{"text": "I feel so alone", "label": "loneliness"}
+{"text": "i can't focus on my studies", "label": "academic"}
+{"text": "goodbye", "label": "neutral"}
+{"text": "nakakainis", "label": "anxiety"}
+{"text": "thank you", "label": "neutral"}
+{"text": "im stressed", "label": "anxiety"}
+{"text": "i envision it like 50/50 that she might actualy like me back but whats holding her is the friendship with her firned. Because we a re a friend of 3. and the other half is she just thinks im her friend", "label": "anger"}
+{"text": "good vibes lang", "label": "neutral"}
+{"text": "mas magiging maganda ang mundo kung wala ako", "label": "suicidal"}
+{"text": "I feel like a machine just working nonstop", "label": "stress"}
+{"text": "I passed my quiz today", "label": "neutral"}
+{"text": "I feel invisible to everyone", "label": "loneliness"}
+{"text": "I see no reason to keep living", "label": "suicidal"}
+{"text": "I moved to a new place and I know nobody", "label": "loneliness"}
+{"text": "No I meant pieces thesis", "label": "anxiety"}
+{"text": "maybe i should drop out", "label": "academic"}
+{"text": "I feel so stupid in class", "label": "academic"}
+{"text": "I feel dizzy and scared", "label": "anxiety"}
+{"text": "ayoko nang mabuhay pa", "label": "suicidal"}
+{"text": "sobrang inis ko", "label": "anger"}
+{"text": "parang lagi akong may nararamdamang pangamba", "label": "anxiety"}
+{"text": "I have no one to talk to about my problems", "label": "loneliness"}
+{"text": "okay", "label": "neutral"}
+{"text": "palagi akong nag-aalala", "label": "anxiety"}
+{"text": "I am scared of my upcoming exams", "label": "academic"}
+{"text": "parang hindi nila ako napapansin", "label": "loneliness"}
+{"text": "I dont want to wake up anymore", "label": "suicidal"}
+{"text": "im fine", "label": "suicidal"}
+{"text": "I feel disrespected", "label": "anger"}
+{"text": "I feel like my friends forgot about me", "label": "loneliness"}
+{"text": "how are you", "label": "neutral"}
+{"text": "I feel like nobody respects my efforts", "label": "anger"}
+{"text": "di ko na kaya lahat ng ito", "label": "stress"}
+{"text": "see you later", "label": "neutral"}
+{"text": "I had a good day", "label": "neutral"}
+{"text": "bumagsak ako sa subject", "label": "academic"}
+{"text": "I want to scream", "label": "anger"}
+{"text": "grabe ang stress ko ngayon", "label": "stress"}
+{"text": "are you feeling anxious", "label": "neutral"}
+{"text": "wala na akong pag-asa", "label": "sadness"}
+{"text": "I am furious", "label": "anger"}
+{"text": "yamot na yamot na ako", "label": "anger"}
+{"text": "wala na akong alalahanin", "label": "neutral"}
+{"text": "its hard to breathe", "label": "anxiety"}
+{"text": "matagal na akong nag-iisa", "label": "loneliness"}
+{"text": "lumayo na ang mga kaibigan ko sa akin", "label": "loneliness"}
+{"text": "I ate well today", "label": "neutral"}
+{"text": "nobody understands me", "label": "loneliness"}
+{"text": "mataas ang grade ko", "label": "neutral"}
+{"text": "hindi ako makatulog sa stress", "label": "stress"}
+{"text": "sobra na ang pressure", "label": "stress"}
+{"text": "mababang mababa ang grade ko", "label": "academic"}
+{"text": "hello", "label": "neutral"}
+{"text": "I have been thinking of ways to hurt myself", "label": "suicidal"}
+{"text": "I feel like a ghost nobody notices", "label": "loneliness"}
+{"text": "I feel normal today", "label": "neutral"}
+{"text": "yes that might work", "label": "stress"}
+{"text": "I feel like im losing control", "label": "anxiety"}
+{"text": "Im burning out", "label": "stress"}
+{"text": "I cant stop overthinking", "label": "anxiety"}
+{"text": "im taking that as an option. Thank you ill do it right now", "label": "anger"}
+{"text": "I dont want to live anymore", "label": "suicidal"}
+{"text": "I feel like I might collapse from stress", "label": "stress"}
+{"text": "hehe hello", "label": "neutral"}
+{"text": "ayoko nang gumising pa", "label": "suicidal"}
+{"text": "hindi ko alam paano ko mapapasa ang subject na ito", "label": "academic"}
+{"text": "I have back to back deadlines", "label": "stress"}
+{"text": "ayoko na sa mga tao", "label": "anger"}
+{"text": "I feel like nobody wants me around", "label": "loneliness"}
+{"text": "pumasa ako sa exam", "label": "neutral"}
+{"text": "kahit gaano ako mag-aral bumabagsak pa rin", "label": "academic"}
+{"text": "too many requirements and not enough time", "label": "stress"}
+{"text": "Im excited", "label": "neutral"}
+{"text": "ang tigas ng katawan ko sa kaba", "label": "anxiety"}
+{"text": "I have been working nonstop", "label": "stress"}
+{"text": "I have been sleeping too much lately", "label": "sadness"}
+{"text": "I said goodbye to my family without them knowing", "label": "suicidal"}
+{"text": "I cant breathe", "label": "anxiety"}
+{"text": "im so worried", "label": "anxiety"}
+{"text": "i cant breathe", "label": "anxiety"}
+{"text": "im gonna kill myself", "label": "suicidal"}
+{"text": "I feel so anxious", "label": "anxiety"}
+{"text": "nakakainis talaga ang sitwasyong ito", "label": "anger"}
+{"text": "I might not graduate on time", "label": "academic"}
+{"text": "walang nagmamalasakit sa akin", "label": "sadness"}
+{"text": "that i might ruin our friendship. Becuase her friend and also a friend of mine likes me", "label": "neutral"}
+{"text": "tapusin ko na ang lahat", "label": "suicidal"}
+{"text": "I have no friends", "label": "loneliness"}
+{"text": "I dont think anyone cares about me", "label": "sadness"}
+{"text": "I have been feeling down for weeks", "label": "sadness"}
+{"text": "I finished my requirements", "label": "neutral"}
+{"text": "walang pahinga", "label": "stress"}
+{"text": "I feel so frustrated", "label": "anger"}
+{"text": "I feel so lost", "label": "sadness"}
+{"text": "I feel motivated today", "label": "neutral"}
+{"text": "nothing special happened", "label": "neutral"}
+{"text": "wala na akong lakas na matitira", "label": "stress"}
+{"text": "hehe thanks", "label": "neutral"}
+{"text": "baka maretain ako", "label": "academic"}
+{"text": "walang nakikinig sa akin", "label": "anger"}
+{"text": "di ko gets ang lessons", "label": "academic"}
+{"text": "sobrang kaba ko", "label": "anxiety"}
+{"text": "walang saysay ang buhay ko", "label": "suicidal"}
+{"text": "I feel so sad", "label": "sadness"}
+{"text": "I dont know how to pass this subject", "label": "academic"}
+{"text": "It just started yesterday When I was doing my traces permitis work", "label": "anxiety"}
+{"text": "takot ako mabigos", "label": "academic"}
+{"text": "I feel a constant sense of dread", "label": "anxiety"}
+{"text": "can you help me", "label": "neutral"}
+{"text": "I am planning to hurt myself", "label": "suicidal"}
+{"text": "I have no motivation to do anything", "label": "sadness"}
+{"text": "magpapakamatay na ako", "label": "suicidal"}
+{"text": "parang nawawala na ang kontrol ko", "label": "anxiety"}
+{"text": "sana hindi na ako nagising", "label": "suicidal"}
+{"text": "masaya ako ngayon", "label": "neutral"}
+{"text": "I feel like I cant rest", "label": "stress"}
+{"text": "nakalimutan na nila ako", "label": "loneliness"}
+{"text": "I feel restless all the time", "label": "anxiety"}
+{"text": "Im just here", "label": "neutral"}
+{"text": "nakakainis talaga", "label": "anger"}
+{"text": "parang nawala na ang lahat", "label": "sadness"}
+{"text": "grabe ang galit ko dito", "label": "anger"}
+{"text": "Im done with this life", "label": "suicidal"}
+{"text": "i feel like kiilling myself literally", "label": "neutral"}
+{"text": "I dont understand anything in class", "label": "academic"}
+{"text": "I feel like no one cares about me", "label": "loneliness"}
+{"text": "ang sikip ng puso ko", "label": "anxiety"}
+{"text": "Im going to get expelled if I fail again", "label": "academic"}
+{"text": "parang walang kwenta ang lahat", "label": "sadness"}
+{"text": "I wake up anxious every morning", "label": "anxiety"}
+{"text": "parang gusto nila akong ilayo", "label": "loneliness"}
+{"text": "I feel lightheaded and scared", "label": "anxiety"}
+{"text": "hi there", "label": "neutral"}
+{"text": "walang kaibigan", "label": "loneliness"}
+{"text": "thanks", "label": "neutral"}
+{"text": "I want to die", "label": "suicidal"}
+{"text": "i cant focus on my studies", "label": "academic"}
+{"text": "nawalan na ko ng pag-asa", "label": "sadness"}
+{"text": "are you clinically approved or what?", "label": "neutral"}
+{"text": "I dont have time to eat properly", "label": "stress"}
+{"text": "my friend is stressed", "label": "neutral"}
+{"text": "this makes my blood boil", "label": "anger"}
+{"text": "I cant control my anger", "label": "anger"}
+{"text": "I keep failing no matter how hard I try", "label": "academic"}
+{"text": "nag-aalala ako sa lahat ng dapat kong gawin", "label": "stress"}
+{"text": "walang nakakakita ng sakit ko", "label": "sadness"}
+{"text": "nag-aral ako pero bumagsak pa rin", "label": "academic"}
+{"text": "hindi na ako stressed", "label": "neutral"}
+{"text": "Im having a panic attack", "label": "anxiety"}
+{"text": "why cant anyone do things right", "label": "anger"}
+{"text": "I have so many deadlines", "label": "stress"}
+{"text": "maganda ang nangyari", "label": "neutral"}
+{"text": "I'm fine", "label": "neutral"}
+{"text": "haha joke lang", "label": "neutral"}
+{"text": "lumalala na ang anxiety ko", "label": "anxiety"}
+{"text": "I have no energy left", "label": "stress"}
+{"text": "everything is piling up and I cant cope", "label": "stress"}
+{"text": "I feel like I have no future", "label": "suicidal"}
+{"text": "I feel so sad and alone", "label": "sadness"}
+{"text": "I am so angry at everything", "label": "anger"}
+{"text": "I am so stressed out", "label": "stress"}
+{"text": "nothing is going right", "label": "neutral"}
+{"text": "I have no time for myself", "label": "stress"}
+{"text": "I want to die", "label": "suicidal"}
+{"text": "I feel like nobody listens to me", "label": "anger"}
+{"text": "I am so stressed right now", "label": "stress"}
+{"text": "I am scared of my upcoming exams", "label": "academic"}
+{"text": "good morning", "label": "neutral"}
+{"text": "this is relaxing", "label": "neutral"}
+{"text": "I am ready to give up on life", "label": "suicidal"}
+{"text": "I feel content", "label": "neutral"}
+{"text": "losing a loved one is so hard", "label": "sadness"}
+{"text": "I can't breathe", "label": "anxiety"}
+{"text": "I'm dying of laughter", "label": "neutral"}

@@ -1,11 +1,74 @@
 import numpy as np
 import librosa
 import io
+import tempfile
+import os
+import subprocess
+
+def _convert_to_wav(audio_bytes: bytes) -> bytes:
+    """
+    Convert any audio format (webm, ogg, mp3, etc.) to WAV using ffmpeg.
+    Uses CapCut's bundled ffmpeg if system ffmpeg not in PATH.
+    """
+    import os
+
+    # Try to find ffmpeg — system PATH first, then CapCut fallback
+    ffmpeg_cmd = "ffmpeg"
+    capcut_ffmpeg = os.path.expandvars(
+        r"C:\Users\Rainier J. Burlasa\AppData\Local\CapCut\Apps\8.2.0.3462\ffmpeg.exe"
+    )
+    if not _is_ffmpeg_available("ffmpeg") and os.path.exists(capcut_ffmpeg):
+        ffmpeg_cmd = capcut_ffmpeg
+
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp_in:
+        tmp_in.write(audio_bytes)
+        tmp_in_path = tmp_in.name
+
+    tmp_out_path = tmp_in_path.replace(".webm", ".wav")
+
+    try:
+        subprocess.run(
+            [
+                ffmpeg_cmd, "-y",
+                "-i", tmp_in_path,
+                "-ar", "16000",
+                "-ac", "1",
+                "-f", "wav",
+                tmp_out_path
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        with open(tmp_out_path, "rb") as f:
+            return f.read()
+    finally:
+        if os.path.exists(tmp_in_path):
+            os.unlink(tmp_in_path)
+        if os.path.exists(tmp_out_path):
+            os.unlink(tmp_out_path)
+
+
+def _is_ffmpeg_available(cmd: str) -> bool:
+    """Check if ffmpeg is available in PATH."""
+    try:
+        subprocess.run([cmd, "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
 
 def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
     try:
-        audio_buf = io.BytesIO(audio_bytes)
-        y, sr = librosa.load(audio_buf, sr=sample_rate, mono=True)
+        # Try direct load first
+        try:
+            audio_buf = io.BytesIO(audio_bytes)
+            y, sr = librosa.load(audio_buf, sr=sample_rate, mono=True)
+        except Exception:
+            # Direct load failed — convert via ffmpeg first
+            wav_bytes = _convert_to_wav(audio_bytes)
+            audio_buf = io.BytesIO(wav_bytes)
+            y, sr = librosa.load(audio_buf, sr=sample_rate, mono=True)
 
         if len(y) == 0:
             return _empty_features()
@@ -63,11 +126,9 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
         features['zcr_mean'] = float(np.mean(zcr))
 
         # ── Spectral Features ────────────────────────────────────────────────
-        # Spectral centroid — brighter voice = more energy/arousal
         spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
         features['spectral_centroid_mean'] = float(np.mean(spectral_centroid))
 
-        # Spectral rolloff — how much energy is in higher frequencies
         rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
         features['spectral_rolloff_mean'] = float(np.mean(rolloff))
 
@@ -80,6 +141,10 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
         # ── Scores ───────────────────────────────────────────────────────────
         features['acoustic_anxiety_score'] = _score_from_features(features)
         features['acoustic_emotion'] = _detect_emotion(features)
+        features['acoustic_confidence'] = min(
+            1.0,
+            features['acoustic_anxiety_score'] + 0.3
+        )
 
         return features
 
@@ -89,52 +154,42 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
 
 
 def _score_from_features(f: dict) -> float:
-    """
-    Compute a 0.0 to 1.0 acoustic anxiety score.
-    Uses weighted scoring instead of binary thresholds.
-    """
     score = 0.0
     weights = 0.0
 
-    # Pitch variability — high std = voice tremor = anxiety
     pitch_std = f.get('pitch_std', 0)
     if pitch_std > 0:
-        pitch_score = min(pitch_std / 80.0, 1.0)  # normalize to 0-1
+        pitch_score = min(pitch_std / 80.0, 1.0)
         score += pitch_score * 0.25
         weights += 0.25
 
-    # Jitter — pitch irregularity
     jitter = f.get('jitter', 0)
     if jitter > 0:
         jitter_score = min(jitter / 0.05, 1.0)
         score += jitter_score * 0.25
         weights += 0.25
 
-    # Shimmer — amplitude irregularity
     shimmer = f.get('shimmer', 0)
     if shimmer > 0:
         shimmer_score = min(shimmer / 0.30, 1.0)
         score += shimmer_score * 0.20
         weights += 0.20
 
-    # Pause ratio — high pauses = hesitation/anxiety
     pause_ratio = f.get('pause_ratio', 0)
     pause_score = min(pause_ratio / 0.60, 1.0)
     score += pause_score * 0.15
     weights += 0.15
 
-    # Speech rate — too fast or too slow = anxiety/sadness
     rate = f.get('speech_rate', 3)
     if rate > 6:
-        rate_score = min((rate - 6) / 4.0, 1.0)   # too fast = anxiety
+        rate_score = min((rate - 6) / 4.0, 1.0)
     elif rate < 1.5:
-        rate_score = min((1.5 - rate) / 1.5, 1.0)  # too slow = sadness/depression
+        rate_score = min((1.5 - rate) / 1.5, 1.0)
     else:
         rate_score = 0.0
     score += rate_score * 0.15
     weights += 0.15
 
-    # Normalize by weights used
     if weights > 0:
         score = score / weights * (weights / 1.0)
 
@@ -142,16 +197,6 @@ def _score_from_features(f: dict) -> float:
 
 
 def _detect_emotion(f: dict) -> str:
-    """
-    Map acoustic features to an emotional state.
-    Returns: 'anxious' | 'sad' | 'angry' | 'calm' | 'neutral'
-
-    Based on:
-    - Anxious: high pitch, high speech rate, high jitter, high shimmer
-    - Sad: low pitch, slow speech rate, high pause ratio, low energy
-    - Angry: high energy, high pitch, fast speech, low pause ratio
-    - Calm: normal pitch, normal rate, low jitter/shimmer
-    """
     pitch_mean  = f.get('pitch_mean', 0)
     pitch_std   = f.get('pitch_std', 0)
     energy_mean = f.get('energy_mean', 0)
@@ -160,51 +205,35 @@ def _detect_emotion(f: dict) -> str:
     jitter      = f.get('jitter', 0)
     shimmer     = f.get('shimmer', 0)
 
-    scores = {
-        'anxious': 0.0,
-        'sad':     0.0,
-        'angry':   0.0,
-        'calm':    0.0,
-    }
+    scores = {'anxious': 0.0, 'sad': 0.0, 'angry': 0.0, 'calm': 0.0}
 
-    # Anxious indicators
     if pitch_std > 30:       scores['anxious'] += 0.3
     if speech_rate > 5:      scores['anxious'] += 0.25
     if jitter > 0.02:        scores['anxious'] += 0.25
     if shimmer > 0.15:       scores['anxious'] += 0.20
 
-    # Sad indicators
     if pitch_mean < 150:     scores['sad'] += 0.3
     if speech_rate < 2:      scores['sad'] += 0.3
     if pause_ratio > 0.5:    scores['sad'] += 0.25
     if energy_mean < 0.02:   scores['sad'] += 0.15
 
-    # Angry indicators
     if energy_mean > 0.08:   scores['angry'] += 0.3
     if pitch_mean > 250:     scores['angry'] += 0.25
     if speech_rate > 6:      scores['angry'] += 0.25
     if pause_ratio < 0.1:    scores['angry'] += 0.20
 
-    # Calm indicators
     if 1.5 <= speech_rate <= 4.5: scores['calm'] += 0.3
     if pitch_std < 20:            scores['calm'] += 0.3
     if jitter < 0.01:             scores['calm'] += 0.2
     if 0.1 <= pause_ratio <= 0.3: scores['calm'] += 0.2
 
     best = max(scores, key=scores.get)
-
-    # Only return emotion if score is meaningful
     if scores[best] < 0.2:
         return 'neutral'
-
     return best
 
 
 def map_acoustic_to_severity(acoustic_score: float) -> str:
-    """
-    Map 0.0 - 1.0 acoustic anxiety score to Normal / Low / Moderate / High.
-    Added Normal to match text intent severity system.
-    """
     if acoustic_score >= 0.65:
         return "High"
     if acoustic_score >= 0.35:
@@ -218,14 +247,8 @@ def fuse_with_text_severity(
     acoustic_severity: str,
     text_severity: str,
     acoustic_emotion: str = None,
+    acoustic_confidence: float = 1.0,
 ) -> str:
-    """
-    Combine acoustic and text severity into a final severity label.
-    Takes the higher of the two to avoid missing high risk cases.
-
-    If acoustic emotion is 'sad' or 'anxious' and text is Normal,
-    bump up to Low as a safety net.
-    """
     order = {'Normal': 0, 'Low': 1, 'Moderate': 2, 'High': 3}
     reverse = {0: 'Normal', 1: 'Low', 2: 'Moderate', 3: 'High'}
 
@@ -233,7 +256,6 @@ def fuse_with_text_severity(
     t = order.get(text_severity, 0)
     fused = max(a, t)
 
-    # Safety net — if voice sounds sad/anxious but text is neutral, bump to Low
     if acoustic_emotion in ('sad', 'anxious') and fused == 0:
         fused = 1
 
@@ -241,22 +263,16 @@ def fuse_with_text_severity(
 
 
 def _empty_features() -> dict:
-    """Return zeroed feature dict when extraction fails."""
     features = {
-        'pitch_mean': 0.0,
-        'pitch_std': 0.0,
-        'energy_mean': 0.0,
-        'energy_std': 0.0,
-        'pause_ratio': 0.0,
-        'speech_rate': 0.0,
-        'duration': 0.0,
-        'jitter': 0.0,
-        'shimmer': 0.0,
-        'zcr_mean': 0.0,
-        'spectral_centroid_mean': 0.0,
+        'pitch_mean': 0.0, 'pitch_std': 0.0,
+        'energy_mean': 0.0, 'energy_std': 0.0,
+        'pause_ratio': 0.0, 'speech_rate': 0.0,
+        'duration': 0.0, 'jitter': 0.0, 'shimmer': 0.0,
+        'zcr_mean': 0.0, 'spectral_centroid_mean': 0.0,
         'spectral_rolloff_mean': 0.0,
         'acoustic_anxiety_score': 0.0,
         'acoustic_emotion': 'neutral',
+        'acoustic_confidence': 0.0,
     }
     for i in range(1, 14):
         features[f'mfcc_{i}_mean'] = 0.0
