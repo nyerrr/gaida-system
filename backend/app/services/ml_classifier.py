@@ -231,6 +231,17 @@ def classify_intent(text: str) -> dict:
         ]
         avg_confidence = round(sum(agreeing_confidences) / len(agreeing_confidences), 3)
 
+        CONFIDENCE_THRESHOLD = 0.55
+
+        if avg_confidence < CONFIDENCE_THRESHOLD:
+            return {
+                "intent": "uncertain",
+                "confidence": avg_confidence,
+                "method": "ml_low_confidence",
+                "all_predictions": predictions,
+                "votes": dict(vote_counts),
+            }
+
         return {
             "intent": majority_intent,
             "confidence": avg_confidence,
