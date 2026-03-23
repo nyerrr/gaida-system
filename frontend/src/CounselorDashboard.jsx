@@ -2,17 +2,27 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, PieChart, Pie, Cell
+  Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine
 } from 'recharts';
 
 const BACKEND = 'http://127.0.0.1:8000';
 
+// ── Quick response templates ──────────────────────────────────────────────────
+const QUICK_RESPONSES = [
+  { label: "I'm here", text: "I'm here with you. You're not alone in this." },
+  { label: "Take a breath", text: "Let's take a slow breath together. Inhale for 4 counts, hold for 4, exhale for 4. I'm right here with you." },
+  { label: "Help coming", text: "I'm a counselor and I'm here to help you. You reached out at the right time. Can you tell me more about what you're feeling right now?" },
+  { label: "Call hotline", text: "Please call the National Crisis Hotline at 1553 right now — they are available 24/7 and can help you immediately. I'm staying with you." },
+  { label: "Safe?", text: "I want to make sure you're safe right now. Are you in a safe place? Is there anyone with you?" },
+  { label: "Follow up", text: "I'd like to schedule a follow-up session with you. You've shown a lot of courage today by reaching out." },
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const severityColor = (s) => {
-  if (s === 'High' || s === 'Crisis') return { bg: 'bg-red-600', text: 'text-white', dot: 'bg-red-500', border: 'border-red-200', light: 'bg-red-50' };
-  if (s === 'Moderate') return { bg: 'bg-amber-500', text: 'text-white', dot: 'bg-amber-400', border: 'border-amber-200', light: 'bg-amber-50' };
-  if (s === 'Low') return { bg: 'bg-green-500', text: 'text-white', dot: 'bg-green-400', border: 'border-green-200', light: 'bg-green-50' };
-  return { bg: 'bg-gray-400', text: 'text-white', dot: 'bg-gray-400', border: 'border-gray-200', light: 'bg-gray-50' };
+  if (s === 'High' || s === 'Crisis') return { bg: 'bg-red-600', text: 'text-white', dot: 'bg-red-500', border: 'border-red-200', light: 'bg-red-50', hex: '#ef4444' };
+  if (s === 'Moderate') return { bg: 'bg-amber-500', text: 'text-white', dot: 'bg-amber-400', border: 'border-amber-200', light: 'bg-amber-50', hex: '#f59e0b' };
+  if (s === 'Low') return { bg: 'bg-green-500', text: 'text-white', dot: 'bg-green-400', border: 'border-green-200', light: 'bg-green-50', hex: '#22c55e' };
+  return { bg: 'bg-gray-400', text: 'text-white', dot: 'bg-gray-400', border: 'border-gray-200', light: 'bg-gray-50', hex: '#9ca3af' };
 };
 
 const formatRelative = (ts) => {
@@ -29,6 +39,33 @@ const formatDuration = (startedAt) => {
   const m = Math.floor(diff / 60).toString().padStart(2, '0');
   const s = (diff % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
+};
+
+const confidenceToSeverity = (c) => {
+  if (c >= 0.99) return 'Crisis';
+  if (c >= 0.75) return 'High';
+  if (c >= 0.60) return 'Moderate';
+  if (c >= 0.45) return 'Low';
+  return 'Normal';
+};
+
+// ── Alert sound ───────────────────────────────────────────────────────────────
+const playAlertSound = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 150, 300].forEach((delay) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay / 1000);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay / 1000 + 0.3);
+      osc.start(ctx.currentTime + delay / 1000);
+      osc.stop(ctx.currentTime + delay / 1000 + 0.3);
+    });
+  } catch (e) {}
 };
 
 // ── Mock chart data ───────────────────────────────────────────────────────────
@@ -49,7 +86,6 @@ const anxietyDistribution = [
   { name: 'High', value: 20, color: '#ef4444' },
 ];
 
-// ── Nav ───────────────────────────────────────────────────────────────────────
 const NAV = [
   { id: 'overview',  label: 'Overview',         icon: '⊞' },
   { id: 'alerts',    label: 'Alerts',            icon: '⚠' },
@@ -62,14 +98,12 @@ const NAV = [
 function OverviewPage({ alerts, sessions }) {
   const pending = alerts.filter(a => a.status === 'pending').length;
   const highSessions = sessions.filter(s => s.severity === 'High' || s.severity === 'Crisis').length;
-
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Counselor Dashboard</h1>
         <p className="text-sm text-gray-500 mt-0.5">University of the East — Guidance System Overview</p>
       </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Active Sessions', value: sessions.length, sub: 'right now', color: 'bg-red-600' },
@@ -89,7 +123,6 @@ function OverviewPage({ alerts, sessions }) {
           </div>
         ))}
       </div>
-
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Anxiety Level Trends</h3>
@@ -118,7 +151,6 @@ function OverviewPage({ alerts, sessions }) {
           </ResponsiveContainer>
         </div>
       </div>
-
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Anxiety Distribution</h3>
@@ -141,7 +173,6 @@ function OverviewPage({ alerts, sessions }) {
             </div>
           </div>
         </div>
-
         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Recent Alerts</h3>
           {alerts.length === 0 ? (
@@ -175,7 +206,6 @@ function OverviewPage({ alerts, sessions }) {
 function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
   const pending = alerts.filter(a => a.status === 'pending');
   const resolved = alerts.filter(a => a.status !== 'pending');
-
   const AlertRow = ({ a }) => {
     const sc = severityColor(a.severity);
     return (
@@ -183,9 +213,7 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>
-                {a.severity}
-              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{a.severity}</span>
               <span className="text-xs text-gray-500">{a.intent}</span>
               <span className="text-xs text-gray-400">{formatRelative(a.timestamp)}</span>
             </div>
@@ -193,33 +221,21 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
             <p className="text-xs text-gray-600 truncate">"{a.message}"</p>
           </div>
           <div className="flex flex-col gap-2 flex-shrink-0">
-            <button
-              onClick={() => onViewChat(a.session_id)}
-              className="text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700 font-medium"
-            >
-              View Chat
-            </button>
+            <button onClick={() => onViewChat(a.session_id)} className="text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700 font-medium">View Chat</button>
             {a.status === 'pending' && (
-              <button
-                onClick={() => onUpdateStatus(a.session_id, 'reviewed')}
-                className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-white font-medium"
-              >
-                Mark Reviewed
-              </button>
+              <button onClick={() => onUpdateStatus(a.session_id, 'reviewed')} className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-white font-medium">Mark Reviewed</button>
             )}
           </div>
         </div>
       </div>
     );
   };
-
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
         <p className="text-sm text-gray-500 mt-0.5">High and Crisis level sessions requiring attention</p>
       </div>
-
       {pending.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
@@ -229,14 +245,12 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
           {pending.map((a, i) => <AlertRow key={i} a={a} />)}
         </div>
       )}
-
       {resolved.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-gray-500 mb-3">Resolved / Reviewed ({resolved.length})</h3>
           {resolved.map((a, i) => <AlertRow key={i} a={a} />)}
         </div>
       )}
-
       {alerts.length === 0 && (
         <div className="text-center py-20 text-gray-400">
           <p className="text-4xl mb-3">✓</p>
@@ -254,11 +268,8 @@ function SessionsPage({ sessions, onViewChat }) {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Active Sessions</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Severity levels visible — chat content only shown for flagged sessions
-        </p>
+        <p className="text-sm text-gray-500 mt-0.5">Severity levels visible — chat content only shown for flagged sessions</p>
       </div>
-
       {sessions.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <p className="text-4xl mb-3">◉</p>
@@ -280,18 +291,10 @@ function SessionsPage({ sessions, onViewChat }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-sm font-semibold text-gray-900">{s.session_id.slice(0, 16)}...</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>
-                        {s.severity}
-                      </span>
-                      {s.has_alert && (
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">
-                          ⚠ Alert
-                        </span>
-                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{s.severity}</span>
+                      {s.has_alert && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">⚠ Alert</span>}
                     </div>
-                    <p className="text-xs text-gray-500">
-                      {s.message_count} messages • {formatDuration(s.started_at)} • intent: {s.intent}
-                    </p>
+                    <p className="text-xs text-gray-500">{s.message_count} messages • {formatDuration(s.started_at)} • intent: {s.intent}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <div className="text-right mr-2">
@@ -299,12 +302,7 @@ function SessionsPage({ sessions, onViewChat }) {
                       <p className="text-sm font-bold text-gray-900">{(s.confidence * 100).toFixed(0)}%</p>
                     </div>
                     {(s.severity === 'High' || s.severity === 'Crisis' || s.has_alert) && (
-                      <button
-                        onClick={() => onViewChat(s.session_id)}
-                        className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
-                      >
-                        View Chat
-                      </button>
+                      <button onClick={() => onViewChat(s.session_id)} className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">View Chat</button>
                     )}
                   </div>
                 </div>
@@ -317,13 +315,14 @@ function SessionsPage({ sessions, onViewChat }) {
   );
 }
 
-// ── Chat Transcript Modal ─────────────────────────────────────────────────────
+// ── Chat Transcript Modal — with quick responses + severity graph ──────────────
 function ChatModal({ sessionId, onClose }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [takeoverMsg, setTakeoverMsg] = useState('');
   const [sending, setSending] = useState(false);
   const [tookOver, setTookOver] = useState(false);
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'graph'
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -333,29 +332,30 @@ function ChatModal({ sessionId, onClose }) {
   }, [sessionId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (activeTab === 'chat') {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, activeTab]);
 
   const fetchChat = async () => {
     try {
       const res = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
       const data = await res.json();
       if (data.messages) setMessages(data.messages);
-    } catch (e) {
-      console.error(e);
-    } finally {
+    } catch (e) {} finally {
       setLoading(false);
     }
   };
 
-  const sendTakeover = async () => {
-    if (!takeoverMsg.trim()) return;
+  const sendTakeover = async (msg) => {
+    const text = msg || takeoverMsg;
+    if (!text.trim()) return;
     setSending(true);
     try {
       const res = await fetch(`${BACKEND}/api/counselor/takeover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message: takeoverMsg }),
+        body: JSON.stringify({ session_id: sessionId, message: text }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -363,85 +363,204 @@ function ChatModal({ sessionId, onClose }) {
         setTakeoverMsg('');
         fetchChat();
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
+    } catch (e) {} finally {
       setSending(false);
     }
   };
 
+  // Build severity history chart data from messages
+  const severityHistory = messages
+    .filter(m => m.sender === 'user' && m.confidence)
+    .map((m, i) => ({
+      msg: i + 1,
+      confidence: Math.round((m.confidence || 0) * 100),
+      severity: confidenceToSeverity(m.confidence || 0),
+      text: m.text?.slice(0, 30) + (m.text?.length > 30 ? '...' : ''),
+    }));
+
+  const CustomDot = (props) => {
+    const { cx, cy, payload } = props;
+    const colors = { Crisis: '#b91c1c', High: '#ef4444', Moderate: '#f59e0b', Low: '#22c55e', Normal: '#9ca3af' };
+    return <circle cx={cx} cy={cy} r={4} fill={colors[payload.severity] || '#9ca3af'} stroke="white" strokeWidth={1.5} />;
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-sm font-bold text-gray-900">Chat Transcript</h3>
-            <p className="text-xs text-gray-500">{sessionId.slice(0, 20)}...</p>
+            <h3 className="text-sm font-bold text-gray-900">Live Session</h3>
+            <p className="text-xs text-gray-500">{sessionId.slice(0, 24)}...</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-bold">✕</button>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span className="text-xs text-gray-400 mr-2">Live</span>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-bold">✕</button>
+          </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-          {loading ? (
-            <p className="text-xs text-gray-400 text-center py-8">Loading chat...</p>
-          ) : messages.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-8">No messages yet</p>
-          ) : (
-            messages.map((m, i) => (
-              <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
-                  m.sender === 'user'
-                    ? 'bg-gray-800 text-white rounded-tr-sm'
-                    : m.sender === 'counselor'
-                    ? 'bg-blue-600 text-white rounded-tl-sm'
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 flex-shrink-0">
+          {[
+            { id: 'chat', label: 'Chat Transcript' },
+            { id: 'graph', label: 'Anxiety Progression' },
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`flex-1 py-2.5 text-xs font-medium transition-colors ${activeTab === t.id ? 'bg-gray-100 text-gray-900 border-b-2 border-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Chat Tab */}
+        {activeTab === 'chat' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 min-h-0">
+            {loading ? (
+              <p className="text-xs text-gray-400 text-center py-8">Loading chat...</p>
+            ) : messages.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8">No messages yet</p>
+            ) : (
+              messages.map((m, i) => (
+                <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                    m.sender === 'user' ? 'bg-gray-800 text-white rounded-tr-sm'
+                    : m.sender === 'counselor' ? 'bg-blue-600 text-white rounded-tl-sm'
                     : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
-                }`}>
-                  {m.sender === 'counselor' && (
-                    <p className="text-blue-200 text-xs font-semibold mb-1">Counselor</p>
-                  )}
-                  <p>{m.text}</p>
-                  {m.intent && m.sender === 'user' && (
-                    <p className="text-gray-400 text-xs mt-1">{m.intent} • {m.confidence ? (m.confidence * 100).toFixed(0) + '%' : ''}</p>
-                  )}
+                  }`}>
+                    {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">You (Counselor)</p>}
+                    <p>{m.text}</p>
+                    {m.sender === 'user' && m.confidence && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          confidenceToSeverity(m.confidence) === 'High' ? 'bg-red-400' :
+                          confidenceToSeverity(m.confidence) === 'Moderate' ? 'bg-amber-400' :
+                          confidenceToSeverity(m.confidence) === 'Low' ? 'bg-green-400' : 'bg-gray-400'
+                        }`} />
+                        <p className="text-gray-400 text-xs">{m.intent} • {(m.confidence * 100).toFixed(0)}% • {confidenceToSeverity(m.confidence)}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
-          <div ref={bottomRef} />
-        </div>
+              ))
+            )}
+            <div ref={bottomRef} />
+          </div>
+        )}
 
-        {/* Takeover input */}
-        <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0">
-          {tookOver && (
-            <p className="text-xs text-blue-600 font-medium mb-2">✓ You have taken over this session</p>
-          )}
-          <div className="flex gap-2">
+        {/* Severity Graph Tab */}
+        {activeTab === 'graph' && (
+          <div className="flex-1 overflow-y-auto p-4 min-h-0">
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-gray-900 mb-1">Anxiety Confidence Over Session</p>
+              <p className="text-xs text-gray-400">Each point = one student message. Color = detected severity.</p>
+            </div>
+
+            {severityHistory.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8">No data yet — waiting for student messages</p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={severityHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="msg" tick={{ fontSize: 10 }} label={{ value: 'Message #', position: 'insideBottom', offset: -2, fontSize: 10 }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} />
+                    <Tooltip
+                      formatter={(val, name) => [`${val}%`, 'Confidence']}
+                      labelFormatter={(label, payload) => payload?.[0]?.payload?.text || `Message ${label}`}
+                    />
+                    <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'High', fill: '#ef4444', fontSize: 10 }} />
+                    <ReferenceLine y={60} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'Moderate', fill: '#f59e0b', fontSize: 10 }} />
+                    <ReferenceLine y={45} stroke="#22c55e" strokeDasharray="3 3" label={{ value: 'Low', fill: '#22c55e', fontSize: 10 }} />
+                    <Line type="monotone" dataKey="confidence" stroke="#6b7280" strokeWidth={2} dot={<CustomDot />} />
+                  </LineChart>
+                </ResponsiveContainer>
+
+                {/* Legend */}
+                <div className="flex flex-wrap gap-3 mt-3">
+                  {[
+                    { label: 'Normal', color: '#9ca3af' },
+                    { label: 'Low', color: '#22c55e' },
+                    { label: 'Moderate', color: '#f59e0b' },
+                    { label: 'High', color: '#ef4444' },
+                    { label: 'Crisis', color: '#b91c1c' },
+                  ].map(l => (
+                    <div key={l.label} className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: l.color }} />
+                      <span className="text-xs text-gray-500">{l.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Current status */}
+                {severityHistory.length > 0 && (() => {
+                  const last = severityHistory[severityHistory.length - 1];
+                  const sc = severityColor(last.severity);
+                  return (
+                    <div className={`mt-3 p-3 rounded-lg ${sc.light} border ${sc.border}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-900">Current Status</p>
+                          <p className="text-xs text-gray-500">Based on latest message</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-sm font-bold px-3 py-1 rounded-full ${sc.bg} ${sc.text}`}>{last.severity}</span>
+                          <p className="text-xs text-gray-400 mt-1">{last.confidence}% confidence</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Quick Response Templates */}
+        <div className="px-4 pt-3 border-t border-gray-100 flex-shrink-0">
+          <p className="text-xs text-gray-400 mb-2">Quick responses:</p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {QUICK_RESPONSES.map((r) => (
+              <button
+                key={r.label}
+                onClick={() => sendTakeover(r.text)}
+                disabled={sending}
+                className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-100 hover:text-blue-700 text-gray-600 rounded-full border border-gray-200 hover:border-blue-300 transition-colors disabled:opacity-50"
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom message input */}
+          {tookOver && <p className="text-xs text-blue-600 font-medium mb-2">✓ You have joined this session</p>}
+          <div className="flex gap-2 pb-3">
             <input
               value={takeoverMsg}
               onChange={e => setTakeoverMsg(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendTakeover()}
-              placeholder="Type a message to take over this session..."
+              placeholder="Or type a custom message..."
               className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
             />
             <button
-              onClick={sendTakeover}
+              onClick={() => sendTakeover()}
               disabled={sending || !takeoverMsg.trim()}
               className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
             >
               {sending ? '...' : 'Send'}
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-1.5">Sending a message will notify the student that a counselor has joined.</p>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Detection Page (unchanged) ────────────────────────────────────────────────
+// ── Detection Page ────────────────────────────────────────────────────────────
 function DetectionPage() {
   return (
     <div>
@@ -456,7 +575,7 @@ function DetectionPage() {
         ].map((m) => (
           <div key={m.label} className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
-              <div className={`w-2 h-2 rounded-full bg-green-400 animate-pulse`} />
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
               <p className="text-xs text-gray-500">{m.label}</p>
             </div>
             <p className="text-xl font-bold text-gray-900 mb-1">{m.status}</p>
@@ -487,7 +606,7 @@ function DetectionPage() {
   );
 }
 
-// ── Reports Page (unchanged) ──────────────────────────────────────────────────
+// ── Reports Page ──────────────────────────────────────────────────────────────
 function ReportsPage() {
   return (
     <div>
@@ -527,8 +646,9 @@ export default function CounselorDashboard() {
   const [sessions, setSessions] = useState([]);
   const [chatSessionId, setChatSessionId] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  const prevAlertCountRef = useRef(0);
+  const prevPendingCountRef = useRef(0);
 
-  // Poll alerts and sessions every 5 seconds
   useEffect(() => {
     fetchAlerts();
     fetchSessions();
@@ -543,7 +663,22 @@ export default function CounselorDashboard() {
     try {
       const res = await fetch(`${BACKEND}/api/counselor/alerts`);
       const data = await res.json();
-      if (data.alerts) setAlerts(data.alerts);
+      if (data.alerts) {
+        const newPending = data.alerts.filter(a => a.status === 'pending').length;
+        // Play alert sound if new pending alert arrived
+        if (newPending > prevPendingCountRef.current) {
+          playAlertSound();
+          // Browser notification if permitted
+          if (Notification.permission === 'granted') {
+            new Notification('⚠ GAIDA Alert', {
+              body: `New High/Crisis session detected`,
+              icon: '/favicon.ico',
+            });
+          }
+        }
+        prevPendingCountRef.current = newPending;
+        setAlerts(data.alerts);
+      }
     } catch (e) {}
   };
 
@@ -566,6 +701,13 @@ export default function CounselorDashboard() {
     } catch (e) {}
   };
 
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   const pendingCount = alerts.filter(a => a.status === 'pending').length;
 
   const logout = () => {
@@ -581,10 +723,7 @@ export default function CounselorDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex overflow-hidden">
-
-      {expanded && (
-        <div className="fixed inset-0 bg-black/20 z-20" onClick={() => setExpanded(false)} />
-      )}
+      {expanded && <div className="fixed inset-0 bg-black/20 z-20" onClick={() => setExpanded(false)} />}
 
       {/* Sidebar */}
       <aside className={`fixed top-0 left-0 h-full z-30 bg-gray-800 flex flex-col shadow-lg transition-all duration-300 ${expanded ? 'w-56' : 'w-14'}`}>
@@ -594,7 +733,6 @@ export default function CounselorDashboard() {
           </div>
           {expanded && <span className="text-white font-bold text-sm tracking-wide ml-3 whitespace-nowrap">GAIDA</span>}
         </div>
-
         <nav className="flex-1 py-3 overflow-y-auto overflow-x-hidden">
           {NAV.map((navItem) => {
             const active = activePage === navItem.id;
@@ -604,43 +742,30 @@ export default function CounselorDashboard() {
                 key={navItem.id}
                 onClick={() => { setActivePage(navItem.id); setExpanded(false); }}
                 title={!expanded ? navItem.label : undefined}
-                className={`w-full flex items-center px-4 py-3 transition-colors relative group ${
-                  active ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                }`}
+                className={`w-full flex items-center px-4 py-3 transition-colors relative group ${active ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}
               >
                 <span className="flex-shrink-0 text-base relative">
                   {navItem.icon}
                   {isAlerts && pendingCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full text-white text-xs flex items-center justify-center" style={{fontSize:'8px'}}>
-                      {pendingCount}
-                    </span>
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full text-white flex items-center justify-center" style={{fontSize:'8px'}}>{pendingCount}</span>
                   )}
                 </span>
                 {expanded && <span className="ml-3 text-sm font-medium whitespace-nowrap">{navItem.label}</span>}
                 {!expanded && (
                   <span className="absolute left-14 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
-                    {navItem.label}
-                    {isAlerts && pendingCount > 0 && ` (${pendingCount})`}
+                    {navItem.label}{isAlerts && pendingCount > 0 && ` (${pendingCount})`}
                   </span>
                 )}
               </button>
             );
           })}
         </nav>
-
         <div className="border-t border-gray-700 flex-shrink-0">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="w-full flex items-center px-4 py-3 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
-          >
+          <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center px-4 py-3 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors">
             <span className={`flex-shrink-0 text-sm transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}>›</span>
             {expanded && <span className="ml-3 text-sm font-medium">Collapse</span>}
           </button>
-          <button
-            onClick={logout}
-            className="w-full flex items-center px-4 py-3 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
-            title={!expanded ? 'Logout' : undefined}
-          >
+          <button onClick={logout} className="w-full flex items-center px-4 py-3 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors" title={!expanded ? 'Logout' : undefined}>
             <span className="flex-shrink-0 text-sm">⏻</span>
             {expanded && <span className="ml-3 text-sm font-medium">Logout</span>}
           </button>
@@ -660,12 +785,8 @@ export default function CounselorDashboard() {
         </main>
       </div>
 
-      {/* Chat Modal */}
       {chatSessionId && (
-        <ChatModal
-          sessionId={chatSessionId}
-          onClose={() => setChatSessionId(null)}
-        />
+        <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
       )}
     </div>
   );
