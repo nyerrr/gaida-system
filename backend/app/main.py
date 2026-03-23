@@ -18,11 +18,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+
 from app.services.intent_router import analyze_intent
 from app.services.rate_limiter import check_rate_limit
 from app.utils.consent_checker import log_consent
 from app.api import auth
 from app.api.voice import router as audio_router
+from app.api.counselor import router as counselor_router
 
 app = FastAPI(title="GAIDA Backend")
 
@@ -31,6 +33,7 @@ app = FastAPI(title="GAIDA Backend")
 # ----------------------------
 app.include_router(auth.router)
 app.include_router(audio_router)
+app.include_router(counselor_router)
 
 # ----------------------------
 # CORS

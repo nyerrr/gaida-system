@@ -14,6 +14,7 @@ export default function StudentDashboard() {
   const containerRef = useRef(null);
   const timerRef = useRef(null);
   const inputRef = useRef(null);
+  
 
   useEffect(() => {
     const token = localStorage.getItem('session_token');
@@ -41,6 +42,34 @@ export default function StudentDashboard() {
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   };
+
+  // Poll for counselor takeover messages every 3 seconds
+  const lastMessageCountRef = useRef(0);
+  useEffect(() => {
+    const pollCounselor = async () => {
+      const sessionId = localStorage.getItem('session_id');
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/counselor/chat/${sessionId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.messages) return;
+        const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
+        if (counselorMsgs.length > lastMessageCountRef.current) {
+          const newMsgs = counselorMsgs.slice(lastMessageCountRef.current);
+          newMsgs.forEach(m => {
+            setMessages(prev => [...prev, {
+              role: 'counselor',
+              text: m.text,
+            }]);
+          });
+          lastMessageCountRef.current = counselorMsgs.length;
+        }
+      } catch (e) {}
+    };
+    const interval = setInterval(pollCounselor, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getSeverityColor = (level) => {
   if (level === 'High') return { bar: 'bg-red-500', text: 'text-red-400', border: 'border-red-800', glow: 'shadow-red-500/20' };
@@ -237,11 +266,20 @@ export default function StudentDashboard() {
           </div>
         </div>
 
+       
         {/* Chat Area */}
         <div
           ref={containerRef}
           className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-3"
         >
+          {/* Counselor joined banner */}
+          {messages.some(m => m.role === 'counselor') && (
+            <div className="flex justify-center">
+              <span className="text-xs text-blue-400 bg-blue-900/30 border border-blue-800 px-3 py-1.5 rounded-full">
+                A counselor has joined your session
+              </span>
+            </div>
+          )}
           {messages.length === 0 && !voiceStatus && (
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <div className="w-14 h-14 bg-gray-800 rounded-full flex items-center justify-center mb-4 border border-gray-700">
@@ -256,9 +294,14 @@ export default function StudentDashboard() {
 
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
-              {m.role === 'bot' && (
-                <div className="w-6 h-6 sm:w-7 sm:h-7 bg-red-900 rounded-full flex items-center justify-center flex-shrink-0 border border-red-700 mb-0.5">
-                  <span className="text-white text-xs font-bold">G</span>
+              {(m.role === 'bot' || m.role === 'counselor') && (
+                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center flex-shrink-0 border mb-0.5
+                  ${m.role === 'counselor'
+                    ? 'bg-blue-900 border-blue-700'
+                    : 'bg-red-900 border-red-700'}`}>
+                  <span className="text-white text-xs font-bold">
+                    {m.role === 'counselor' ? 'C' : 'G'}
+                  </span>
                 </div>
               )}
               <div className="flex flex-col gap-1 max-w-[78%] sm:max-w-[72%] lg:max-w-[65%]">
@@ -266,6 +309,8 @@ export default function StudentDashboard() {
                   px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-sm leading-relaxed
                   ${m.role === 'user'
                     ? 'bg-red-700 text-white rounded-tr-sm'
+                    : m.role === 'counselor'
+                    ? 'bg-blue-900 text-blue-100 border border-blue-700 rounded-tl-sm'
                     : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm'}
                 `}>
                   {m.isVoice && (
