@@ -2,8 +2,6 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-import sys
-import os
 
 router = APIRouter(prefix="/api/counselor", tags=["counselor"])
 
@@ -24,9 +22,10 @@ def should_alert_counselor(severity: str) -> bool:
     return severity in ("High", "Crisis")
 
 # ---------------------------------------------------------------------------
-# In-memory alert store
+# In-memory stores
 # ---------------------------------------------------------------------------
 ALERTS: list[dict] = []
+TYPING_STATES: dict = {}  # { session_id: { "counselor": bool, "student": bool } }
 
 # ---------------------------------------------------------------------------
 # Internal function called by intent_router.py
@@ -42,16 +41,13 @@ def process_alert(
     alert_sent = False
 
     if should_alert_counselor(severity):
-        # Check if alert already exists for this session
         existing = next((a for a in ALERTS if a["session_id"] == session_id), None)
 
         if existing:
-            # Update existing alert
             existing["last_message"] = message
             existing["timestamp"] = datetime.utcnow().isoformat()
             existing["intent"] = intent
         else:
-            # Create new alert
             alert_entry = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "session_id": session_id,
@@ -66,7 +62,6 @@ def process_alert(
             }
             ALERTS.append(alert_entry)
 
-            # Save to Supabase
             try:
                 from app.database.database import supabase
                 supabase.table("counselor_alerts").insert({
@@ -89,9 +84,8 @@ def process_alert(
     }
 
 # ---------------------------------------------------------------------------
-# API endpoints
+# Models
 # ---------------------------------------------------------------------------
-
 class AlertStatusUpdate(BaseModel):
     session_id: str
     status: str
@@ -100,28 +94,35 @@ class TakeOverMessage(BaseModel):
     session_id: str
     message: str
 
+class TypingPayload(BaseModel):
+    is_typing: bool
+    sender: str  # "counselor" or "student"
+
+class StudentMessage(BaseModel):
+    sender: str
+    text: str
+
+# ---------------------------------------------------------------------------
+# API endpoints
+# ---------------------------------------------------------------------------
 
 @router.get("/alerts")
 def get_alerts():
-    """Return all alerts — used by counselor dashboard."""
     return {"alerts": ALERTS, "count": len(ALERTS)}
 
 
 @router.get("/alerts/pending")
 def get_pending_alerts():
-    """Return only pending High/Crisis alerts."""
     pending = [a for a in ALERTS if a.get("status") == "pending"]
     return {"alerts": pending, "count": len(pending)}
 
 
 @router.post("/alerts/update")
 def update_alert_status(payload: AlertStatusUpdate):
-    """Counselor marks alert as reviewed/resolved/escalated."""
     for alert in ALERTS:
         if alert["session_id"] == payload.session_id:
             alert["status"] = payload.status
             alert["updated_at"] = datetime.utcnow().isoformat()
-            # Update Supabase
             try:
                 from app.database.database import supabase
                 supabase.table("counselor_alerts").update({
@@ -135,10 +136,6 @@ def update_alert_status(payload: AlertStatusUpdate):
 
 @router.get("/sessions/active")
 def get_active_sessions():
-    """
-    Return all active sessions with severity level.
-    Counselor sees severity but NOT chat content unless flagged.
-    """
     try:
         from app.services.session_manager import list_active_sessions
         sessions = list_active_sessions()
@@ -148,7 +145,6 @@ def get_active_sessions():
             severity = meta.get("severity", "Normal")
             confidence = meta.get("running_confidence", 0.3)
 
-            # Map confidence to severity if not set
             if not severity or severity == "Normal":
                 if confidence >= 0.75:
                     severity = "High"
@@ -159,7 +155,6 @@ def get_active_sessions():
                 else:
                     severity = "Normal"
 
-            # Check if this session has a pending alert
             has_alert = any(
                 a["session_id"] == s["session_id"] and a["status"] == "pending"
                 for a in ALERTS
@@ -184,14 +179,14 @@ def get_active_sessions():
 @router.get("/chat/{session_id}")
 def get_chat_transcript(session_id: str):
     """
-    Return full chat transcript for a session.
-    Only called when counselor clicks View on a flagged alert.
+    Returns full chat transcript including student messages mirrored via POST /chat/{session_id}.
+    Also returns typing state for both counselor and student.
     """
     try:
         from app.services.session_manager import get_session
         session = get_session(session_id)
         if not session:
-            return {"error": "Session not found", "messages": []}
+            return {"error": "Session not found", "messages": [], "counselor_typing": False, "student_typing": False}
 
         messages = []
         for m in session.get("messages", []):
@@ -203,20 +198,57 @@ def get_chat_transcript(session_id: str):
                 "confidence": m.get("analysis", {}).get("confidence"),
             })
 
+        typing = TYPING_STATES.get(session_id, {})
+
         return {
             "session_id": session_id,
             "messages": messages,
             "severity": session.get("meta", {}).get("running_confidence", 0.3),
+            "counselor_typing": typing.get("counselor", False),
+            "student_typing": typing.get("student", False),
         }
     except Exception as e:
-        return {"error": str(e), "messages": []}
+        return {"error": str(e), "messages": [], "counselor_typing": False, "student_typing": False}
+
+
+@router.post("/chat/{session_id}")
+def post_student_message(session_id: str, payload: StudentMessage):
+    """
+    Student dashboard mirrors messages here so counselor can see them in real time.
+    Called after every student message send.
+    """
+    try:
+        from app.services.session_manager import get_session, record_interaction
+        session = get_session(session_id)
+        if not session:
+            return {"ok": False, "error": "Session not found"}
+
+        record_interaction(
+            session_id=session_id,
+            sender=payload.sender,
+            text=payload.text,
+            analysis={},
+            response=None,
+        )
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/typing/{session_id}")
+def set_typing(session_id: str, payload: TypingPayload):
+    """Set typing indicator for counselor or student."""
+    if session_id not in TYPING_STATES:
+        TYPING_STATES[session_id] = {"counselor": False, "student": False}
+    TYPING_STATES[session_id][payload.sender] = payload.is_typing
+    return {"ok": True}
 
 
 @router.post("/takeover")
 def counselor_takeover(payload: TakeOverMessage):
     """
     Counselor sends a message directly to the student.
-    Injects counselor message into the session.
+    Sets counselor_active = True so VA stops responding.
     """
     try:
         from app.services.session_manager import get_session, record_interaction
@@ -224,13 +256,11 @@ def counselor_takeover(payload: TakeOverMessage):
         if not session:
             return {"ok": False, "error": "Session not found"}
 
-        # Mark session as counselor-assisted
         if "meta" not in session:
             session["meta"] = {}
         session["meta"]["counselor_active"] = True
         session["meta"]["counselor_message"] = payload.message
 
-        # Record counselor message in session
         record_interaction(
             session_id=payload.session_id,
             sender="counselor",
@@ -239,7 +269,6 @@ def counselor_takeover(payload: TakeOverMessage):
             response=None,
         )
 
-        # Mark alert as escalated
         for alert in ALERTS:
             if alert["session_id"] == payload.session_id:
                 alert["status"] = "escalated"

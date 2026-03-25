@@ -315,15 +315,17 @@ function SessionsPage({ sessions, onViewChat }) {
   );
 }
 
-// ── Chat Transcript Modal — with quick responses + severity graph ──────────────
+// ── Chat Modal ────────────────────────────────────────────────────────────────
 function ChatModal({ sessionId, onClose }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [takeoverMsg, setTakeoverMsg] = useState('');
   const [sending, setSending] = useState(false);
   const [tookOver, setTookOver] = useState(false);
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'graph'
+  const [activeTab, setActiveTab] = useState('chat');
+  const [studentTyping, setStudentTyping] = useState(false);
   const bottomRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
     fetchChat();
@@ -335,21 +337,43 @@ function ChatModal({ sessionId, onClose }) {
     if (activeTab === 'chat') {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, activeTab]);
+  }, [messages, activeTab, studentTyping]);
 
   const fetchChat = async () => {
     try {
       const res = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
       const data = await res.json();
       if (data.messages) setMessages(data.messages);
+      // Update student typing indicator
+      setStudentTyping(data.student_typing || false);
     } catch (e) {} finally {
       setLoading(false);
     }
   };
 
+  const fireCounselorTyping = (isTyping) => {
+    fetch(`${BACKEND}/api/counselor/typing/${sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: 'counselor', is_typing: isTyping }),
+    }).catch(() => {});
+  };
+
+  const handleInputChange = (e) => {
+    setTakeoverMsg(e.target.value);
+    fireCounselorTyping(true);
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => fireCounselorTyping(false), 2000);
+  };
+
   const sendTakeover = async (msg) => {
     const text = msg || takeoverMsg;
     if (!text.trim()) return;
+
+    // Clear typing signal on send
+    clearTimeout(typingTimeoutRef.current);
+    fireCounselorTyping(false);
+
     setSending(true);
     try {
       const res = await fetch(`${BACKEND}/api/counselor/takeover`, {
@@ -368,7 +392,6 @@ function ChatModal({ sessionId, onClose }) {
     }
   };
 
-  // Build severity history chart data from messages
   const severityHistory = messages
     .filter(m => m.sender === 'user' && m.confidence)
     .map((m, i) => ({
@@ -403,10 +426,7 @@ function ChatModal({ sessionId, onClose }) {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-100 flex-shrink-0">
-          {[
-            { id: 'chat', label: 'Chat Transcript' },
-            { id: 'graph', label: 'Anxiety Progression' },
-          ].map(t => (
+          {[{ id: 'chat', label: 'Chat Transcript' }, { id: 'graph', label: 'Anxiety Progression' }].map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
@@ -426,15 +446,17 @@ function ChatModal({ sessionId, onClose }) {
               <p className="text-xs text-gray-400 text-center py-8">No messages yet</p>
             ) : (
               messages.map((m, i) => (
-                <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={i} className={`flex ${m.sender === 'student' || m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
-                    m.sender === 'user' ? 'bg-gray-800 text-white rounded-tr-sm'
-                    : m.sender === 'counselor' ? 'bg-blue-600 text-white rounded-tl-sm'
-                    : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
+                    m.sender === 'student' || m.sender === 'user'
+                      ? 'bg-gray-800 text-white rounded-tr-sm'
+                      : m.sender === 'counselor'
+                      ? 'bg-blue-600 text-white rounded-tl-sm'
+                      : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
                   }`}>
                     {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">You (Counselor)</p>}
                     <p>{m.text}</p>
-                    {m.sender === 'user' && m.confidence && (
+                    {(m.sender === 'user' || m.sender === 'student') && m.confidence && (
                       <div className="flex items-center gap-1 mt-1">
                         <div className={`w-1.5 h-1.5 rounded-full ${
                           confidenceToSeverity(m.confidence) === 'High' ? 'bg-red-400' :
@@ -448,6 +470,20 @@ function ChatModal({ sessionId, onClose }) {
                 </div>
               ))
             )}
+
+            {/* Student typing bubble */}
+            {studentTyping && (
+              <div className="flex justify-end">
+                <div className="bg-gray-700 px-3 py-2 rounded-xl rounded-tr-sm">
+                  <div className="flex gap-1 items-center h-4">
+                    <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{animationDelay:'0ms'}}></div>
+                    <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{animationDelay:'150ms'}}></div>
+                    <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{animationDelay:'300ms'}}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div ref={bottomRef} />
           </div>
         )}
@@ -459,7 +495,6 @@ function ChatModal({ sessionId, onClose }) {
               <p className="text-xs font-semibold text-gray-900 mb-1">Anxiety Confidence Over Session</p>
               <p className="text-xs text-gray-400">Each point = one student message. Color = detected severity.</p>
             </div>
-
             {severityHistory.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">No data yet — waiting for student messages</p>
             ) : (
@@ -470,7 +505,7 @@ function ChatModal({ sessionId, onClose }) {
                     <XAxis dataKey="msg" tick={{ fontSize: 10 }} label={{ value: 'Message #', position: 'insideBottom', offset: -2, fontSize: 10 }} />
                     <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} />
                     <Tooltip
-                      formatter={(val, name) => [`${val}%`, 'Confidence']}
+                      formatter={(val) => [`${val}%`, 'Confidence']}
                       labelFormatter={(label, payload) => payload?.[0]?.payload?.text || `Message ${label}`}
                     />
                     <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'High', fill: '#ef4444', fontSize: 10 }} />
@@ -479,8 +514,6 @@ function ChatModal({ sessionId, onClose }) {
                     <Line type="monotone" dataKey="confidence" stroke="#6b7280" strokeWidth={2} dot={<CustomDot />} />
                   </LineChart>
                 </ResponsiveContainer>
-
-                {/* Legend */}
                 <div className="flex flex-wrap gap-3 mt-3">
                   {[
                     { label: 'Normal', color: '#9ca3af' },
@@ -495,8 +528,6 @@ function ChatModal({ sessionId, onClose }) {
                     </div>
                   ))}
                 </div>
-
-                {/* Current status */}
                 {severityHistory.length > 0 && (() => {
                   const last = severityHistory[severityHistory.length - 1];
                   const sc = severityColor(last.severity);
@@ -520,7 +551,7 @@ function ChatModal({ sessionId, onClose }) {
           </div>
         )}
 
-        {/* Quick Response Templates */}
+        {/* Quick Responses + Input */}
         <div className="px-4 pt-3 border-t border-gray-100 flex-shrink-0">
           <p className="text-xs text-gray-400 mb-2">Quick responses:</p>
           <div className="flex flex-wrap gap-1.5 mb-3">
@@ -535,15 +566,13 @@ function ChatModal({ sessionId, onClose }) {
               </button>
             ))}
           </div>
-
-          {/* Custom message input */}
           {tookOver && <p className="text-xs text-blue-600 font-medium mb-2">✓ You have joined this session</p>}
           <div className="flex gap-2 pb-3">
             <input
               value={takeoverMsg}
-              onChange={e => setTakeoverMsg(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={e => e.key === 'Enter' && sendTakeover()}
-              placeholder="Or type a custom message..."
+              placeholder="Type a message to the student..."
               className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
             />
             <button
@@ -646,7 +675,6 @@ export default function CounselorDashboard() {
   const [sessions, setSessions] = useState([]);
   const [chatSessionId, setChatSessionId] = useState(null);
   const [expanded, setExpanded] = useState(false);
-  const prevAlertCountRef = useRef(0);
   const prevPendingCountRef = useRef(0);
 
   useEffect(() => {
@@ -659,21 +687,22 @@ export default function CounselorDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   const fetchAlerts = async () => {
     try {
       const res = await fetch(`${BACKEND}/api/counselor/alerts`);
       const data = await res.json();
       if (data.alerts) {
         const newPending = data.alerts.filter(a => a.status === 'pending').length;
-        // Play alert sound if new pending alert arrived
         if (newPending > prevPendingCountRef.current) {
           playAlertSound();
-          // Browser notification if permitted
           if (Notification.permission === 'granted') {
-            new Notification('⚠ GAIDA Alert', {
-              body: `New High/Crisis session detected`,
-              icon: '/favicon.ico',
-            });
+            new Notification('⚠ GAIDA Alert', { body: 'New High/Crisis session detected', icon: '/favicon.ico' });
           }
         }
         prevPendingCountRef.current = newPending;
@@ -700,13 +729,6 @@ export default function CounselorDashboard() {
       fetchAlerts();
     } catch (e) {}
   };
-
-  // Request browser notification permission on mount
-  useEffect(() => {
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
 
   const pendingCount = alerts.filter(a => a.status === 'pending').length;
 

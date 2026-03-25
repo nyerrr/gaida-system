@@ -2,6 +2,16 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import VoiceInput from './VoiceInput';
 
+const BACKEND = 'http://127.0.0.1:8000';
+
+const mapConfidenceToSeverity = (conf) => {
+  if (conf >= 0.75) return 'High';
+  if (conf >= 0.60) return 'Moderate';
+  if (conf >= 0.45) return 'Low';
+  return 'Normal';
+};
+
+
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
@@ -10,12 +20,16 @@ export default function StudentDashboard() {
   const [severity, setSeverity] = useState('Normal');
   const [sessionTime, setSessionTime] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState(''); // CHANGE 1: added voiceStatus state
+  const [voiceStatus, setVoiceStatus] = useState('');
+  const [counselorTyping, setCounselorTyping] = useState(false);
   const containerRef = useRef(null);
   const timerRef = useRef(null);
   const inputRef = useRef(null);
-  
+  const lastMessageCountRef = useRef(0);
+  const typingTimeoutRef = useRef(null);
+  const [counselorActive, setCounselorActive] = useState(false);
 
+  // ── Auth + session timer ───────────────────────────────────────────────────
   useEffect(() => {
     const token = localStorage.getItem('session_token');
     const consent = localStorage.getItem('consent_given');
@@ -31,38 +45,57 @@ export default function StudentDashboard() {
     return () => clearInterval(timerRef.current);
   }, [navigate]);
 
+
+  // ── Auto-scroll ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [messages, voiceStatus]); // CHANGE 2: added voiceStatus to scroll dependency
+  }, [messages, voiceStatus, counselorTyping]);
 
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  // Poll for counselor takeover messages every 3 seconds
-  const lastMessageCountRef = useRef(0);
+  // ── Poll counselor chat every 3s ───────────────────────────────────────────
   useEffect(() => {
     const pollCounselor = async () => {
       const sessionId = localStorage.getItem('session_id');
       if (!sessionId) return;
+
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/counselor/chat/${sessionId}`);
+        const res = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
         if (!res.ok) return;
+
         const data = await res.json();
         if (!data.messages) return;
+
+        // FIX: now data exists
+        const hasCounselor = data.messages.some(m => m.sender === 'counselor');
+        if (hasCounselor) setCounselorActive(true);
+
+        // Update counselor typing indicator
+        setCounselorTyping(data.counselor_typing || false);
+
+        const conf = data.severity;
+        if (conf !== undefined) {
+          setSeverity(mapConfidenceToSeverity(conf));
+        }
+
         const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
         if (counselorMsgs.length > lastMessageCountRef.current) {
-          const newMsgs = counselorMsgs.slice(lastMessageCountRef.current);
-          newMsgs.forEach(m => {
+          // Show "joined" system message on first counselor message
+          if (lastMessageCountRef.current === 0) {
             setMessages(prev => [...prev, {
+              role: 'system',
+              text: 'A counselor has joined your session.',
+            }]);
+          }
+          const newMsgs = counselorMsgs.slice(lastMessageCountRef.current);
+          setMessages(prev => [
+            ...prev,
+            ...newMsgs.map(m => ({
               role: 'counselor',
               text: m.text,
-            }]);
-          });
+              timestamp: new Date(),
+            }))
+          ]);
           lastMessageCountRef.current = counselorMsgs.length;
         }
       } catch (e) {}
@@ -71,27 +104,60 @@ export default function StudentDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const formatMsgTime = (date) => {
+    if (!date) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   const getSeverityColor = (level) => {
-  if (level === 'High') return { bar: 'bg-red-500', text: 'text-red-400', border: 'border-red-800', glow: 'shadow-red-500/20' };
-  if (level === 'Moderate') return { bar: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-800', glow: 'shadow-yellow-500/20' };
-  if (level === 'Low') return { bar: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-800', glow: 'shadow-emerald-500/20' };
-  // Normal — default neutral gray
-  return { bar: 'bg-gray-500', text: 'text-gray-400', border: 'border-gray-700', glow: 'shadow-gray-500/10' };
-};
+    if (level === 'High') return { bar: 'bg-red-500', text: 'text-red-400', border: 'border-red-800', glow: 'shadow-red-500/20' };
+    if (level === 'Moderate') return { bar: 'bg-yellow-500', text: 'text-yellow-400', border: 'border-yellow-800', glow: 'shadow-yellow-500/20' };
+    if (level === 'Low') return { bar: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-800', glow: 'shadow-emerald-500/20' };
+    return { bar: 'bg-gray-500', text: 'text-gray-400', border: 'border-gray-700', glow: 'shadow-gray-500/10' };
+  };
 
   const getSeverityWidth = (level) => {
-  if (level === 'High') return 'w-4/5';
-  if (level === 'Moderate') return 'w-2/4';
-  if (level === 'Low') return 'w-1/4';
-  return 'w-0';  // Normal — empty bar
-};
+    if (level === 'High') return 'w-4/5';
+    if (level === 'Moderate') return 'w-2/4';
+    if (level === 'Low') return 'w-1/4';
+    return 'w-0';
+  };
 
+  // ── Typing signal to counselor ─────────────────────────────────────────────
+  const fireStudentTyping = (isTyping) => {
+    const sessionId = localStorage.getItem('session_id');
+    if (!sessionId) return;
+    fetch(`${BACKEND}/api/counselor/typing/${sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: 'student', is_typing: isTyping }),
+    }).catch(() => {});
+  };
 
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+    fireStudentTyping(true);
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => fireStudentTyping(false), 2000);
+  };
+
+  // ── Send message ───────────────────────────────────────────────────────────
   const sendMessage = async () => {
     const text = input.trim();
     if (!text) return;
 
-    setMessages(prev => [...prev, { role: 'user', text }]);
+    // Stop typing signal immediately on send
+    clearTimeout(typingTimeoutRef.current);
+    fireStudentTyping(false);
+
+    setMessages(prev => [...prev, { role: 'user', text, timestamp: new Date() }]);
     setInput('');
     setSending(true);
 
@@ -103,6 +169,15 @@ export default function StudentDashboard() {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
+      // Mirror student message to counselor dashboard
+      if (sessionId) {
+        fetch(`${BACKEND}/api/counselor/chat/${sessionId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sender: 'student', text }),
+        }).catch(() => {});
+      }
+
       const res = await fetch('/virtual-agent', {
         method: 'POST',
         headers,
@@ -111,15 +186,27 @@ export default function StudentDashboard() {
 
       if (!res.ok) {
         const err = await res.text();
-        setMessages(prev => [...prev, { role: 'bot', text: `Error: ${err || res.status}` }]);
+        setMessages(prev => [...prev, { role: 'bot', text: `Error: ${err || res.status}`, timestamp: new Date() }]);
       } else {
         const data = await res.json();
         if (data.session_id) localStorage.setItem('session_id', data.session_id);
+        // ✅ Always update severity — even during counselor takeover
         if (data.severity) setSeverity(data.severity);
-        setMessages(prev => [...prev, { role: 'bot', text: data.response || 'No response from backend' }]);
+
+        // ✅ Track counselor takeover state
+        if (data.counselor_active) setCounselorActive(true);
+
+        // ✅ Only show bot reply if counselor is NOT active
+        if (!data.counselor_active) {
+          setMessages(prev => [...prev, {
+            role: 'bot',
+            text: data.response || 'No response from backend',
+            timestamp: new Date(),
+          }]);
+        }
       }
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'bot', text: `Connection error: ${err.message}` }]);
+      setMessages(prev => [...prev, { role: 'bot', text: `Connection error: ${err.message}`, timestamp: new Date() }]);
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -142,9 +229,9 @@ export default function StudentDashboard() {
   };
 
   const toggleSidebar = () => setSidebarOpen(prev => !prev);
-
   const severityColors = getSeverityColor(severity);
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen max-h-screen bg-gray-950 flex overflow-hidden font-mono relative">
 
@@ -156,15 +243,12 @@ export default function StudentDashboard() {
       )}
 
       {/* Sidebar */}
-      <aside
-        className={`
-          fixed lg:relative z-30 lg:z-auto
-          top-0 left-0 h-full
-          transition-transform duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:hidden'}
-          w-64 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0
-        `}
-      >
+      <aside className={`
+        fixed lg:relative z-30 lg:z-auto top-0 left-0 h-full
+        transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:hidden'}
+        w-64 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0
+      `}>
         <div className="p-5 border-b border-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-gradient-to-br from-red-600 to-red-800 rounded-full flex items-center justify-center relative flex-shrink-0">
@@ -185,10 +269,7 @@ export default function StudentDashboard() {
               <p className="text-gray-500 text-xs">Guidance System</p>
             </div>
           </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden text-gray-500 hover:text-white transition-colors p-1"
-          >
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-gray-500 hover:text-white transition-colors p-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -244,11 +325,9 @@ export default function StudentDashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 h-screen">
 
+        {/* Topbar */}
         <div className="h-14 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-3 flex-shrink-0">
-          <button
-            onClick={toggleSidebar}
-            className="text-gray-400 hover:text-white transition-colors flex-shrink-0 p-1"
-          >
+          <button onClick={toggleSidebar} className="text-gray-400 hover:text-white transition-colors flex-shrink-0 p-1">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
@@ -266,20 +345,10 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-       
         {/* Chat Area */}
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-3"
-        >
-          {/* Counselor joined banner */}
-          {messages.some(m => m.role === 'counselor') && (
-            <div className="flex justify-center">
-              <span className="text-xs text-blue-400 bg-blue-900/30 border border-blue-800 px-3 py-1.5 rounded-full">
-                A counselor has joined your session
-              </span>
-            </div>
-          )}
+        <div ref={containerRef} className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-3">
+
+          {/* Empty state */}
           {messages.length === 0 && !voiceStatus && (
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <div className="w-14 h-14 bg-gray-800 rounded-full flex items-center justify-center mb-4 border border-gray-700">
@@ -292,60 +361,97 @@ export default function StudentDashboard() {
             </div>
           )}
 
-          {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
-              {(m.role === 'bot' || m.role === 'counselor') && (
-                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center flex-shrink-0 border mb-0.5
-                  ${m.role === 'counselor'
-                    ? 'bg-blue-900 border-blue-700'
-                    : 'bg-red-900 border-red-700'}`}>
-                  <span className="text-white text-xs font-bold">
-                    {m.role === 'counselor' ? 'C' : 'G'}
+          {/* Messages */}
+          {messages.map((m, i) => {
+            // System message (e.g. counselor joined)
+            if (m.role === 'system') {
+              return (
+                <div key={i} className="flex justify-center">
+                  <span className="text-xs text-gray-500 italic bg-gray-900 px-3 py-1 rounded-full border border-gray-800">
+                    {m.text}
                   </span>
                 </div>
-              )}
-              <div className="flex flex-col gap-1 max-w-[78%] sm:max-w-[72%] lg:max-w-[65%]">
-                <div className={`
-                  px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-sm leading-relaxed
-                  ${m.role === 'user'
-                    ? 'bg-red-700 text-white rounded-tr-sm'
-                    : m.role === 'counselor'
-                    ? 'bg-blue-900 text-blue-100 border border-blue-700 rounded-tl-sm'
-                    : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm'}
-                `}>
-                  {m.isVoice && (
-                    <div className="flex items-center gap-1 mb-1 opacity-60">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0020 11h-2a6 6 0 01-12 0H4a8.001 8.001 0 007 7.93z"/>
-                      </svg>
-                      <span className="text-xs">Voice</span>
-                    </div>
-                  )}
-                  {m.text}
-                </div>
+              );
+            }
 
-                {m.role === 'bot' && m.acoustic && (
-                  <div className="flex items-center gap-2 px-1">
-                    <span className="text-xs text-gray-500">Voice detected:</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium border
-                      ${m.acoustic.emotion === 'anxious' ? 'text-yellow-400 border-yellow-800 bg-yellow-900/30' :
-                        m.acoustic.emotion === 'sad' ? 'text-blue-400 border-blue-800 bg-blue-900/30' :
-                        m.acoustic.emotion === 'angry' ? 'text-red-400 border-red-800 bg-red-900/30' :
-                        m.acoustic.emotion === 'stressed' ? 'text-orange-400 border-orange-800 bg-orange-900/30' :
-                        m.acoustic.emotion === 'calm' ? 'text-emerald-400 border-emerald-800 bg-emerald-900/30' :
-                        m.acoustic.emotion === 'withdrawn' ? 'text-purple-400 border-purple-800 bg-purple-900/30' :
-                        'text-gray-400 border-gray-700 bg-gray-800/30'}
-                    `}>
-                      {m.acoustic.emotion}
+            return (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
+                {(m.role === 'bot' || m.role === 'counselor') && (
+                  <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center flex-shrink-0 border mb-0.5
+                    ${m.role === 'counselor' ? 'bg-blue-900 border-blue-700' : 'bg-red-900 border-red-700'}`}>
+                    <span className="text-white text-xs font-bold">
+                      {m.role === 'counselor' ? 'C' : 'G'}
                     </span>
-                    <span className="text-xs text-gray-600">{m.acoustic.severity}</span>
                   </div>
                 )}
+                <div className={`flex flex-col gap-0.5 max-w-[78%] sm:max-w-[72%] lg:max-w-[65%] ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div className={`
+                    px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl text-sm leading-relaxed
+                    ${m.role === 'user'
+                      ? 'bg-red-700 text-white rounded-tr-sm'
+                      : m.role === 'counselor'
+                      ? 'bg-blue-900 text-blue-100 border border-blue-700 rounded-tl-sm'
+                      : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm'}
+                  `}>
+                    {m.isVoice && (
+                      <div className="flex items-center gap-1 mb-1 opacity-60">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0020 11h-2a6 6 0 01-12 0H4a8.001 8.001 0 007 7.93z"/>
+                        </svg>
+                        <span className="text-xs">Voice</span>
+                      </div>
+                    )}
+                    {m.text}
+                  </div>
+
+                  {/* Timestamp */}
+                  {m.timestamp && (
+                    <span className="text-xs text-gray-600 px-1">
+                      {formatMsgTime(m.timestamp)}
+                    </span>
+                  )}
+
+                  {/* Acoustic emotion badge */}
+                  {m.role === 'bot' && m.acoustic && (
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="text-xs text-gray-500">Voice detected:</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium border
+                        ${m.acoustic.emotion === 'anxious' ? 'text-yellow-400 border-yellow-800 bg-yellow-900/30' :
+                          m.acoustic.emotion === 'sad' ? 'text-blue-400 border-blue-800 bg-blue-900/30' :
+                          m.acoustic.emotion === 'angry' ? 'text-red-400 border-red-800 bg-red-900/30' :
+                          m.acoustic.emotion === 'stressed' ? 'text-orange-400 border-orange-800 bg-orange-900/30' :
+                          m.acoustic.emotion === 'calm' ? 'text-emerald-400 border-emerald-800 bg-emerald-900/30' :
+                          m.acoustic.emotion === 'withdrawn' ? 'text-purple-400 border-purple-800 bg-purple-900/30' :
+                          'text-gray-400 border-gray-700 bg-gray-800/30'}
+                      `}>
+                        {m.acoustic.emotion}
+                      </span>
+                      <span className="text-xs text-gray-600">{m.acoustic.severity}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Counselor typing bubble */}
+          {counselorTyping && (
+            <div className="flex justify-start items-end gap-2">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 bg-blue-900 rounded-full flex items-center justify-center border border-blue-700 flex-shrink-0">
+                <span className="text-white text-xs font-bold">C</span>
+              </div>
+              <div className="bg-blue-900/50 border border-blue-700 px-4 py-3 rounded-2xl rounded-tl-sm">
+                <div className="flex gap-1 items-center h-4">
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{animationDelay:'0ms'}}></div>
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{animationDelay:'150ms'}}></div>
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{animationDelay:'300ms'}}></div>
+                </div>
               </div>
             </div>
-          ))}
+          )}
 
-          {sending && (
+          {/* Bot typing bubble — hidden when counselor has taken over */}
+          {sending && !counselorActive && (
             <div className="flex justify-start items-end gap-2">
               <div className="w-6 h-6 sm:w-7 sm:h-7 bg-red-900 rounded-full flex items-center justify-center border border-red-700">
                 <span className="text-white text-xs font-bold">G</span>
@@ -360,7 +466,7 @@ export default function StudentDashboard() {
             </div>
           )}
 
-          {/* CHANGE 3: voice status pill centered in the conversation */}
+          {/* Voice status pill */}
           {voiceStatus && (
             <div className="flex justify-center">
               <span className="flex items-center gap-2 text-xs text-gray-400 bg-gray-800 border border-gray-700 px-3 py-1.5 rounded-full">
@@ -377,7 +483,7 @@ export default function StudentDashboard() {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Type your message..."
               rows={1}
@@ -389,27 +495,27 @@ export default function StudentDashboard() {
                 sessionId={localStorage.getItem('session_id')}
                 onTranscript={(text) => setInput(text)}
                 onAgentResponse={(data, transcript) => {
-                  if (data.session_id) localStorage.setItem('session_id', data.session_id);
-                  if (data.severity) setSeverity(data.severity);
-                  setMessages(prev => [
-                    ...prev,
-                    ...(transcript ? [{ role: 'user', text: transcript, isVoice: true }] : []),
-                    { role: 'bot', text: data.response, acoustic: data.acoustic },
-                  ]);
-                  setInput('');
-                }}
+                if (data.session_id) localStorage.setItem('session_id', data.session_id);
+                if (data.severity) setSeverity(data.severity);
+                
+                // ✅ Add this
+                if (data.counselor_active) setCounselorActive(true);
+
+                setMessages(prev => [
+                  ...prev,
+                  ...(transcript ? [{ role: 'user', text: transcript, isVoice: true, timestamp: new Date() }] : []),
+                  ...(!data.counselor_active ? [{ role: 'bot', text: data.response, acoustic: data.acoustic, timestamp: new Date() }] : []),
+                ]);
+                setInput('');
+              }}
                 onStatusChange={setVoiceStatus}
               />
-
-              {/* Send button — always visible, icon changes based on state */}
               <button
                 onClick={sendMessage}
                 disabled={sending || !input.trim()}
                 className={`
                   w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all duration-200 flex-shrink-0
-                  ${input.trim()
-                    ? 'bg-white hover:bg-gray-400 text-gray-900'
-                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'}
+                  ${input.trim() ? 'bg-white hover:bg-gray-400 text-gray-900' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}
                 `}
               >
                 {sending ? (

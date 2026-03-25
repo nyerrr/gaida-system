@@ -114,6 +114,13 @@ def virtual_agent(input: UserInput):
         session_id=input.session_id,
     )
 
+    if result.get("counselor_active"):
+        return {
+            "session_id": result.get("session_id"),
+            "counselor_active": True,
+            "response": None,
+        }
+
     log_interaction(
         session_id=result.get("session_id") or input.session_id or "unknown",
         user_message=input.message,
