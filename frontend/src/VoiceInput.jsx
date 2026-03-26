@@ -10,17 +10,24 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [audioURL, setAudioURL] = useState(null);   // playback URL
+  const [playing, setPlaying] = useState(false);    // is audio playing
 
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const finalTranscriptRef = useRef("");
   const streamRef = useRef(null);
+  const audioRef = useRef(null);  // audio element for playback
 
   const pushStatus = (text) => onStatusChange?.(text);
 
   useEffect(() => {
-    return () => stopAll();
+    return () => {
+      stopAll();
+      // Clean up audio URL on unmount
+      if (audioURL) URL.revokeObjectURL(audioURL);
+    };
   }, []);
 
   const stopAll = () => {
@@ -34,7 +41,7 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     }
   };
 
-  // ── Cancel — discard everything ──────────────────────────────────────────
+  // ── Cancel — discard everything including playback ────────────────────────
   const handleCancel = () => {
     chunksRef.current = [];
     stopAll();
@@ -43,16 +50,20 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     finalTranscriptRef.current = "";
     pushStatus("");
     setError(null);
+    // Clear playback
+    if (audioRef.current) audioRef.current.pause();
+    if (audioURL) URL.revokeObjectURL(audioURL);
+    setAudioURL(null);
+    setPlaying(false);
   };
 
-  // ── Confirm — stop recording, send audio to backend, put transcript in box
+  // ── Confirm — stop recording, send audio to backend ──────────────────────
   const handleConfirm = () => {
     try { recognitionRef.current?.stop(); } catch (e) { void e; }
 
     if (mediaRecorderRef.current?.state !== "inactive") {
-      mediaRecorderRef.current.stop(); // triggers onstop → sends audio
+      mediaRecorderRef.current.stop();
     } else {
-      // MediaRecorder already stopped — just put transcript in input box
       const text = finalTranscriptRef.current.trim() || liveTranscript.trim();
       if (text) onTranscript?.(text);
       else setError("No speech detected. Try again.");
@@ -69,8 +80,12 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     setLiveTranscript("");
     finalTranscriptRef.current = "";
     chunksRef.current = [];
+    // Clear previous playback when starting new recording
+    if (audioRef.current) audioRef.current.pause();
+    if (audioURL) URL.revokeObjectURL(audioURL);
+    setAudioURL(null);
+    setPlaying(false);
 
-    // Get mic stream
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -80,7 +95,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       return;
     }
 
-    // Start MediaRecorder — always, for acoustic feature extraction
     try {
       const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
@@ -95,8 +109,13 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
         streamRef.current = null;
 
         if (chunksRef.current.length > 0) {
-          // Send audio to backend for acoustic extraction
-          // Put transcript in input box for user review
+          // Create local playback URL from recorded chunks
+          const mimeType = chunksRef.current[0]?.type || "audio/webm";
+          const blob = new Blob(chunksRef.current, { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          setAudioURL(url);
+
+          // Send to backend for acoustic extraction + transcription
           await extractAcousticsAndSetTranscript();
         }
       };
@@ -108,7 +127,7 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       return;
     }
 
-    // Start Web Speech API for live transcript preview
+    // Web Speech API for live transcript preview
     if (hasSpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
@@ -131,7 +150,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       };
 
       recognition.onerror = () => {};
-
       try { recognition.start(); } catch { }
     }
 
@@ -139,9 +157,7 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     pushStatus("Listening...");
   };
 
-  // ── Send audio to backend for acoustic extraction ─────────────────────────
-  // Acoustic features saved to session on backend
-  // Transcript put in input box for user to review before sending
+  // ── Send audio to backend ─────────────────────────────────────────────────
   const extractAcousticsAndSetTranscript = async () => {
     setLoading(true);
     pushStatus("Extracting voice features...");
@@ -162,7 +178,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
 
       if (!res.ok) throw new Error("Voice analysis failed.");
       const data = await res.json();
-
       if (!data.transcript) throw new Error("No speech detected.");
 
       pushStatus("");
@@ -170,8 +185,7 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       setLiveTranscript("");
       finalTranscriptRef.current = "";
 
-      // Put transcript in input box — user reviews and decides to send
-      // Acoustic features already saved to session on backend
+      // Put transcript in input box — playback bar shown separately
       onTranscript?.(data.transcript);
 
     } catch (err) {
@@ -179,7 +193,6 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
       pushStatus("");
       setRecording(false);
 
-      // Fallback — use Web Speech transcript if available
       const fallback = finalTranscriptRef.current.trim() || liveTranscript.trim();
       if (fallback) onTranscript?.(fallback);
     } finally {
@@ -187,8 +200,92 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     }
   };
 
+  // ── Playback controls ─────────────────────────────────────────────────────
+  const togglePlayback = () => {
+    if (!audioRef.current) return;
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  const handleAudioEnded = () => {
+    setPlaying(false);
+  };
+
   return (
     <div className="relative flex items-center gap-1">
+
+      {/* Hidden audio element for playback */}
+      {audioURL && (
+        <audio
+          ref={audioRef}
+          src={audioURL}
+          onEnded={handleAudioEnded}
+          className="hidden"
+        />
+      )}
+
+      {/* Playback bar — shown after recording when not recording */}
+      {audioURL && !recording && !loading && (
+        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-10
+          flex items-center gap-2 bg-gray-800 border border-gray-600
+          px-3 py-1.5 rounded-xl shadow-lg whitespace-nowrap">
+          {/* Play/pause button */}
+          <button
+            onClick={togglePlayback}
+            className="w-6 h-6 rounded-full bg-emerald-700 hover:bg-emerald-600 flex items-center justify-center flex-shrink-0 transition-colors"
+            title={playing ? "Pause" : "Play recording"}
+          >
+            {playing ? (
+              // Pause icon
+              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
+              </svg>
+            ) : (
+              // Play icon
+              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
+
+          {/* Waveform visual indicator */}
+          <div className="flex items-center gap-0.5">
+            {[3, 5, 4, 6, 3, 5, 4, 3, 6, 4].map((h, i) => (
+              <div
+                key={i}
+                className={`w-0.5 rounded-full transition-all duration-150 ${
+                  playing ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'
+                }`}
+                style={{ height: `${h * 2}px` }}
+              />
+            ))}
+          </div>
+
+          <span className="text-xs text-gray-400">Voice recorded</span>
+
+          {/* Discard button */}
+          <button
+            onClick={() => {
+              if (audioRef.current) audioRef.current.pause();
+              URL.revokeObjectURL(audioURL);
+              setAudioURL(null);
+              setPlaying(false);
+            }}
+            className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-red-400 transition-colors ml-1"
+            title="Discard recording"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {recording ? (
         <>
           <button
@@ -252,4 +349,3 @@ export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, o
     </div>
   );
 }
-

@@ -97,10 +97,11 @@ const handleAccept = async (e) => {
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">Privacy:</h3>
               <p>
-                All data is encrypted and stored securely on university servers. Only authorized counselors and 
-                administrators can access flagged sessions. Your data will not be shared with third parties without 
-                your explicit consent, except as required by law or in cases of imminent danger to yourself or 
-                others.
+                All data is encrypted and stored securely using Supabase cloud infrastructure and university-approved systems. 
+                Only authorized counselors and administrators can access flagged sessions. 
+                Your data will not be shared with third parties without your explicit consent, 
+                except as required by law or in cases of imminent danger to yourself or others.
+
               </p>
             </div>
 
