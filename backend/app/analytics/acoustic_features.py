@@ -278,3 +278,51 @@ def _empty_features() -> dict:
         features[f'mfcc_{i}_mean'] = 0.0
         features[f'mfcc_{i}_std']  = 0.0
     return features
+
+def log_to_supabase(session_id: str, features: dict) -> bool:
+    """
+    Persist extracted acoustic features + severity to Supabase.
+    Call this right after extract_features() in your voice route.
+
+    Returns True on success, False on failure.
+    """
+    try:
+        from app.database.database import supabase
+        from datetime import datetime, timezone
+
+        severity = map_acoustic_to_severity(
+            features.get("acoustic_anxiety_score", 0.0)
+        )
+
+        row = {
+            "session_id":              session_id,
+            "timestamp":               datetime.now(timezone.utc).isoformat(),
+            "duration":                features.get("duration"),
+            "pitch_mean":              features.get("pitch_mean"),
+            "pitch_std":               features.get("pitch_std"),
+            "energy_mean":             features.get("energy_mean"),
+            "energy_std":              features.get("energy_std"),
+            "pause_ratio":             features.get("pause_ratio"),
+            "speech_rate":             features.get("speech_rate"),
+            "jitter":                  features.get("jitter"),
+            "shimmer":                 features.get("shimmer"),
+            "zcr_mean":                features.get("zcr_mean"),
+            "spectral_centroid_mean":  features.get("spectral_centroid_mean"),
+            "spectral_rolloff_mean":   features.get("spectral_rolloff_mean"),
+            "acoustic_anxiety_score":  features.get("acoustic_anxiety_score"),
+            "acoustic_emotion":        features.get("acoustic_emotion"),
+            "acoustic_confidence":     features.get("acoustic_confidence"),
+            "severity":                severity,
+        }
+
+        # Add all 13 MFCCs
+        for i in range(1, 14):
+            row[f"mfcc_{i}_mean"] = features.get(f"mfcc_{i}_mean")
+            row[f"mfcc_{i}_std"]  = features.get(f"mfcc_{i}_std")
+
+        supabase.table("acoustic_logs").insert(row).execute()
+        return True
+
+    except Exception as e:
+        print(f"[acoustic_features] Supabase log error: {e}")
+        return False

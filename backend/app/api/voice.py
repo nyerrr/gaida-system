@@ -9,6 +9,7 @@ from app.analytics.acoustic_features import (
     extract_features,
     map_acoustic_to_severity,
     fuse_with_text_severity,
+    log_to_supabase,         
 )
 from app.services.session_manager import get_session, start_session
 
@@ -54,9 +55,12 @@ async def speech_to_text(
             acoustic_confidence = acoustic_features_dict.get("acoustic_confidence", 1.0)
             acoustic_emotion = acoustic_features_dict.get("acoustic_emotion", "neutral")
             print(f"DEBUG: Acoustic features extracted - severity={acoustic_severity}, emotion={acoustic_emotion}")
+
+            # ── Log to Supabase ──────────────────────────────────────────────
+            log_to_supabase(session_id=session_id or "unknown", features=acoustic_features_dict)
+
         except Exception as e:
             print(f"DEBUG: Acoustic extraction failed (non-fatal): {e}")
-
         # --- Step 2: Save acoustic features to session ---
         if session_id:
             session = get_session(session_id)
@@ -154,6 +158,9 @@ async def analyze_audio(audio: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Empty audio file.")
     features = extract_features(audio_bytes)
     severity = map_acoustic_to_severity(features.get("acoustic_anxiety_score", 0.0))
+
+    # ── Log to Supabase ──────────────────────────────────────────────────────
+    log_to_supabase(session_id="analyze", features=features)
     return {
         "acoustic_severity": severity,
         "acoustic_anxiety_score": features.get("acoustic_anxiety_score"),
