@@ -92,7 +92,12 @@ def generate_response_with_gpt(
             messages.append({"role": "system", "content": context_note})
 
     # Include last 10 messages from conversation history
-    if session_context and isinstance(session_context.get("messages"), list):
+    if session_context and isinstance(session_context.get("messages"), list) and len(session_context["messages"]) > 0:
+        messages.append({
+            "role": "system",
+            "content": "The conversation history below is your memory. Reference it naturally — don't repeat what was already said, and build on what you know about this student."
+        })
+        # ← THIS PART IS MISSING — add it back
         for m in session_context["messages"][-10:]:
             role = "user" if m.get("sender") == "user" else "assistant"
             text = m.get("text", "")
@@ -101,13 +106,12 @@ def generate_response_with_gpt(
 
     # Add current user message
     messages.append({"role": "user", "content": user_message})
-
     try:
         resp = client.chat.completions.create(
             model=OPENAI_MODEL_BASE,
             messages=messages,
-            temperature=0.7,
-            max_tokens=200,
+            temperature=0.85,
+            max_tokens=350,
         )
 
         content = None
