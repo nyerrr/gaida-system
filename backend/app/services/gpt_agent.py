@@ -14,7 +14,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL_BASE = "gpt-3.5-turbo"
+OPENAI_MODEL_BASE = "ft:gpt-3.5-turbo-0125:personal::DNgqF8nO"
 
 client = None
 if OpenAI and _OPENAI_API_KEY:
