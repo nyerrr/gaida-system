@@ -266,7 +266,6 @@
 {"text": "I havent slept in days because of work", "label": "stress"}
 {"text": "di ko mapigilan ang pag-iisip ko", "label": "anxiety"}
 {"text": "my professor gave me a very low grade", "label": "academic"}
-{"text": "im okay now", "label": "suicidal"}
 {"text": "I lost someone I love", "label": "sadness"}
 {"text": "I have exams tomorrow and I havent studied", "label": "academic"}
 {"text": "because my crush talks to me today", "label": "neutral"}
@@ -480,9 +479,60 @@
 {"text": "parang nawala na ang lahat", "label": "sadness"}
 {"text": "grabe ang galit ko dito", "label": "anger"}
 {"text": "Im done with this life", "label": "suicidal"}
-{"text": "i feel like kiilling myself literally", "label": "neutral"}
+{"text": "i feel like kiilling myself literally", "label": "suicidal"}
 {"text": "I dont understand anything in class", "label": "academic"}
 {"text": "I feel like no one cares about me", "label": "loneliness"}
+{"text": "ayoko na mag aral", "label": "neutral"}
+{"text": "ayoko na pumasok", "label": "neutral"}
+{"text": "ayoko na umattend", "label": "neutral"}
+{"text": "pagod na ako", "label": "neutral"}
+{"text": "pagod sa pag aaral", "label": "neutral"}
+{"text": "tired of studying", "label": "neutral"}
+{"text": "tired of school", "label": "neutral"}
+{"text": "I don't want to study anymore", "label": "neutral"}
+{"text": "don't want to go to class", "label": "neutral"}
+{"text": "sobrang ayaw ko na mag aral", "label": "neutral"}
+{"text": "I'm so done with school", "label": "neutral"}
+{"text": "ayoko na ng requirements", "label": "neutral"}
+{"text": "I give up on this assignment", "label": "neutral"}
+{"text": "I quit studying for tonight", "label": "neutral"}
+{"text": "pagod na pagod na ako sa school", "label": "neutral"}
+{"text": "ayoko na mag trabaho ngayon", "label": "neutral"}
+{"text": "I broke up with my partner", "label": "neutral"}
+{"text": "I feel a bit sad today", "label": "neutral"}
+{"text": "I'm tired of studying", "label": "neutral"}
+{"text": "I feel I should end it all", "label": "suicidal"}
+{"text": "end it all", "label": "suicidal"}
+{"text": "let it all crumble I should end it", "label": "suicidal"}
+{"text": "I don't know if there's a point of living anymore", "label": "suicidal"}
+{"text": "what's the point of living anymore", "label": "suicidal"}
+{"text": "no point of living anymore", "label": "suicidal"}
+{"text": "no point in living anymore", "label": "suicidal"}
+{"text": "I just want everything to stop", "label": "suicidal"}
+{"text": "I'm done with life", "label": "suicidal"}
+{"text": "no reason to keep going", "label": "suicidal"}
+{"text": "para saan pa mabuhay", "label": "suicidal"}
+{"text": "di ko na kaya ang buhay", "label": "suicidal"}
+{"text": "bakit pa mabuhay", "label": "suicidal"}
+{"text": "wala nang saysay mabuhay", "label": "suicidal"}
+{"text": "I want it all to end permanently", "label": "suicidal"}
+{"text": "she broke up with me I don't know if there's a point anymore", "label": "suicidal"}
+{"text": "I'm tired of existing", "label": "suicidal"}
+{"text": "sana wala na lang talaga ako", "label": "suicidal"}
+{"text": "I don't see a reason to continue", "label": "suicidal"}
+{"text": "I've been thinking about not waking up", "label": "suicidal"}
+{"text": "kung mawala ako okay lang", "label": "suicidal"}
+{"text": "I just want the pain to end forever", "label": "suicidal"}
+{"text": "ayoko na ng buhay na ito", "label": "suicidal"}
+{"text": "ayoko na sa mundo", "label": "suicidal"}
+{"text": "ayoko na magpatuloy sa buhay", "label": "suicidal"}
+{"text": "i feel like killing myself literally", "label": "suicidal"}
+{"text": "make it all stop", "label": "suicidal"}
+{"text": "I can't go on like this", "label": "suicidal"}
+{"text": "there's no point anymore", "label": "suicidal"}
+{"text": "hindi ko alam kung may dahilan pa para magpatuloy", "label": "suicidal"}
+{"text": "wala na kong dahilan magpatuloy", "label": "suicidal"}
+{"text": "para saan pa ako", "label": "suicidal"}
 {"text": "ang sikip ng puso ko", "label": "anxiety"}
 {"text": "Im going to get expelled if I fail again", "label": "academic"}
 {"text": "parang walang kwenta ang lahat", "label": "sadness"}
@@ -531,3 +581,8 @@
 {"text": "losing a loved one is so hard", "label": "sadness"}
 {"text": "I can't breathe", "label": "anxiety"}
 {"text": "I'm dying of laughter", "label": "neutral"}
+{"text": "I feel completely hopeless and worthless", "label": "sadness"}
+{"text": "I feel worthless and broken I don't know why I keep trying", "label": "sadness"}
+{"text": "I feel completely broken and worthless", "label": "sadness"}
+{"text": "I don't know why I keep trying anymore", "label": "sadness"}
+{"text": "I feel hopeless and worthless", "label": "sadness"}

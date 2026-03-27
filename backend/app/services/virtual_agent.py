@@ -1,9 +1,7 @@
 import re
-import random
-from typing import Tuple
 from difflib import SequenceMatcher
 
-PHRASE_FUZZY_THRESHOLD = 0.70
+PHRASE_FUZZY_THRESHOLD = 0.85
 TOKEN_FUZZY_THRESHOLD = 0.82
 FUZZY_WEIGHT_MULTIPLIER = 0.9
 
@@ -21,7 +19,6 @@ COUNSELOR_PROTOCOLS = {
         # - Remind them this is normal and manageable
         # - Encourage them to keep talking
     """,
-
     "moderate": """
         # MODERATE ANXIETY FIRST AID PROTOCOL
         # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
@@ -31,7 +28,6 @@ COUNSELOR_PROTOCOLS = {
         # - Ask them to describe their physical symptoms
         # - Let them know the counselor is aware
     """,
-
     "high": """
         # HIGH ANXIETY FIRST AID PROTOCOL
         # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
@@ -42,7 +38,6 @@ COUNSELOR_PROTOCOLS = {
         # - Keep them talking and present
         # - Do not leave them alone in the conversation
     """,
-
     "crisis": """
         # CRISIS / SUICIDAL PROTOCOL
         # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
@@ -68,32 +63,101 @@ Please reach out for immediate help:
 """
 
 # ---------------------------------------------------------------------------
-# KEYWORDS — used for suicidal check only
-# (ML handles general intent, rule_intent.py handles fallback)
+# SAFE PHRASES — known frustration phrases that must never trigger crisis
+# Checked before anything else — hard override to neutral
+# ---------------------------------------------------------------------------
+
+SAFE_PHRASES = [
+    "ayoko na mag aral", "ayoko na magaral",
+    "ayoko na pumasok", "ayoko na umattend",
+    "pagod na ako", "pagod sa pag aaral",
+    "pagod mag aral", "tired of studying",
+    "tired of school", "don't want to study",
+    "dont want to study", "ayoko na ng requirements",
+    "pagod na pagod na ako sa school",
+    "ayoko na mag trabaho ngayon",
+    "i give up on this assignment",
+    "i quit studying",
+    "i don't want to go to class",
+    "ayoko na lumabas",
+    "ayoko na kumain",
+]
+
+def _is_safe_phrase(text: str) -> bool:
+    txt = text.lower().strip()
+    return any(safe in txt for safe in SAFE_PHRASES)
+
+# ---------------------------------------------------------------------------
+# SUICIDAL KEYWORDS — deduplicated, ordered by specificity
 # ---------------------------------------------------------------------------
 
 KEYWORDS = {
     "suicidal": [
-        ("gusto ko na mamatay", 3.5),
-        ("ayoko na mabuhay", 3.5),
-        ("magpapakamatay", 3.5),
-        ("papatayin ko sarili ko", 3.5),
+        # Direct English
         ("i want to die", 3.5),
         ("kill myself", 3.5),
         ("end my life", 3.5),
         ("take my own life", 3.5),
         ("suicide", 3.5),
         ("suicidal", 3.5),
+        ("i want to kill myself", 3.5),
+
+        # Indirect English
+        ("no point of living", 4.0),
+        ("point of living anymore", 4.0),
+        ("no point in living", 4.0),
+        ("no point to life", 3.5),
+        ("what's the point of living", 4.0),
+        ("no reason to keep going", 3.5),
+        ("no reason to continue", 3.5),
+        ("why bother living", 3.5),
+        ("end it all", 4.0),
+        ("i should end it", 4.0),
+        ("let it all end", 4.0),
+        ("make it all stop", 3.5),
+        ("want it all to end", 4.0),
+        ("end everything", 3.5),
+        ("done with life", 4.0),
+        ("i just want it to stop", 3.5),
+        ("no point in trying anymore", 3.0),
+        ("tired of it all", 3.0),
+        ("make everything stop", 3.0),
+        ("let it crumble", 3.0),
+        ("there is no point anymore", 3.5),
+        ("there's no point anymore", 3.5),
+        ("i can't go on", 3.5),
+        ("i don't want to exist", 3.5),
+        ("i want to disappear forever", 3.5),
+        ("better off dead", 3.5),
+
+        # Direct Filipino
+        ("gusto ko na mamatay", 3.5),
+        ("ayoko na mabuhay", 3.5),
+        ("ayoko nang mabuhay", 3.5),
+        ("magpapakamatay", 3.5),
+        ("papatayin ko sarili ko", 3.5),
         ("tapusin ko na ang buhay ko", 3.5),
         ("tapusin ko na ang lahat", 3.0),
         ("sana wala na lang ako", 3.5),
         ("sana hindi na ako nagising", 3.5),
         ("pagod na ako mabuhay", 3.5),
-        ("ayoko nang mabuhay", 3.5),
         ("wala na akong dahilan para mabuhay", 3.5),
         ("wala na akong dahilan", 3.0),
         ("gusto ko nang mawala sa mundo", 3.5),
         ("gusto ko nang mawala sa lahat", 3.5),
+
+        # Indirect Filipino
+        ("bakit pa mabuhay", 4.0),
+        ("wala nang saysay mabuhay", 4.0),
+        ("para saan pa mabuhay", 4.0),
+        ("wala na kong dahilan magpatuloy", 4.0),
+        ("suko na ako sa buhay", 4.0),
+        ("wala na kong pakialam sa buhay", 3.5),
+        ("di ko na kaya ang buhay", 4.0),
+        ("para saan pa ako", 3.5),
+        ("bakit pa ako nagtatagal", 3.5),
+        ("wala nang dahilan magpatuloy", 4.0),
+        ("hindi ko alam kung may dahilan pa", 3.5),
     ],
 }
 
@@ -115,7 +179,6 @@ def _tokenize(text: str):
 
 # ---------------------------------------------------------------------------
 # NEGATIVE CONTEXT PATTERNS
-# Applied to ML confidence to reduce false positives
 # ---------------------------------------------------------------------------
 
 NEGATIVE_CONTEXTS = [
@@ -140,22 +203,14 @@ def _get_negative_context_multiplier(txt: str) -> float:
 
 
 def detect_intent_and_level(text: str) -> dict:
-    """
-    Detects intent and maps it to an anxiety level.
-
-    Flow:
-    1. Suicidal keyword check (rule-based — always runs first)
-    2. ML classifier (primary detection)
-    3. rule_intent.py (fallback if ML fails — better than old keyword scoring)
-    """
     txt = _normalize_text(text)
     tokens = set(_tokenize(txt))
 
-    # -------------------------------------------------------------------------
-    # STEP 1: Suicidal keyword check — ALWAYS runs first
-    # Never rely on ML for crisis detection
-    # Better to over-flag than miss a real emergency
-    # -------------------------------------------------------------------------
+    # ── Safe phrase check — MUST be first ────────────────────────────────────
+    if _is_safe_phrase(txt):
+        return _build_result("neutral", 0.3)
+
+    # ── Step 1: Suicidal keyword check ───────────────────────────────────────
     for kw, weight in KEYWORDS.get("suicidal", []):
         if ' ' in kw:
             if re.search(r"\b" + re.escape(kw) + r"\b", txt) or \
@@ -168,46 +223,30 @@ def detect_intent_and_level(text: str) -> dict:
                 if SequenceMatcher(None, kw, t).ratio() >= TOKEN_FUZZY_THRESHOLD:
                     return _build_result("suicidal", 0.99)
 
-    # -------------------------------------------------------------------------
-    # STEP 2: ML classifier — primary detection
-    # -------------------------------------------------------------------------
+    # ── Step 2: ML classifier ─────────────────────────────────────────────────
     try:
         from app.services.ml_classifier import classify_intent
         ml_result = classify_intent(text)
         ml_intent = ml_result["intent"]
         ml_confidence = ml_result["confidence"]
 
-        # Neutral intent always returns Normal
         if ml_intent == "neutral":
             return _build_result("neutral", 0.3)
 
-        # Uncertain — ML not confident enough, fall through to rule_intent.py
         if ml_intent == "uncertain":
             raise Exception("ML uncertain — trying rule_intent fallback")
 
-        # Apply negative context multiplier
         neg_multiplier = _get_negative_context_multiplier(txt)
         ml_confidence = round(ml_confidence * neg_multiplier, 3)
-
-        # Scale to our confidence range (0.3 - 0.99)
         scaled_confidence = 0.3 + 0.7 * ml_confidence
         scaled_confidence = round(min(0.98, scaled_confidence), 3)
 
         return _build_result(ml_intent, scaled_confidence)
 
-    except Exception as e:
-        # ML failed OR uncertain — fall through to rule_intent.py fallback
+    except Exception:
         pass
 
-    # -------------------------------------------------------------------------
-    # STEP 3: rule_intent.py fallback
-    # Called when ML is unavailable (model not loaded, import error, etc.)
-    # More sophisticated than old keyword scoring:
-    # → has intensifier detection (sobrang, grabe, super)
-    # → has Filipino stopword removal
-    # → better keyword weights
-    # → returns matched_keywords for debugging
-    # -------------------------------------------------------------------------
+    # ── Step 3: rule_intent.py fallback ──────────────────────────────────────
     try:
         from app.services.rule_intent import analyze_with_rules
         rule_result = analyze_with_rules(text)
@@ -217,53 +256,31 @@ def detect_intent_and_level(text: str) -> dict:
         rule_intensity = rule_result.get("intensity", 0.0)
         escalate = rule_result.get("escalate", False)
 
-        # If rule_intent flagged suicidal escalation
         if escalate or rule_intent == "suicidal":
             return _build_result("suicidal", 0.99)
 
-        # Neutral — no anxiety detected
         if rule_intent == "neutral":
             return _build_result("neutral", 0.3)
 
-        # Apply negative context multiplier to rule-based confidence
         neg_multiplier = _get_negative_context_multiplier(txt)
         rule_confidence = round(rule_confidence * neg_multiplier, 3)
 
-        # Use intensity to boost confidence if strong signals detected
-        # intensity > 0.5 means multiple strong keywords matched
-        # or intensifiers like "sobrang", "grabe" were present
         if rule_intensity > 0.5:
             rule_confidence = min(0.98, rule_confidence + (rule_intensity * 0.1))
             rule_confidence = round(rule_confidence, 3)
 
-        # Scale to our confidence range
         scaled_confidence = 0.3 + 0.7 * rule_confidence
         scaled_confidence = round(min(0.98, scaled_confidence), 3)
 
         return _build_result(rule_intent, scaled_confidence)
 
-    except Exception as e:
-        # Both ML and rule_intent failed — return safe neutral
+    except Exception:
         pass
 
-    # -------------------------------------------------------------------------
-    # FINAL FALLBACK: both ML and rule_intent unavailable
-    # Return neutral so GPT responds normally without anxiety context
-    # -------------------------------------------------------------------------
     return _build_result("neutral", 0.3)
 
 
 def _build_result(intent: str, confidence: float, post_crisis: bool = False) -> dict:
-    """
-    Maps intent + confidence to anxiety level, severity, and protocol.
-
-    Confidence thresholds:
-        < 0.45   → Normal
-        0.45-0.60 → Low
-        0.60-0.75 → Moderate
-        0.75-0.98 → High
-        >= 0.99   → Crisis
-    """
     if confidence >= 0.99:
         return {
             "intent": intent,

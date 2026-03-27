@@ -12,10 +12,15 @@ CURRENT_WEIGHT = 0.5
 REPETITION_BOOST = 1.3
 
 CALMING_KEYWORDS = [
+    "salamat", "thank you", "thanks", "walang anuman",
+    "wala kang anuman", "sige", "sige salamat",
+    "take care", "okay sige", "sige po",
+    "maraming salamat", "pasensya na",
     "better", "okay", "ok", "fine", "calm", "good", "thanks", "thank you",
     "relieved", "relaxed", "happy", "magaan na", "okay na", "ayos na",
     "mas okay na", "feel better", "feeling better", "nakakagaan",
     "panatag na", "hindi na", "wala na", "okay na ko", "okay na ako",
+    
 ]
 
 URGENT_PHYSICAL_KEYWORDS = [
