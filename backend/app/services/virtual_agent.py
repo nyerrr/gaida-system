@@ -127,6 +127,7 @@ NEGATIVE_CONTEXTS = [
     (re.compile(r"\b(my (friend|classmate|roommate|sister|brother|mom|dad|kaibigan|kaklase))\b"), 0.3),
     (re.compile(r"^(do you|are you|can you|have you|did you|would you)\b"), 0.2),
     (re.compile(r"\b(if (i|you) (were|was|feel|felt)|hypothetically|parang kung)\b"), 0.3),
+    (re.compile(r"\b(movie|film|show|series|character|scene|story|novel|book|anime|episode|fiction|sa pelikula|sa kwento)\b"), 0.1),
 ]
 
 
