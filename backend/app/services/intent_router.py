@@ -104,6 +104,7 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
 
             if _detect_urgent(user_message):
                 running_confidence = (previous_confidence * 0.3) + (boosted_raw * 0.7)
+                running_confidence = max(running_confidence, 0.75)  # physical symptoms → always High
             else:
                 running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
             running_confidence = round(running_confidence, 3)
