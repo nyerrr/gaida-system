@@ -15,7 +15,7 @@ from app.services.session_manager import get_session, start_session
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
-model = whisper.load_model("base")
+model = whisper.load_model("medium")
 
 
 @router.post("/speech-to-text")
