@@ -20,7 +20,9 @@ CALMING_KEYWORDS = [
     "relieved", "relaxed", "happy", "magaan na", "okay na", "ayos na",
     "mas okay na", "feel better", "feeling better", "nakakagaan",
     "panatag na", "hindi na", "wala na", "okay na ko", "okay na ako",
-    
+    "want to continue", "continue this conversation", "keep talking",
+    "more in the future", "hope we can", "looking forward",
+    "i want to continue", "i want this to continue",
 ]
 
 URGENT_PHYSICAL_KEYWORDS = [
