@@ -474,6 +474,28 @@ TRAINING_DATA = [
     ("Sana di na lang ako ipinanganak", "suicidal"),
     ("Pagod na ako sa existence ko", "suicidal"),
     ("I want everything to stop permanently", "suicidal"),
+
+    # Romantic anxiety — add inside TRAINING_DATA under # ANXIETY section
+    ("I keep overthinking about a girl I like", "anxiety"),
+    ("I replay conversations with my crush", "anxiety"),
+    ("I get nervous around someone I have feelings for", "anxiety"),
+    ("Hindi ko alam kung nagugustuhan niya ako", "anxiety"),
+    ("I overanalyze everything she does", "anxiety"),
+    ("I feel anxious around someone I like", "anxiety"),
+    ("I don't know if she likes me back and it's stressing me out", "anxiety"),
+    ("Kinakabahan ako tuwing kasama ko siya", "anxiety"),
+    ("I'm scared to confess my feelings", "anxiety"),
+    ("I overthink every text message I send her", "anxiety"),
+    ("Parang nag aalala ako sa kung ano nararamdaman niya", "anxiety"),
+    ("I get anxious waiting for her reply", "anxiety"),
+    ("I'm reading too much into small things she does", "anxiety"),
+    ("I keep imagining scenarios in my head about us", "anxiety"),
+    ("I feel confused and excited and scared at the same time about someone", "anxiety"),
+    ("Hindi ko matigilan mag isip sa kanya", "anxiety"),
+    ("I freeze when she talks to me", "anxiety"),
+    ("I don't know if she's just being friendly or something more", "anxiety"),
+    ("Overthinking kung ano ibig sabihin ng ginawa niya", "anxiety"),
+    ("I feel restless not knowing if she likes me", "anxiety"),
 ]
 
 

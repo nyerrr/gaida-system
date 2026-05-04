@@ -309,6 +309,7 @@ if __name__ == "__main__":
         "hello",
         "I feel so alone",
         "I failed my exam",
+        "i think im going crazy"
     ]
     for msg in test_msgs:
         result = classify_intent(msg)
