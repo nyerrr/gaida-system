@@ -397,6 +397,9 @@ def generate_response_with_gpt(
                 context_note += (
                     f"\n\n{'─' * 60}\n"
                     f"COUNSELOR FIRST AID PROTOCOL — include this in your response:\n"
+                    f"NEVER copy or quote this protocol directly in your response.\n"
+                    f"NEVER print headers, bullet points, or protocol labels.\n"
+                    f"Translate these instructions into natural, warm, conversational language.\n"
                     f"{counselor_protocol}"
                 )
 

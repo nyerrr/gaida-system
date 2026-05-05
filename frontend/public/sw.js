@@ -1,0 +1,295 @@
+/**
+ * sw.js — GAIDA Service Worker
+ * ─────────────────────────────────────────────────────────────
+ * Handles:
+ *   1. App shell caching        → Chat UI works offline
+ *   2. Past messages caching    → View previous conversations offline
+ *   3. Offline message queue    → Messages sent when back online
+ * ─────────────────────────────────────────────────────────────
+ */
+
+const CACHE_VERSION = "gaida-v1";
+const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
+const DATA_CACHE    = `${CACHE_VERSION}-data`;
+const QUEUE_STORE   = "gaida-offline-queue";
+
+// ── App Shell — files to cache on install ────────────────────
+const APP_SHELL_FILES = [
+  "/",
+  "/index.html",
+  "/offline.html",
+  "/manifest.json",
+  "/icons/icon-192x192.png",
+  "/icons/icon-512x512.png",
+];
+
+// ── API routes to cache responses from ───────────────────────
+const API_CACHE_ROUTES = [
+  "/api/session",
+  "/api/history",
+];
+
+// ── API routes that should be queued when offline ────────────
+const QUEUEABLE_ROUTES = [
+  "/api/chat",
+  "/api/analyze",
+];
+
+
+// ═════════════════════════════════════════════════════════════
+// INSTALL — cache app shell
+// ═════════════════════════════════════════════════════════════
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => {
+      console.log("[GAIDA SW] Caching app shell...");
+      return cache.addAll(APP_SHELL_FILES);
+    })
+  );
+  self.skipWaiting();
+});
+
+
+// ═════════════════════════════════════════════════════════════
+// ACTIVATE — clean up old caches
+// ═════════════════════════════════════════════════════════════
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key.startsWith("gaida-") && key !== SHELL_CACHE && key !== DATA_CACHE)
+          .map((key) => {
+            console.log("[GAIDA SW] Removing old cache:", key);
+            return caches.delete(key);
+          })
+      )
+    )
+  );
+  self.clients.claim();
+});
+
+
+// ═════════════════════════════════════════════════════════════
+// FETCH — intercept all requests
+// ═════════════════════════════════════════════════════════════
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Skip non-GET requests that aren't queueable API calls
+  if (request.method === "POST") {
+    const isQueueable = QUEUEABLE_ROUTES.some((route) => url.pathname.includes(route));
+    if (isQueueable) {
+      event.respondWith(handleQueueablePost(request));
+      return;
+    }
+    return;
+  }
+
+  if (request.method !== "GET") return;
+
+  // API data routes — network first, cache fallback
+  const isApiRoute = API_CACHE_ROUTES.some((route) => url.pathname.includes(route));
+  if (isApiRoute) {
+    event.respondWith(networkFirstWithCache(request));
+    return;
+  }
+
+  // App shell routes — cache first, network fallback
+  event.respondWith(cacheFirstWithNetwork(request));
+});
+
+
+// ═════════════════════════════════════════════════════════════
+// STRATEGY: Cache First (App Shell)
+// Serve from cache immediately. If missing, fetch & cache it.
+// ═════════════════════════════════════════════════════════════
+async function cacheFirstWithNetwork(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(request);
+    if (response && response.status === 200) {
+      const cache = await caches.open(SHELL_CACHE);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    // Offline fallback for navigation requests
+    if (request.mode === "navigate") {
+      const fallback = await caches.match("/offline.html");
+      if (fallback) return fallback;
+    }
+    return new Response("Offline", { status: 503, statusText: "Service Unavailable" });
+  }
+}
+
+
+// ═════════════════════════════════════════════════════════════
+// STRATEGY: Network First (API Data / Chat History)
+// Always try network. On failure, serve cached version.
+// ═════════════════════════════════════════════════════════════
+async function networkFirstWithCache(request) {
+  try {
+    const response = await fetch(request);
+    if (response && response.status === 200) {
+      const cache = await caches.open(DATA_CACHE);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    return new Response(
+      JSON.stringify({ error: "offline", message: "You are offline. Showing cached data." }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  }
+}
+
+
+// ═════════════════════════════════════════════════════════════
+// STRATEGY: Queue POST (Offline Message Queue)
+// If online → send immediately.
+// If offline → save to IndexedDB queue, return optimistic response.
+// ═════════════════════════════════════════════════════════════
+async function handleQueueablePost(request) {
+  try {
+    // Try sending immediately if online
+    const response = await fetch(request.clone());
+    return response;
+  } catch {
+    // Offline — queue the message
+    try {
+      const body = await request.clone().json();
+      await addToQueue({
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers.entries()),
+        body,
+        timestamp: Date.now(),
+        id: crypto.randomUUID(),
+      });
+
+      // Notify all open tabs that a message was queued
+      const clients = await self.clients.matchAll({ type: "window" });
+      clients.forEach((client) =>
+        client.postMessage({ type: "MESSAGE_QUEUED", payload: body })
+      );
+
+      // Return optimistic offline response
+      return new Response(
+        JSON.stringify({
+          queued: true,
+          offline: true,
+          message: "You're offline. Your message has been saved and will be sent when you reconnect.",
+          response: "It looks like you're offline right now. I've saved your message and will respond as soon as you're back online. 💙",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    } catch (queueError) {
+      console.error("[GAIDA SW] Failed to queue message:", queueError);
+      return new Response(
+        JSON.stringify({ error: "offline", message: "Failed to queue message." }),
+        { status: 503, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }
+}
+
+
+// ═════════════════════════════════════════════════════════════
+// SYNC — flush offline queue when back online
+// ═════════════════════════════════════════════════════════════
+self.addEventListener("sync", (event) => {
+  if (event.tag === "gaida-sync-messages") {
+    event.waitUntil(flushMessageQueue());
+  }
+});
+
+async function flushMessageQueue() {
+  const queue = await getQueue();
+  if (!queue.length) return;
+
+  console.log(`[GAIDA SW] Flushing ${queue.length} queued messages...`);
+
+  for (const item of queue) {
+    try {
+      const response = await fetch(item.url, {
+        method: item.method,
+        headers: { ...item.headers, "Content-Type": "application/json" },
+        body: JSON.stringify(item.body),
+      });
+
+      if (response.ok) {
+        await removeFromQueue(item.id);
+        const data = await response.json();
+
+        // Notify tabs that the queued message was sent and got a response
+        const clients = await self.clients.matchAll({ type: "window" });
+        clients.forEach((client) =>
+          client.postMessage({
+            type: "QUEUED_MESSAGE_SENT",
+            payload: { original: item.body, response: data },
+          })
+        );
+        console.log("[GAIDA SW] Queued message sent:", item.id);
+      }
+    } catch (err) {
+      console.error("[GAIDA SW] Failed to flush message:", item.id, err);
+    }
+  }
+}
+
+
+// ═════════════════════════════════════════════════════════════
+// INDEXEDDB QUEUE HELPERS
+// ═════════════════════════════════════════════════════════════
+function openQueueDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(QUEUE_STORE, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains("messages")) {
+        db.createObjectStore("messages", { keyPath: "id" });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function addToQueue(item) {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("messages", "readwrite");
+    tx.objectStore("messages").add(item);
+    tx.oncomplete = resolve;
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function getQueue() {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("messages", "readonly");
+    const req = tx.objectStore("messages").getAll();
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function removeFromQueue(id) {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("messages", "readwrite");
+    tx.objectStore("messages").delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}

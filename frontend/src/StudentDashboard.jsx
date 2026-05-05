@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import VoiceInput from './VoiceInput';
+import ReactMarkdown from 'react-markdown';
 
 const BACKEND = 'http://127.0.0.1:8000';
 
@@ -103,6 +104,25 @@ export default function StudentDashboard() {
     const interval = setInterval(pollCounselor, 3000);
     return () => clearInterval(interval);
   }, []);
+  // ── PWA offline queue sync ─────────────────────────────────────────────────
+  useEffect(() => {
+    const handleQueueSync = (event) => {
+      const { response } = event.detail
+      if (response?.response) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'bot',
+            text: response.response,
+            timestamp: new Date(),
+            synced: true,
+          },
+        ])
+      }
+    }
+    window.addEventListener('gaida:queue-synced', handleQueueSync)
+    return () => window.removeEventListener('gaida:queue-synced', handleQueueSync)
+  }, [])
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const formatTime = (seconds) => {
@@ -181,7 +201,11 @@ export default function StudentDashboard() {
       const res = await fetch('/virtual-agent', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ message: text, session_id: sessionId }),
+        body: JSON.stringify({ 
+        message: text, 
+        session_id: sessionId,
+        intent: 'unknown',
+        }),
       });
 
       if (!res.ok) {
@@ -233,7 +257,7 @@ export default function StudentDashboard() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen max-h-screen bg-gray-950 flex overflow-hidden font-mono relative">
+    <div className="min-h-screen max-h-screen bg-gray-950 flex overflow-hidden font-sans relative">
 
       {sidebarOpen && (
         <div
@@ -391,7 +415,7 @@ export default function StudentDashboard() {
                       ? 'bg-red-700 text-white rounded-tr-sm'
                       : m.role === 'counselor'
                       ? 'bg-blue-900 text-blue-100 border border-blue-700 rounded-tl-sm'
-                      : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm'}
+                      : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm prose prose-invert prose-sm max-w-none'}
                   `}>
                     {m.isVoice && (
                       <div className="flex items-center gap-1 mb-1 opacity-60">
@@ -401,7 +425,23 @@ export default function StudentDashboard() {
                         <span className="text-xs">Voice</span>
                       </div>
                     )}
-                    {m.text}
+                    {m.role === 'user' ? (
+                      <span>{m.text}</span>
+                    ) : (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                          strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mt-1 space-y-0.5">{children}</ul>,
+                          li: ({ children }) => <li className="text-sm">{children}</li>,
+                          h1: () => null,
+                          h2: () => null,
+                          h3: () => null,
+                        }}
+                      >
+                        {m.text}
+                      </ReactMarkdown>
+                    )}
                   </div>
 
                   {/* Timestamp */}

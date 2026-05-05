@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GAIDA – You're Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background: #0f1117;
+      color: #e8e4ff;
+      font-family: 'Georgia', serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .orb {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #a89cf7, #7c6af7 50%, #3d2fa0);
+      box-shadow: 0 0 60px rgba(124, 106, 247, 0.4), 0 0 120px rgba(124, 106, 247, 0.15);
+      margin-bottom: 2rem;
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 60px rgba(124, 106, 247, 0.4); }
+      50%       { transform: scale(1.06); box-shadow: 0 0 80px rgba(124, 106, 247, 0.6); }
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: normal;
+      letter-spacing: 0.02em;
+      margin-bottom: 0.75rem;
+      color: #c4bbff;
+    }
+
+    p {
+      font-size: 1rem;
+      line-height: 1.7;
+      color: #8b82c0;
+      max-width: 340px;
+      margin-bottom: 2rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.4rem 1.2rem;
+      background: rgba(124, 106, 247, 0.15);
+      border: 1px solid rgba(124, 106, 247, 0.3);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      color: #a89cf7;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div class="orb"></div>
+  <h1>You're offline right now</h1>
+  <p>
+    GAIDA is still here with you. Your past conversations are saved
+    and any messages you send will be delivered once you reconnect.
+  </p>
+  <span class="badge">Reconnecting when ready</span>
+</body>
+</html>
