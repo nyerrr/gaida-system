@@ -80,9 +80,9 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
         # --- Step 4: Calming signals ---
         if _detect_calming(user_message):
             if post_crisis:
-                running_confidence = (previous_confidence * 0.7) + (0.3 * 0.3)
+                running_confidence = (previous_confidence * 0.5) + (0.3 * 0.5)
             else:
-                running_confidence = (previous_confidence * 0.75) + (0.3 * 0.25)
+                running_confidence = (previous_confidence * 0.4) + (0.3 * 0.6)
             running_confidence = max(0.3, round(running_confidence, 3))
         else:
             boosted_raw = raw_confidence
@@ -116,7 +116,7 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
                 running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
 
             # Prevent confidence from dropping more than 20% in a single message
-            max_drop = previous_confidence * 0.80
+            max_drop = previous_confidence * 0.60
             running_confidence = max(max_drop, running_confidence)
             running_confidence = round(running_confidence, 3)
 
