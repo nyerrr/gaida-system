@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import VoiceInput from './VoiceInput';
+import VoiceInput from "../voice/VoiceInput";
 import ReactMarkdown from 'react-markdown';
 
 // ─────────────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ export default function StudentDashboard() {
 
         if (data.messages.some(m => m.sender === 'counselor')) setCounselorActive(true);
         setCounselorTyping(data.counselor_typing || false);
-        if (data.severity !== undefined) setSeverity(mapConfidenceToSeverity(data.severity));
+        // severity is controlled only by /virtual-agent response, not counselor poll
 
         const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
         if (counselorMsgs.length > lastCounselorCount.current) {

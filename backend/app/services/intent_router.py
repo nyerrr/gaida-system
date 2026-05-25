@@ -28,11 +28,10 @@ CALMING_KEYWORDS = [
 URGENT_PHYSICAL_KEYWORDS = [
     "cant breathe", "can't breathe", "cannot breathe",
     "chest is tight", "tight chest", "chest tightness", "chest pain",
-    "shaking", "trembling", "nanginginig",
+    "shaking uncontrollably", "trembling uncontrollably", "nanginginig na grabe",
     "hyperventilating", "hyperventilation",
     "panic attack", "panicattack",
     "cant control my breathing", "cant control breathing",
-    "dizzy", "lightheaded",
     "palpitations", "heart racing",
     "sikip sa puso", "hirap huminga",
     "di makahininga",
@@ -110,8 +109,8 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
                 boosted_raw = min(0.98, raw_confidence * 1.15)
 
             if _detect_urgent(user_message):
-                running_confidence = (previous_confidence * 0.3) + (boosted_raw * 0.7)
-                running_confidence = max(running_confidence, 0.75)  # physical symptoms → always High
+                running_confidence = (previous_confidence * 0.4) + (boosted_raw * 0.6)
+                running_confidence = max(running_confidence, 0.60)  # Moderate floor, not always High
             else:
                 running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
 

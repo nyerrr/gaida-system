@@ -16,7 +16,14 @@ logger = logging.getLogger(__name__)
 _OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL_BASE = "ft:gpt-3.5-turbo-0125:personal::DNgqF8nO"
 MAX_HISTORY_MESSAGES = 6
-MAX_RESPONSE_TOKENS = 250
+TOKEN_LIMITS = {
+    "none":     100,
+    "low":      130,
+    "moderate": 150,
+    "high":     110,
+    "crisis":   100,
+    "venting":   90,
+}
 
 client = None
 if OpenAI and _OPENAI_API_KEY:
@@ -54,8 +61,9 @@ WHAT YOU NEVER DO:
 - Never say "as an AI" or break character.
 - Never diagnose or prescribe anything.
 - Never give a generic response that ignores what was just said.
-- Never ask multiple questions at once.
-- Never stay in the same emotional step twice in a row — always advance the conversation.
+- Never mix languages mid-sentence — if the student wrote in English, respond fully in English.
+- Only use Tagalog or Taglish if the student's message was in Tagalog or Taglish.
+- Never insert Tagalog grounding instructions into an English conversation.
 
 CONTEXT AWARENESS:
 - Always read the full conversation history before responding.
@@ -443,8 +451,8 @@ def generate_response_with_gpt(
         resp = client.chat.completions.create(
             model=OPENAI_MODEL_BASE,
             messages=messages,
-            temperature=0.85,
-            max_tokens=MAX_RESPONSE_TOKENS,
+            temperature=0.75,
+            max_tokens=TOKEN_LIMITS.get(anxiety_level.lower() if anxiety_level else "none", 130),
         )
 
         content = None

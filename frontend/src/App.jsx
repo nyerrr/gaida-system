@@ -1,13 +1,13 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useCallback } from 'react'
 
-import PortalSelection from './PortalSelection'
-import StudentLogin from './StudentLogin'
-import CounselorLogin from './CounselorLogin'
-import InformedConsent from './InformedConsent'
-import StudentDashboard from './StudentDashboard'
-import CounselorDashboard from './CounselorDashboard'
-import ForgotPassword from './ForgotPassword'
+import PortalSelection from './features/auth/PortalSelection'
+import StudentLogin from './features/student/StudentLogin'
+import CounselorLogin from './features/auth/CounselorLogin'
+import InformedConsent from './features/auth/InformedConsent'
+import StudentDashboard from './features/student/StudentDashboard'
+import CounselorDashboard from './features/counselor/CounselorDashboard'
+import ForgotPassword from './features/auth/ForgotPassword'
 import PWABanner from './components/PWABanner'
 
 // ─────────────────────────────────────────────────────────────

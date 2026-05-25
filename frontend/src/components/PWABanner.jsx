@@ -12,7 +12,7 @@
  */
 
 import { useState } from "react";
-import { usePWA } from "../hooks/usePWA";
+import { usePWA } from '../hooks/usePWA';
 
 export default function PWABanner({ onQueuedMessageSent }) {
   const {

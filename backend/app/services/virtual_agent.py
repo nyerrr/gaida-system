@@ -10,46 +10,42 @@ FUZZY_WEIGHT_MULTIPLIER = 0.9
 # ---------------------------------------------------------------------------
 
 COUNSELOR_PROTOCOLS = {
-    "low": """
-        # LOW ANXIETY FIRST AID PROTOCOL
-        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
-        # Example structure:
-        # - Acknowledge the feeling without alarming the student
-        # - Suggest a simple grounding exercise (e.g. 4-7-8 breathing)
-        # - Remind them this is normal and manageable
-        # - Encourage them to keep talking
+        "low": """
+    Respond with warmth and gentle acknowledgment.
+    - Validate their feeling without alarming them
+    - Normalize what they are experiencing
+    - Offer one simple practical suggestion if appropriate
+    - End with one open question to keep them talking
+    - Do NOT mention the counselor or escalate
     """,
-    "moderate": """
-        # MODERATE ANXIETY FIRST AID PROTOCOL
-        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
-        # Example structure:
-        # - Validate that what they are feeling is real and serious
-        # - Guide them through a specific coping technique
-        # - Ask them to describe their physical symptoms
-        # - Let them know the counselor is aware
+        "moderate": """
+    Respond with stronger empathy and grounded support.
+    - Validate clearly that what they feel is real and matters
+    - Reflect back what they shared to show you heard them
+    - Offer one specific coping suggestion relevant to what they described
+    - Keep the tone calm and present
+    - Do NOT invent grounding techniques involving specific objects or rooms
+    - End with one focused question about how they are feeling right now
     """,
-    "high": """
-        # HIGH ANXIETY FIRST AID PROTOCOL
-        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
-        # Example structure:
-        # - Respond with calm urgency
-        # - Immediately inform that counselor has been notified
-        # - Guide them through an emergency grounding technique
-        # - Keep them talking and present
-        # - Do not leave them alone in the conversation
+        "high": """
+    Respond with calm urgency. You are a steady grounding presence.
+    - Lead with strong validation — acknowledge the intensity directly
+    - Inform them calmly that the counselor has been notified
+    - Offer ONE simple immediate action: sit down, breathe slowly, stay where they are
+    - Do NOT suggest specific objects, rooms, or actions you cannot verify they have access to
+    - Do NOT mix languages mid-sentence — respond in the same language the student used
+    - End with one simple present-moment question: "Are you sitting down?" or "Is anyone nearby?"
     """,
-    "crisis": """
-        # CRISIS / SUICIDAL PROTOCOL
-        # TO BE FILLED IN AFTER COUNSELOR INTERVIEW
-        # Example structure:
-        # - Express immediate care and concern
-        # - Provide crisis hotline: (insert number)
-        # - Provide school guidance office contact
-        # - Stay present in the conversation
-        # - Never minimize or dismiss what they are feeling
+        "crisis": """
+    Respond with full presence and deep human care.
+    - Open with immediate acknowledgment — do not jump to resources first
+    - Make them feel heard before anything else
+    - Never minimize what they are feeling
+    - Provide crisis resources warmly: National Crisis Hotline 1553 (24/7), In Touch (02) 893-7603
+    - Encourage them to reach out to someone nearby
+    - End with reassurance and presence — not a question
     """,
 }
-
 # ---------------------------------------------------------------------------
 # CRISIS SAFETY RESOURCES
 # ---------------------------------------------------------------------------
