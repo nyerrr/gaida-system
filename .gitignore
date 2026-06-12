@@ -1,1 +1,27 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment — NEVER commit this (contains API keys)
+.env
+backend/.env
+
+# ML Models
+backend/training/models/*.pkl
+
+# Logs — generated files
+backend/logs/
+*.log
+*.json
+
+# Frontend build — generated
+frontend/dist/
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
 node_modules
