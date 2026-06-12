@@ -1,27 +1,48 @@
 # Python
-venv/
-__pycache__/
 *.pyc
+__pycache__/
 *.pyo
 *.pyd
 
-# Environment — NEVER commit this (contains API keys)
-.env
-backend/.env
+# Virtual environment
+venv/
+env/
+ENV/
 
-# ML Models
-backend/training/models/*.pkl
-
-# Logs — generated files
-backend/logs/
+# FastAPI / Uvicorn logs and DB
 *.log
-*.json
+*.db
+*.sqlite3
 
-# Frontend build — generated
-frontend/dist/
-frontend/node_modules/
+# Node / JS
+node_modules/
+dist/
+esbuild/
+js-yami/
+*.lock
+*.log
 
-# OS
+# IDE / editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
 .DS_Store
 Thumbs.db
-node_modules
+
+# Environment files
+.env
+
+# Testing / coverage
+.coverage
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+.mypy_cache/
+
+# Runtime data files
+consents.json
+interactions.json

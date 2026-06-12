@@ -1,0 +1,738 @@
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import VoiceInput from "../voice/VoiceInput";
+import ReactMarkdown from 'react-markdown';
+
+// ─────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────
+
+const BACKEND = 'http://127.0.0.1:8000';
+const POLL_INTERVAL = 3000;
+const TYPING_DEBOUNCE = 2000;
+
+const THEMES = {
+  purple: {
+    name: 'purple',
+    preview: '#7c6af7',
+    bg: '#0d0b1a',
+    sidebar: '#12102a',
+    border: '#1e1a40',
+    accent: '#7c6af7',
+    accentDark: '#3d2fa0',
+    textPrimary: '#a89cf7',
+    textSecondary: '#6b5fd4',
+    textMuted: '#3d3580',
+    userBubble: '#3d2fa0',
+    userText: '#e8e4ff',
+    botBubble: '#12102a',
+    botText: '#a89cf7',
+  },
+  navy: {
+    name: 'navy',
+    preview: '#378add',
+    bg: '#0c1220',
+    sidebar: '#101929',
+    border: '#1a2f4a',
+    accent: '#378add',
+    accentDark: '#1a4a7a',
+    textPrimary: '#93b4d9',
+    textSecondary: '#4a7aaa',
+    textMuted: '#1e3a5a',
+    userBubble: '#1a4a7a',
+    userText: '#e0eef8',
+    botBubble: '#101929',
+    botText: '#93b4d9',
+  },
+  charcoal: {
+    name: 'charcoal',
+    preview: '#ba7517',
+    bg: '#111010',
+    sidebar: '#1a1817',
+    border: '#2d2520',
+    accent: '#ba7517',
+    accentDark: '#7c4a2a',
+    textPrimary: '#d4b896',
+    textSecondary: '#7a6050',
+    textMuted: '#3d2e28',
+    userBubble: '#7c4a2a',
+    userText: '#fdf0e0',
+    botBubble: '#1a1817',
+    botText: '#d4b896',
+  },
+  forest: {
+    name: 'forest',
+    preview: '#5dcaa5',
+    bg: '#0a1a14',
+    sidebar: '#0f2318',
+    border: '#1a3527',
+    accent: '#5dcaa5',
+    accentDark: '#1d6a4a',
+    textPrimary: '#a8d9c0',
+    textSecondary: '#3e7a5e',
+    textMuted: '#2d5a45',
+    userBubble: '#1d6a4a',
+    userText: '#e8f5ee',
+    botBubble: '#0f2318',
+    botText: '#a8d9c0',
+  },
+};
+
+const SEVERITY_CONFIG = {
+  High:     { bar: 'bg-amber-500',   text: 'text-amber-400',   border: 'border-amber-800',   width: 'w-4/5' },
+  Moderate: { bar: 'bg-teal-400',    text: 'text-teal-300',    border: 'border-teal-700',    width: 'w-2/4' },
+  Low:      { bar: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-800', width: 'w-1/4' },
+  Normal:   { bar: 'bg-slate-500',   text: 'text-slate-400',   border: 'border-slate-700',   width: 'w-0'   },
+};
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+
+const mapConfidenceToSeverity = (conf) => {
+  if (conf >= 0.75) return 'High';
+  if (conf >= 0.60) return 'Moderate';
+  if (conf >= 0.45) return 'Low';
+  return 'Normal';
+};
+
+const formatTime = (seconds) => {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+};
+
+const formatMsgTime = (date) => {
+  if (!date) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+// ─────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────
+
+function TypingBubble({ color }) {
+  return (
+    <div className="flex gap-1 items-center h-4">
+      {[0, 150, 300].map((delay) => (
+        <div
+          key={delay}
+          className="w-1.5 h-1.5 rounded-full animate-bounce"
+          style={{ background: color, animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Avatar({ role, accent }) {
+  const isBot = role === 'bot';
+  const isCounselor = role === 'counselor';
+  const bg = isCounselor ? '#0e2a45' : 'transparent';
+  const border = isCounselor ? '1px solid #1a4a6e' : `1px solid ${accent}`;
+  const color = isCounselor ? '#7eb8d9' : accent;
+  const label = isCounselor ? 'C' : 'G';
+
+  return (
+    <div
+      className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5"
+      style={{ background: bg, border }}
+    >
+      <span className="text-xs font-bold" style={{ color }}>{label}</span>
+    </div>
+  );
+}
+
+function MessageBubble({ message, theme }) {
+  const { role, text, isVoice, acoustic, timestamp } = message;
+
+  const bubbleStyle =
+    role === 'user'
+      ? { background: theme.userBubble, color: theme.userText, borderRadius: '16px 16px 4px 16px' }
+      : role === 'counselor'
+      ? { background: '#0e2a45', color: '#b5d4f4', border: '1px solid #1a4a6e', borderRadius: '4px 16px 16px 16px' }
+      : { background: theme.botBubble, color: theme.botText, border: `1px solid ${theme.border}`, borderRadius: '4px 16px 16px 16px' };
+
+  return (
+    <div className={`flex flex-col gap-0.5 max-w-[78%] sm:max-w-[72%] lg:max-w-[65%] ${role === 'user' ? 'items-end' : 'items-start'}`}>
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 text-sm leading-relaxed" style={bubbleStyle}>
+        {isVoice && (
+          <div className="flex items-center gap-1 mb-1" style={{ opacity: 0.6 }}>
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0020 11h-2a6 6 0 01-12 0H4a8.001 8.001 0 007 7.93z" />
+            </svg>
+            <span className="text-xs">Voice</span>
+          </div>
+        )}
+
+        {role === 'user' ? (
+          <span>{text}</span>
+        ) : (
+          <ReactMarkdown
+            components={{
+              p:      ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+              strong: ({ children }) => <strong className="font-bold" style={{ color: theme.userText }}>{children}</strong>,
+              ul:     ({ children }) => <ul className="list-disc list-inside mt-1 space-y-0.5">{children}</ul>,
+              li:     ({ children }) => <li className="text-sm">{children}</li>,
+              h1: () => null,
+              h2: () => null,
+              h3: () => null,
+            }}
+          >
+            {text}
+          </ReactMarkdown>
+        )}
+      </div>
+
+      {timestamp && (
+        <span className="text-xs px-1" style={{ color: theme.textMuted }}>
+          {formatMsgTime(timestamp)}
+        </span>
+      )}
+
+      {role === 'bot' && acoustic && (
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs" style={{ color: theme.textMuted }}>Voice detected:</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+            acoustic.emotion === 'anxious'   ? 'text-yellow-400 border-yellow-800 bg-yellow-900/30' :
+            acoustic.emotion === 'sad'       ? 'text-blue-400 border-blue-800 bg-blue-900/30' :
+            acoustic.emotion === 'angry'     ? 'text-red-400 border-red-800 bg-red-900/30' :
+            acoustic.emotion === 'stressed'  ? 'text-orange-400 border-orange-800 bg-orange-900/30' :
+            acoustic.emotion === 'calm'      ? 'text-emerald-400 border-emerald-800 bg-emerald-900/30' :
+            acoustic.emotion === 'withdrawn' ? 'text-purple-400 border-purple-800 bg-purple-900/30' :
+                                               'text-gray-400 border-gray-700 bg-gray-800/30'
+          }`}>
+            {acoustic.emotion}
+          </span>
+          <span className="text-xs" style={{ color: theme.textMuted }}>{acoustic.severity}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────
+
+export default function StudentDashboard() {
+  const navigate = useNavigate();
+
+  // ── State ────────────────────────────────────────────────────
+  const [messages,       setMessages]       = useState([]);
+  const [input,          setInput]          = useState('');
+  const [sending,        setSending]        = useState(false);
+  const [severity,       setSeverity]       = useState('Normal');
+  const [sessionTime,    setSessionTime]    = useState(0);
+  const [sidebarOpen,    setSidebarOpen]    = useState(false);
+  const [voiceStatus,    setVoiceStatus]    = useState('');
+  const [counselorTyping,setCounselorTyping]= useState(false);
+  const [counselorActive,setCounselorActive]= useState(false);
+  const [theme,          setTheme]          = useState(
+    () => THEMES[localStorage.getItem('gaida_theme')] || THEMES.purple
+  );
+
+  // ── Refs ─────────────────────────────────────────────────────
+  const containerRef        = useRef(null);
+  const timerRef            = useRef(null);
+  const inputRef            = useRef(null);
+  const lastCounselorCount  = useRef(0);
+  const typingTimeout       = useRef(null);
+
+  const severityConfig = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.Normal;
+
+  // ── Auth + session reset on mount ─────────────────────────────
+  useEffect(() => {
+    const token   = localStorage.getItem('session_token');
+    const consent = localStorage.getItem('consent_given');
+    if (!token)   { navigate('/student-login'); return; }
+    if (!consent) { navigate('/consent');       return; }
+
+    // Always start a fresh session on dashboard mount
+    localStorage.removeItem('session_id');
+
+    setSidebarOpen(window.innerWidth >= 1024);
+    timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
+    return () => clearInterval(timerRef.current);
+  }, [navigate]);
+
+  // ── Auto-scroll ───────────────────────────────────────────────
+  useEffect(() => {
+    containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, voiceStatus, counselorTyping]);
+
+  // ── Counselor poll ────────────────────────────────────────────
+  useEffect(() => {
+    const poll = async () => {
+      const sessionId = localStorage.getItem('session_id');
+      if (!sessionId) return;
+
+      try {
+        const res  = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.messages) return;
+
+        if (data.messages.some(m => m.sender === 'counselor')) setCounselorActive(true);
+        setCounselorTyping(data.counselor_typing || false);
+        // severity is controlled only by /virtual-agent response, not counselor poll
+
+        const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
+        if (counselorMsgs.length > lastCounselorCount.current) {
+          if (lastCounselorCount.current === 0) {
+            setMessages(prev => [...prev, { role: 'system', text: 'A counselor has joined your session.' }]);
+          }
+          setMessages(prev => [
+            ...prev,
+            ...counselorMsgs.slice(lastCounselorCount.current).map(m => ({
+              role: 'counselor', text: m.text, timestamp: new Date(),
+            })),
+          ]);
+          lastCounselorCount.current = counselorMsgs.length;
+        }
+      } catch (_) {}
+    };
+
+    const interval = setInterval(poll, POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── PWA offline queue sync ────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.response?.response) {
+        setMessages(prev => [...prev, {
+          role: 'bot', text: e.detail.response.response,
+          timestamp: new Date(), synced: true,
+        }]);
+      }
+    };
+    window.addEventListener('gaida:queue-synced', handler);
+    return () => window.removeEventListener('gaida:queue-synced', handler);
+  }, []);
+
+  // ── Handlers ─────────────────────────────────────────────────
+  const fireTyping = useCallback((isTyping) => {
+    const sessionId = localStorage.getItem('session_id');
+    if (!sessionId) return;
+    fetch(`${BACKEND}/api/counselor/typing/${sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: 'student', is_typing: isTyping }),
+    }).catch(() => {});
+  }, []);
+
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+    fireTyping(true);
+    clearTimeout(typingTimeout.current);
+    typingTimeout.current = setTimeout(() => fireTyping(false), TYPING_DEBOUNCE);
+  };
+
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+
+    clearTimeout(typingTimeout.current);
+    fireTyping(false);
+
+    setMessages(prev => [...prev, { role: 'user', text, timestamp: new Date() }]);
+    setInput('');
+    setSending(true);
+    if (window.innerWidth < 1024) setSidebarOpen(false);
+
+    const sessionId = localStorage.getItem('session_id');
+    const token     = localStorage.getItem('session_token');
+
+    // Mirror to counselor dashboard
+    if (sessionId) {
+      fetch(`${BACKEND}/api/counselor/chat/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender: 'student', text }),
+      }).catch(() => {});
+    }
+
+    try {
+      const res = await fetch('/virtual-agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ message: text, session_id: sessionId, intent: 'unknown' }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        setMessages(prev => [...prev, { role: 'bot', text: `Error: ${err || res.status}`, timestamp: new Date() }]);
+        return;
+      }
+
+      const data = await res.json();
+      if (data.session_id)     localStorage.setItem('session_id', data.session_id);
+      if (data.severity)       setSeverity(data.severity);
+      if (data.counselor_active) setCounselorActive(true);
+
+      if (!data.counselor_active) {
+        setMessages(prev => [...prev, {
+          role: 'bot',
+          text: data.response || 'No response from backend',
+          timestamp: new Date(),
+        }]);
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        role: 'bot', text: `Connection error: ${err.message}`, timestamp: new Date(),
+      }]);
+    } finally {
+      setSending(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  };
+
+  const endSession = () => {
+    ['session_token', 'student_id', 'consent_given', 'session_id'].forEach(k =>
+      localStorage.removeItem(k)
+    );
+    navigate('/student-login');
+  };
+
+  const switchTheme = (key) => {
+    setTheme(THEMES[key]);
+    localStorage.setItem('gaida_theme', key);
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────
+  return (
+    <div
+      className="min-h-screen max-h-screen flex overflow-hidden font-sans"
+      style={{ background: theme.bg }}
+    >
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 lg:hidden"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar ──────────────────────────────────────────── */}
+      <aside
+        className={`
+          fixed lg:relative z-30 lg:z-auto top-0 left-0
+          transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          w-64 flex flex-col flex-shrink-0 h-full min-h-screen
+        `}
+        style={{ background: theme.sidebar, borderRight: `1px solid ${theme.border}` }}
+      >
+        {/* Logo */}
+        <div className="p-5 flex items-center justify-between" style={{ borderBottom: `1px solid ${theme.border}` }}>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: `linear-gradient(135deg, ${theme.accentDark}, ${theme.sidebar})` }}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M9 2C5 2 2 6 2 9c0 4 3 7 7 7s7-3 7-7c0-3-3-7-7-7z" fill="none" stroke={theme.accent} strokeWidth="1.2" />
+                <path d="M9 5v8M6 8l3-3 3 3" stroke={theme.accent} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div>
+              <p className="font-bold tracking-widest text-sm" style={{ color: theme.textPrimary }}>GAIDA</p>
+              <p className="text-xs" style={{ color: theme.textMuted }}>Guidance System</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1"
+            style={{ color: theme.textMuted }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Session */}
+        <div className="p-4" style={{ borderBottom: `1px solid ${theme.border}` }}>
+          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: theme.textMuted }}>Session</p>
+          <div className="space-y-2">
+            {[['Duration', formatTime(sessionTime)], ['Messages', messages.length]].map(([label, value]) => (
+              <div key={label} className="flex justify-between items-center">
+                <span className="text-xs" style={{ color: theme.textSecondary }}>{label}</span>
+                <span className="text-xs font-bold" style={{ color: theme.textPrimary }}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Anxiety Level */}
+        <div className="p-4" style={{ borderBottom: `1px solid ${theme.border}` }}>
+          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: theme.textMuted }}>Anxiety Level</p>
+          <div
+            className={`p-3 rounded-lg border ${severityConfig.border}`}
+            style={{ background: theme.bg }}
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs" style={{ color: theme.textSecondary }}>Detected</span>
+              <span className={`text-xs font-bold ${severityConfig.text}`}>{severity}</span>
+            </div>
+            <div className="w-full rounded-full h-1.5" style={{ background: theme.border }}>
+              <div className={`${severityConfig.bar} ${severityConfig.width} h-1.5 rounded-full transition-all duration-700`} />
+            </div>
+          </div>
+        </div>
+
+        {/* Theme Picker */}
+        <div className="p-4" style={{ borderBottom: `1px solid ${theme.border}` }}>
+          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: theme.textMuted }}>Theme</p>
+          <div className="flex gap-2">
+            {Object.entries(THEMES).map(([key, t]) => (
+              <button
+                key={key}
+                onClick={() => switchTheme(key)}
+                title={key}
+                style={{
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  background: t.preview,
+                  border: theme.name === key ? `2px solid ${theme.textPrimary}` : '2px solid transparent',
+                  outline: theme.name === key ? `2px solid ${t.preview}` : 'none',
+                  outlineOffset: '2px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Quick Tips */}
+        <div className="p-4 flex-1">
+          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: theme.textMuted }}>Quick Tips</p>
+          <div className="space-y-2 text-xs leading-relaxed" style={{ color: theme.textSecondary }}>
+            <p>Press Enter to send a message.</p>
+            <p>Use the mic button for voice input.</p>
+            <p>Your session is private and encrypted.</p>
+          </div>
+        </div>
+
+        {/* End Session */}
+        <div className="p-4" style={{ borderTop: `1px solid ${theme.border}` }}>
+          <button
+            onClick={endSession}
+            className="w-full py-2 px-4 text-xs font-bold rounded-lg tracking-widest uppercase transition-all duration-200"
+            style={{ background: 'transparent', border: `1px solid ${theme.border}`, color: theme.textSecondary }}
+            onMouseEnter={e => { e.currentTarget.style.background = theme.border; e.currentTarget.style.color = theme.textPrimary; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = theme.textSecondary; }}
+          >
+            End Session
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main ─────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen">
+
+        {/* Topbar */}
+        <div
+          className="h-14 flex items-center px-4 gap-3 flex-shrink-0"
+          style={{ background: theme.sidebar, borderBottom: `1px solid ${theme.border}` }}
+        >
+          <button
+            onClick={() => setSidebarOpen(p => !p)}
+            className="flex-shrink-0 p-1 transition-colors"
+            style={{ color: theme.textSecondary }}
+            onMouseEnter={e => e.currentTarget.style.color = theme.textPrimary}
+            onMouseLeave={e => e.currentTarget.style.color = theme.textSecondary}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          <span className="text-xs sm:text-sm font-bold tracking-widest truncate" style={{ color: theme.textPrimary }}>
+            VIRTUAL COUNSELOR
+          </span>
+
+          <div
+            className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${severityConfig.text} ${severityConfig.border}`}
+            style={{ background: theme.bg }}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full ${severityConfig.bar}`} />
+            <span className="hidden sm:inline">{severity}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: theme.accent }} />
+            <span className="text-xs hidden sm:inline" style={{ color: theme.accent }}>Online</span>
+          </div>
+        </div>
+
+        {/* Chat */}
+        <div
+          ref={containerRef}
+          className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-3"
+          style={{ background: theme.bg }}
+        >
+          {/* Empty state */}
+          {messages.length === 0 && !voiceStatus && (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
+                style={{ background: theme.sidebar, border: `1px solid ${theme.border}` }}
+              >
+                <svg className="w-7 h-7" fill="none" stroke={theme.textSecondary} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <p className="text-sm" style={{ color: theme.textPrimary }}>Start the conversation.</p>
+              <p className="text-xs mt-1" style={{ color: theme.textSecondary }}>Your session is private and secure.</p>
+            </div>
+          )}
+
+          {/* Message list */}
+          {messages.map((m, i) => {
+            if (m.role === 'system') {
+              return (
+                <div key={i} className="flex justify-center">
+                  <span
+                    className="text-xs italic px-3 py-1 rounded-full"
+                    style={{ color: theme.textSecondary, background: theme.sidebar, border: `1px solid ${theme.border}` }}
+                  >
+                    {m.text}
+                  </span>
+                </div>
+              );
+            }
+
+            return (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
+                {(m.role === 'bot' || m.role === 'counselor') && (
+                  <Avatar role={m.role} accent={theme.accent} />
+                )}
+                <MessageBubble message={m} theme={theme} />
+              </div>
+            );
+          })}
+
+          {/* Counselor typing */}
+          {counselorTyping && (
+            <div className="flex justify-start items-end gap-2">
+              <Avatar role="counselor" accent={theme.accent} />
+              <div
+                className="px-4 py-3"
+                style={{ background: '#0e2a45', border: '1px solid #1a4a6e', borderRadius: '4px 16px 16px 16px' }}
+              >
+                <TypingBubble color="#7eb8d9" />
+              </div>
+            </div>
+          )}
+
+          {/* Bot typing */}
+          {sending && !counselorActive && (
+            <div className="flex justify-start items-end gap-2">
+              <Avatar role="bot" accent={theme.accent} />
+              <div
+                className="px-4 py-3"
+                style={{ background: theme.botBubble, border: `1px solid ${theme.border}`, borderRadius: '4px 16px 16px 16px' }}
+              >
+                <TypingBubble color={theme.accent} />
+              </div>
+            </div>
+          )}
+
+          {/* Voice status */}
+          {voiceStatus && (
+            <div className="flex justify-center">
+              <span
+                className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full"
+                style={{ color: theme.textSecondary, background: theme.sidebar, border: `1px solid ${theme.border}` }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: theme.accent }} />
+                {voiceStatus}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Input */}
+        <div
+          className="px-3 sm:px-4 py-3 flex-shrink-0"
+          style={{ background: theme.sidebar, borderTop: `1px solid ${theme.border}` }}
+        >
+          <div
+            className="flex items-end gap-2 rounded-2xl px-3 py-2 transition-colors"
+            style={{ background: theme.bg, border: `1px solid ${theme.border}` }}
+          >
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message..."
+              rows={1}
+              className="flex-1 resize-none py-1 text-sm leading-relaxed focus:outline-none"
+              style={{ minHeight: '32px', maxHeight: '96px', background: 'transparent', color: theme.textPrimary }}
+            />
+            <div className="flex items-center gap-1.5 flex-shrink-0 pb-0.5">
+              <VoiceInput
+                sessionId={localStorage.getItem('session_id')}
+                onTranscript={(text) => setInput(text)}
+                onAgentResponse={(data, transcript) => {
+                  if (data.session_id)      localStorage.setItem('session_id', data.session_id);
+                  if (data.severity)        setSeverity(data.severity);
+                  if (data.counselor_active) setCounselorActive(true);
+                  setMessages(prev => [
+                    ...prev,
+                    ...(transcript ? [{ role: 'user', text: transcript, isVoice: true, timestamp: new Date() }] : []),
+                    ...(!data.counselor_active ? [{ role: 'bot', text: data.response, acoustic: data.acoustic, timestamp: new Date() }] : []),
+                  ]);
+                  setInput('');
+                }}
+                onStatusChange={setVoiceStatus}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={sending || !input.trim()}
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all duration-200 flex-shrink-0"
+                style={
+                  input.trim()
+                    ? { background: theme.userBubble, color: theme.userText }
+                    : { background: theme.sidebar, color: theme.border, cursor: 'not-allowed' }
+                }
+                onMouseEnter={e => { if (input.trim()) e.currentTarget.style.background = theme.accent; }}
+                onMouseLeave={e => { if (input.trim()) e.currentTarget.style.background = theme.userBubble; }}
+              >
+                {sending ? (
+                  <div
+                    className="w-3.5 h-3.5 border-2 rounded-full animate-spin"
+                    style={{ borderColor: theme.textSecondary, borderTopColor: theme.accent }}
+                  />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-center mt-1.5 hidden sm:block" style={{ color: theme.textMuted }}>
+            Press Enter to send. Shift+Enter for new line.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
