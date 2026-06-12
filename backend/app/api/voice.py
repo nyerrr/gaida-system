@@ -1,4 +1,3 @@
-import whisper
 import tempfile
 import os
 import traceback
@@ -9,14 +8,23 @@ from app.analytics.acoustic_features import (
     extract_features,
     map_acoustic_to_severity,
     fuse_with_text_severity,
-    log_to_supabase,         
+    log_to_supabase,
 )
 from app.services.session_manager import get_session, start_session
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
-model = whisper.load_model("medium")
+# ── Lazy load Whisper — loads on first voice request, not at startup ──
+_whisper_model = None
 
+def _get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        import whisper
+        print("[GAIDA] Loading Whisper model (first voice request)...")
+        _whisper_model = whisper.load_model("medium")
+        print("[GAIDA] Whisper model loaded.")
+    return _whisper_model
 
 @router.post("/speech-to-text")
 async def speech_to_text(
@@ -100,7 +108,7 @@ async def speech_to_text(
             print(f"DEBUG: Temp file created: {tmp_path}")
 
             print(f"DEBUG: Starting Whisper transcription...")
-            result = model.transcribe(tmp_path)
+            result = _get_whisper_model().transcribe(tmp_path)
             transcript = result.get("text", "").strip()
             print(f"DEBUG: Transcription complete: '{transcript}'")
 

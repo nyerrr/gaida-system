@@ -165,15 +165,36 @@ def _load_all_models():
             "Random Forest": RF_MODEL_PATH,
             "Neural Network": NN_MODEL_PATH,
         }
-        for name, path in model_paths.items():
+        missing = [name for name, path in model_paths.items() if not path.exists()]
+        if missing:
+            print(f"Missing models: {missing}. Training now...")
+            train_and_compare()
+
+        # Load only LR and RF at startup — NN loads on first use
+        for name in ["Logistic Regression", "Random Forest"]:
+            path = model_paths[name]
             if path.exists():
                 with open(path, "rb") as f:
                     _models[name] = pickle.load(f)
-            else:
-                print(f"Model not found: {path}. Training now...")
-                train_and_compare()
-                with open(path, "rb") as f:
-                    _models[name] = pickle.load(f)
+                print(f"[GAIDA] Loaded {name}")
+
+    return _models
+
+
+def _load_nn_if_needed():
+    """Load Neural Network only when needed — keeps startup fast."""
+    global _models
+    if "Neural Network" not in _models:
+        if NN_MODEL_PATH.exists():
+            print("[GAIDA] Loading Neural Network (first use)...")
+            with open(NN_MODEL_PATH, "rb") as f:
+                _models["Neural Network"] = pickle.load(f)
+            print("[GAIDA] Neural Network loaded.")
+        else:
+            print("[GAIDA] Neural Network model not found — retraining...")
+            train_and_compare()
+            with open(NN_MODEL_PATH, "rb") as f:
+                _models["Neural Network"] = pickle.load(f)
     return _models
 
 
@@ -201,8 +222,11 @@ def classify_intent(text: str) -> dict:
         }
     """
     try:
-        models = _load_all_models()
+        _load_all_models()       # loads LR + RF at startup
+        _load_nn_if_needed()     # loads NN on first use
+        models = _models
         predictions = {}
+
 
         for name, model in models.items():
             intent = model.predict([text])[0]
@@ -271,8 +295,11 @@ def classify_intent_all(text: str) -> dict:
     Use this for panel demonstration / comparison report.
     """
     try:
-        models = _load_all_models()
+        _load_all_models()
+        _load_nn_if_needed()
+        models = _models
         results = {}
+        
         for name, model in models.items():
             intent = model.predict([text])[0]
             proba = model.predict_proba([text])[0]
