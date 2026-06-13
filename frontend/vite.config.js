@@ -6,22 +6,17 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      strategies: 'injectManifest',
-      srcDir: 'public',        // ← removed 'frontend/'
-      filename: 'sw.js',
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       manifest: false,
-      devOptions: {
-        enabled: true,
-        type: 'module',
-      },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       },
+      devOptions: {
+        enabled: true,
+      },
     }),
   ],
-                               // ← remove root: 'frontend'
   server: {
     proxy: {
       '/virtual-agent': {
