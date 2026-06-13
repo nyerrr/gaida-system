@@ -13,7 +13,7 @@ const handleAccept = async (e) => {
     // Get session_id from localStorage (set during login)
     const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
 
-    const response = await fetch('http://127.0.0.1:8000/consent', {
+    await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'}/consent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

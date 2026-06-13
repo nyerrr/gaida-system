@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const BACKEND = 'http://127.0.0.1:8000';
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 const POLL_INTERVAL = 3000;
 const TYPING_DEBOUNCE = 2000;
 
