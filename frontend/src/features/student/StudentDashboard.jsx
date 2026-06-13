@@ -354,7 +354,7 @@ export default function StudentDashboard() {
     }
 
     try {
-      const res = await fetch('/virtual-agent', {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/virtual-agent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
