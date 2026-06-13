@@ -359,11 +359,26 @@ function ChatModal({ sessionId, onClose }) {
     }).catch(() => {});
   };
 
+  // Add this ref at the top of ChatModal
+const typingThrottleRef = useRef(null);
+
   const handleInputChange = (e) => {
     setTakeoverMsg(e.target.value);
-    fireCounselorTyping(true);
+
+    // Only fire typing signal if not already throttled
+    if (!typingThrottleRef.current) {
+      fireCounselorTyping(true);
+      typingThrottleRef.current = setTimeout(() => {
+        typingThrottleRef.current = null;
+      }, 2000); // fire at most once every 2 seconds
+    }
+
+    // Reset the "stop typing" timer
     clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => fireCounselorTyping(false), 2000);
+    typingTimeoutRef.current = setTimeout(() => {
+      fireCounselorTyping(false);
+      typingThrottleRef.current = null;
+    }, 2000);
   };
 
   const sendTakeover = async (msg) => {
