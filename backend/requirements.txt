@@ -9,3 +9,6 @@ opensmile
 speechrecognition
 supabase
 gtts
+python-multipart
+numpy
+scikit-learn
