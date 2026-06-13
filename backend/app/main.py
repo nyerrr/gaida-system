@@ -3,6 +3,9 @@ import sys
 import os
 from datetime import datetime
 from app.database.database import supabase
+from fastapi import Response
+
+
 
 # ----------------------------
 # Add project root to Python path
@@ -92,6 +95,12 @@ def log_interaction(
 # ----------------------------
 # Routes
 # ----------------------------
+
+@app.head("/")
+def root_head():
+    return Response(status_code=200)
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "message": "GAIDA Backend"}
