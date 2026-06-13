@@ -13,6 +13,10 @@ const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
 const DATA_CACHE    = `${CACHE_VERSION}-data`;
 const QUEUE_STORE   = "gaida-offline-queue";
 
+
+// Required by vite-plugin-pwa injectManifest strategy
+const WB_MANIFEST = self.__WB_MANIFEST || [];
+
 // ── App Shell — files to cache on install ────────────────────
 const APP_SHELL_FILES = [
   "/",
