@@ -3,8 +3,10 @@ services:
     name: gaida-backend
     runtime: python
     rootDir: backend
-    buildCommand: apt-get install -y portaudio19-dev && pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    packages:
+      - portaudio19-dev
     envVars:
       - key: OPENAI_API_KEY
         sync: false
