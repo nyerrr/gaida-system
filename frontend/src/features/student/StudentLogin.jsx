@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BACKEND_URL } from '../../config'
 
 export default function StudentLogin() {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ export default function StudentLogin() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -37,7 +38,7 @@ export default function StudentLogin() {
         setError(data.detail || 'Login failed. Please check your credentials.');
       }
     } catch {
-      setError('Connection error. Make sure the backend is running on localhost:8000');
+      setError('Connection error. Please try again.');
     } finally {
       setLoading(false);
     }
