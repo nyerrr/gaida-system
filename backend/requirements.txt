@@ -6,5 +6,4 @@ pytest
 httpx
 librosa
 opensmile
-pyaudio
 speechrecognition
