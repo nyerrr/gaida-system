@@ -271,7 +271,6 @@ export default function StudentDashboard() {
         const res  = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
         if (!res.ok) return;
         const data = await res.json();
-        console.log('Poll data:', data.messages);
         if (!data.messages) return;
 
         if (data.messages.some(m => m.sender === 'counselor')) setCounselorActive(true);
@@ -279,7 +278,6 @@ export default function StudentDashboard() {
         // severity is controlled only by /virtual-agent response, not counselor poll
 
         const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
-        console.log('Counselor msgs:', counselorMsgs.length, 'Last count:', lastCounselorCount.current);
         if (counselorMsgs.length > lastCounselorCount.current) {
           if (lastCounselorCount.current === 0) {
             setMessages(prev => [...prev, { role: 'system', text: 'A counselor has joined your session.' }]);
