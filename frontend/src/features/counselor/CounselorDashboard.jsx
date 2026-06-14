@@ -361,7 +361,7 @@ function ChatModal({ sessionId, onClose }) {
       const data = await res.json();
       if (data.alerts) {
         const newPending = data.alerts.filter(a => a.status === 'pending').length;
-        console.log('Pending alerts:', newPending);
+        console.log('Pending alerts:', newPending); 
       }
     } catch (e) {}
   };

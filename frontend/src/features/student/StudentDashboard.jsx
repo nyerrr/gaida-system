@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const BACKEND = 'http://127.0.0.1:8000';
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 const POLL_INTERVAL = 3000;
 const TYPING_DEBOUNCE = 2000;
 
@@ -271,6 +271,7 @@ export default function StudentDashboard() {
         const res  = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
         if (!res.ok) return;
         const data = await res.json();
+        console.log('Poll data:', data.messages);
         if (!data.messages) return;
 
         if (data.messages.some(m => m.sender === 'counselor')) setCounselorActive(true);
@@ -278,17 +279,19 @@ export default function StudentDashboard() {
         // severity is controlled only by /virtual-agent response, not counselor poll
 
         const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
+        console.log('Counselor msgs:', counselorMsgs.length, 'Last count:', lastCounselorCount.current);
         if (counselorMsgs.length > lastCounselorCount.current) {
           if (lastCounselorCount.current === 0) {
             setMessages(prev => [...prev, { role: 'system', text: 'A counselor has joined your session.' }]);
           }
+          const newMsgs = counselorMsgs.slice(lastCounselorCount.current);
+          lastCounselorCount.current = counselorMsgs.length;
           setMessages(prev => [
             ...prev,
-            ...counselorMsgs.slice(lastCounselorCount.current).map(m => ({
-              role: 'counselor', text: m.text, timestamp: new Date(),
+            ...newMsgs.map(m => ({
+                role: 'counselor', text: m.text, timestamp: new Date(),
             })),
           ]);
-          lastCounselorCount.current = counselorMsgs.length;
         }
       } catch (_) {}
     };
@@ -354,7 +357,7 @@ export default function StudentDashboard() {
     }
 
     try {
-      const res = await fetch('/virtual-agent', {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'}/virtual-agent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
