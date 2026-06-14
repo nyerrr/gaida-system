@@ -28,6 +28,8 @@ def start_session(user_id: str | None = None) -> str:
             # ---------------------------------------------------------------------------
             "running_confidence": 0.3,
             "running_intent": "neutral",
+            "peak_severity": "Normal",    
+            "peak_confidence": 0.3,   
         }
     }
     return session_id
@@ -91,6 +93,15 @@ def record_interaction(session_id: str, sender: str, text: str, analysis: Dict |
         session["meta"]["intensity"] = analysis.get("intensity")
         if analysis.get("escalate"):
             session["meta"]["escalate"] = True
+
+        
+        SEVERITY_RANK = {"Normal": 0, "Low": 1, "Moderate": 2, "High": 3, "Crisis": 4}
+        new_severity = analysis.get("severity", "Normal")
+        new_confidence = analysis.get("confidence", 0.0) or 0.0
+        current_peak = session["meta"].get("peak_severity", "Normal")
+        if SEVERITY_RANK.get(new_severity, 0) > SEVERITY_RANK.get(current_peak, 0):
+            session["meta"]["peak_severity"] = new_severity
+            session["meta"]["peak_confidence"] = new_confidence
 
     # Persist only if consent exists for this session
     try:

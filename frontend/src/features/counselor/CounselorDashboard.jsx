@@ -5,7 +5,7 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine
 } from 'recharts';
 
-const BACKEND = 'http://127.0.0.1:8000';
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 
 // ── Quick response templates ──────────────────────────────────────────────────
 const QUICK_RESPONSES = [
@@ -263,7 +263,7 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
 }
 
 // ── Active Sessions Page ──────────────────────────────────────────────────────
-function SessionsPage({ sessions, onViewChat }) {
+function SessionsPage({ sessions, onViewChat, lastUpdated }) {
   return (
     <div>
       <div className="mb-6">
@@ -280,7 +280,9 @@ function SessionsPage({ sessions, onViewChat }) {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-900">Sessions ({sessions.length})</span>
-            <span className="text-xs text-gray-400">Auto-refreshes every 5s</span>
+            <span className="text-xs text-gray-400">
+              {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Auto-refreshing...'}
+            </span>
           </div>
           <div className="divide-y divide-gray-50">
             {sessions.map((s) => {
@@ -326,6 +328,7 @@ function ChatModal({ sessionId, onClose }) {
   const [studentTyping, setStudentTyping] = useState(false);
   const bottomRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     fetchChat();
@@ -349,6 +352,18 @@ function ChatModal({ sessionId, onClose }) {
     } catch (e) {} finally {
       setLoading(false);
     }
+  };
+
+  const fetchAlerts = async () => {
+    console.log('Fetching alerts...', new Date().toLocaleTimeString());
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/alerts`);
+      const data = await res.json();
+      if (data.alerts) {
+        const newPending = data.alerts.filter(a => a.status === 'pending').length;
+        console.log('Pending alerts:', newPending);
+      }
+    } catch (e) {}
   };
 
   const fireCounselorTyping = (isTyping) => {
@@ -676,6 +691,7 @@ export default function CounselorDashboard() {
   const [chatSessionId, setChatSessionId] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const prevPendingCountRef = useRef(0);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     fetchAlerts();
@@ -683,7 +699,7 @@ export default function CounselorDashboard() {
     const interval = setInterval(() => {
       fetchAlerts();
       fetchSessions();
-    }, 5000);
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -716,6 +732,7 @@ export default function CounselorDashboard() {
       const res = await fetch(`${BACKEND}/api/counselor/sessions/active`);
       const data = await res.json();
       if (data.sessions) setSessions(data.sessions);
+      setLastUpdated(new Date());
     } catch (e) {}
   };
 
@@ -800,7 +817,7 @@ export default function CounselorDashboard() {
           <div className="w-full max-w-6xl mx-auto p-4 sm:p-6">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} />}
             {activePage === 'alerts'    && <AlertsPage alerts={alerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} />}
-            {activePage === 'sessions'  && <SessionsPage sessions={sessions} onViewChat={setChatSessionId} />}
+            {activePage === 'sessions' && <SessionsPage sessions={sessions} onViewChat={setChatSessionId} lastUpdated={lastUpdated} />}
             {activePage === 'detection' && <DetectionPage />}
             {activePage === 'reports'   && <ReportsPage />}
           </div>
