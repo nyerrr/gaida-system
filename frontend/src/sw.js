@@ -80,6 +80,12 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
+  
+  if (url.hostname === '127.0.0.1' || 
+      url.hostname.includes('onrender.com')) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   // Skip non-GET requests that aren't queueable API calls
   if (request.method === "POST") {

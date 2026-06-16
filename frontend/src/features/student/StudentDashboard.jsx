@@ -282,13 +282,14 @@ export default function StudentDashboard() {
           if (lastCounselorCount.current === 0) {
             setMessages(prev => [...prev, { role: 'system', text: 'A counselor has joined your session.' }]);
           }
+          const newMsgs = counselorMsgs.slice(lastCounselorCount.current);
+          lastCounselorCount.current = counselorMsgs.length;
           setMessages(prev => [
             ...prev,
-            ...counselorMsgs.slice(lastCounselorCount.current).map(m => ({
-              role: 'counselor', text: m.text, timestamp: new Date(),
+            ...newMsgs.map(m => ({
+                role: 'counselor', text: m.text, timestamp: new Date(),
             })),
           ]);
-          lastCounselorCount.current = counselorMsgs.length;
         }
       } catch (_) {}
     };
@@ -354,7 +355,7 @@ export default function StudentDashboard() {
     }
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/virtual-agent`, {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'}/virtual-agent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

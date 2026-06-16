@@ -288,3 +288,45 @@ def check_severity(anxiety_score: int):
         "severity": severity,
         "requires_alert": should_alert_counselor(severity),
     }
+
+@router.get("/analytics/overview")
+def get_analytics_overview():
+    try:
+        from app.database.database import supabase
+        from datetime import datetime, timedelta
+
+        # Anxiety distribution from interactions
+        interactions = supabase.table("interactions").select("severity").execute()
+        severity_counts = {"Low": 0, "Moderate": 0, "High": 0, "Normal": 0}
+        for row in interactions.data:
+            s = row.get("severity", "Normal") or "Normal"
+            if s in severity_counts:
+                severity_counts[s] += 1
+
+        # Sessions this week
+        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        sessions = supabase.table("sessions").select("created_at").gte("created_at", week_ago).execute()
+
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        week_data = {d: 0 for d in days}
+        for row in sessions.data:
+            if row.get("created_at"):
+                day = datetime.fromisoformat(row["created_at"]).strftime("%a")
+                if day in week_data:
+                    week_data[day] += 1
+
+        # Alerts per month
+        alerts = supabase.table("counselor_alerts").select("created_at, severity").execute()
+
+        return {
+            "anxiety_distribution": [
+                {"name": k, "value": v} for k, v in severity_counts.items() if v > 0
+            ],
+            "sessions_this_week": [
+                {"day": d, "count": week_data[d]} for d in days
+            ],
+            "total_sessions": len(supabase.table("sessions").select("id").execute().data),
+            "total_alerts": len(alerts.data),
+        }
+    except Exception as e:
+        return {"error": str(e)}
