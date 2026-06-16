@@ -40,7 +40,7 @@ if OpenAI and _OPENAI_API_KEY:
 
 SYSTEM_PROMPT = """
 You are GAIDA, a warm and empathetic virtual counseling assistant for university students.
-You are NOT a licensed counselor — you are a compassionate first responder who listens deeply
+You are NOT a licensed counselor - you are a compassionate first responder who listens deeply
 and responds like a caring friend who happens to understand mental health.
 
 PERSONALITY:
@@ -305,6 +305,35 @@ def _build_repetition_guard(session_context: Dict[str, Any] | None) -> str | Non
     )
     return guard
 
+def _build_closing_guard(session_context: Dict[str, Any] | None) -> str | None:
+    """
+    Reads the running list of question themes GAIDA has already
+    closed with this session, and instructs GPT to avoid repeating
+    any of them — even reworded.
+    """
+    if not session_context:
+        return None
+
+    covered = session_context.get("meta", {}).get("covered_themes", [])
+    if not covered:
+        return None
+
+    formatted = "\n".join(f'  \u274c "{line}"' for line in covered)
+
+    return (
+        "CONVERSATION MEMORY — QUESTIONS ALREADY ASKED THIS SESSION:\n"
+        f"{formatted}\n\n"
+        "Before ending your response with a question, check this list. "
+        "If the student has ALREADY answered any of these (even if asked "
+        "with different wording), DO NOT ask a reworded version of it again.\n\n"
+        "Examples of theme matches to avoid:\n"
+        '  - "what kind of job are you hoping for" = "what kind of job are you aiming for" (SAME)\n'
+        '  - "how long have you felt this way" = "how long have you been in this stage" (SAME)\n\n'
+        "Your closing question must explore a genuinely NEW angle: "
+        "what they need right now, a coping step, a reframe, or something "
+        "specific they just shared that hasn't been explored yet."
+    )
+
 
 # ─────────────────────────────────────────────────────────────────
 # HELPER: Build conversation progression rule
@@ -418,6 +447,11 @@ def generate_response_with_gpt(
     repetition_guard = _build_repetition_guard(session_context)
     if repetition_guard:
         messages.append({"role": "system", "content": repetition_guard})
+
+    # ── Step 3b: Inject closing question repetition guard ────────
+    closing_guard = _build_closing_guard(session_context)
+    if closing_guard:
+        messages.append({"role": "system", "content": closing_guard})
 
     # ── Step 4: Inject conversation progression rule ──────────────
     progression_rule = _build_progression_rule(session_context)

@@ -254,6 +254,17 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
     except Exception as e:
         logger.error(f"Failed to record interaction: {e}")
 
+    # --- Step 9b: Track question themes to prevent repetition ---
+    if response_text and "meta" in session:
+        if "covered_themes" not in session["meta"]:
+            session["meta"]["covered_themes"] = []
+
+        sentences = [s.strip() for s in response_text.split('.') if s.strip()]
+        if sentences:
+            closing_line = sentences[-1]
+            session["meta"]["covered_themes"].append(closing_line)
+            session["meta"]["covered_themes"] = session["meta"]["covered_themes"][-5:]
+
     return {
         "session_id": session_id,
         "intent": intent,

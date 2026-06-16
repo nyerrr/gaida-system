@@ -12,7 +12,7 @@ const QUICK_RESPONSES = [
   { label: "I'm here", text: "I'm here with you. You're not alone in this." },
   { label: "Take a breath", text: "Let's take a slow breath together. Inhale for 4 counts, hold for 4, exhale for 4. I'm right here with you." },
   { label: "Help coming", text: "I'm a counselor and I'm here to help you. You reached out at the right time. Can you tell me more about what you're feeling right now?" },
-  { label: "Call hotline", text: "Please call the National Crisis Hotline at 1553 right now — they are available 24/7 and can help you immediately. I'm staying with you." },
+  { label: "Call hotline", text: "Please call the National Crisis Hotline at 1553 right now - they are available 24/7 and can help you immediately. I'm staying with you." },
   { label: "Safe?", text: "I want to make sure you're safe right now. Are you in a safe place? Is there anyone with you?" },
   { label: "Follow up", text: "I'd like to schedule a follow-up session with you. You've shown a lot of courage today by reaching out." },
 ];
@@ -76,15 +76,6 @@ const anxietyTrendData = [
   { month: 'Apr', low: 17, moderate: 51, high: 24 },
   { month: 'May', low: 14, moderate: 55, high: 25 },
 ];
-const sessionsWeekData = [
-  { day: 'Mon', count: 12 }, { day: 'Tue', count: 15 },
-  { day: 'Wed', count: 10 }, { day: 'Thu', count: 18 }, { day: 'Fri', count: 14 },
-];
-const anxietyDistribution = [
-  { name: 'Low', value: 45, color: '#22c55e' },
-  { name: 'Moderate', value: 35, color: '#f59e0b' },
-  { name: 'High', value: 20, color: '#ef4444' },
-];
 
 const NAV = [
   { id: 'overview',  label: 'Overview',         icon: '⊞' },
@@ -96,20 +87,51 @@ const NAV = [
 
 // ── Overview Page ─────────────────────────────────────────────────────────────
 function OverviewPage({ alerts, sessions }) {
+  const [analytics, setAnalytics] = useState(null);
+
+  useEffect(() => {
+    fetch(`${BACKEND}/api/counselor/analytics/overview`)
+      .then(r => r.json())
+      .then(setAnalytics)
+      .catch(() => {});
+  }, []);
+
   const pending = alerts.filter(a => a.status === 'pending').length;
   const highSessions = sessions.filter(s => s.severity === 'High' || s.severity === 'Crisis').length;
+
+  const DISTRIBUTION_COLORS = {
+    Low: '#22c55e',
+    Moderate: '#f59e0b',
+    High: '#ef4444',
+    Normal: '#9ca3af',
+  };
+
+  const distributionData = analytics?.anxiety_distribution?.map(d => ({
+    ...d,
+    color: DISTRIBUTION_COLORS[d.name] || '#9ca3af',
+  })) || [
+    { name: 'Low', value: 0, color: '#22c55e' },
+    { name: 'Moderate', value: 0, color: '#f59e0b' },
+    { name: 'High', value: 0, color: '#ef4444' },
+  ];
+
+  const weekData = analytics?.sessions_this_week || [
+    { day: 'Mon', count: 0 }, { day: 'Tue', count: 0 },
+    { day: 'Wed', count: 0 }, { day: 'Thu', count: 0 }, { day: 'Fri', count: 0 },
+    { day: 'Sat', count: 0 }, { day: 'Sun', count: 0 },
+  ];
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Counselor Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-0.5">University of the East — Guidance System Overview</p>
+        <p className="text-sm text-gray-500 mt-0.5">University of the East - Guidance System Overview</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Active Sessions', value: sessions.length, sub: 'right now', color: 'bg-red-600' },
           { label: 'Pending Alerts', value: pending, sub: 'need attention', color: pending > 0 ? 'bg-red-600' : 'bg-gray-700' },
           { label: 'High Anxiety', value: highSessions, sub: 'active sessions', color: 'bg-gray-900' },
-          { label: 'Total Alerts', value: alerts.length, sub: 'all time', color: 'bg-gray-900' },
+          { label: 'Total Alerts', value: analytics?.total_alerts ?? alerts.length, sub: 'all time', color: 'bg-gray-900' },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-5 flex items-center justify-between shadow-sm">
             <div>
@@ -141,7 +163,7 @@ function OverviewPage({ alerts, sessions }) {
         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Sessions This Week</h3>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={sessionsWeekData}>
+            <BarChart data={weekData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
@@ -157,17 +179,17 @@ function OverviewPage({ alerts, sessions }) {
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <ResponsiveContainer width={160} height={160}>
               <PieChart>
-                <Pie data={anxietyDistribution} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value">
-                  {anxietyDistribution.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                <Pie data={distributionData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value">
+                  {distributionData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-2">
-              {anxietyDistribution.map((d) => (
+              {distributionData.map((d) => (
                 <div key={d.name} className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
                   <span className="text-xs text-gray-600">{d.name}</span>
-                  <span className="text-xs font-semibold text-gray-900 ml-auto pl-4">{d.value}%</span>
+                  <span className="text-xs font-semibold text-gray-900 ml-auto pl-4">{d.value}</span>
                 </div>
               ))}
             </div>
@@ -187,7 +209,7 @@ function OverviewPage({ alerts, sessions }) {
                       <div className={`w-2 h-2 rounded-full ${sc.dot}`} />
                       <div>
                         <p className="text-xs font-semibold text-gray-900">{a.session_id.slice(0, 8)}...</p>
-                        <p className="text-xs text-gray-400">{a.severity} — {a.intent}</p>
+                        <p className="text-xs text-gray-400">{a.severity} - {a.intent}</p>
                       </div>
                     </div>
                     <span className="text-xs text-gray-400">{formatRelative(a.timestamp)}</span>
@@ -201,6 +223,7 @@ function OverviewPage({ alerts, sessions }) {
     </div>
   );
 }
+
 
 // ── Alerts Page ───────────────────────────────────────────────────────────────
 function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
@@ -268,7 +291,7 @@ function SessionsPage({ sessions, onViewChat, lastUpdated }) {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Active Sessions</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Severity levels visible — chat content only shown for flagged sessions</p>
+        <p className="text-sm text-gray-500 mt-0.5">Severity levels visible - chat content only shown for flagged sessions</p>
       </div>
       {sessions.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
@@ -511,7 +534,7 @@ function ChatModal({ sessionId, onClose }) {
               <p className="text-xs text-gray-400">Each point = one student message. Color = detected severity.</p>
             </div>
             {severityHistory.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-8">No data yet — waiting for student messages</p>
+              <p className="text-xs text-gray-400 text-center py-8">No data yet - waiting for student messages</p>
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={200}>
