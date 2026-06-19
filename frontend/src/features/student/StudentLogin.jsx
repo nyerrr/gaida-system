@@ -1,8 +1,17 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from '../../config'
 
+
+
+
 export default function StudentLogin() {
+
+  const [captchaText, setCaptchaText] = useState('');
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const canvasRef = useRef(null);
+
+
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     student_number: '',
@@ -19,12 +28,88 @@ export default function StudentLogin() {
     setError('');
   };
 
+  const validateEmail = (email) => {
+    return email.trim().toLowerCase().endsWith('@ue.edu.ph');
+  };
+
+  const generateCaptcha = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let text = '';
+    for (let i = 0; i < 6; i++) {
+      text += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setCaptchaText(text);
+    return text;
+  };
+
+  const drawCaptcha = (text) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#f9fafb';
+    ctx.fillRect(0, 0, width, height);
+    for (let i = 0; i < 5; i++) {
+      ctx.strokeStyle = `rgba(${Math.random()*200},${Math.random()*50},${Math.random()*50},0.3)`;
+      ctx.beginPath();
+      ctx.moveTo(Math.random()*width, Math.random()*height);
+      ctx.lineTo(Math.random()*width, Math.random()*height);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = `rgba(0,0,0,0.05)`;
+      ctx.fillRect(Math.random()*width, Math.random()*height, 2, 2);
+    }
+    ctx.font = 'bold 24px monospace';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < text.length; i++) {
+      const x = 12 + i * 22;
+      const y = height / 2;
+      const angle = (Math.random() - 0.5) * 0.4;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillStyle = `rgb(${120 + Math.random()*80},${Math.random()*30},${Math.random()*30})`;
+      ctx.fillText(text[i], 0, 0);
+      ctx.restore();
+    }
+  };
+
+  const handleAntibotFocus = () => {
+    if (!showCaptcha) {
+      setShowCaptcha(true);
+      setTimeout(() => {
+        const text = generateCaptcha();
+        drawCaptcha(text);
+      }, 0);
+    }
+  };
+
+  const handleRefreshCaptcha = () => {
+    const text = generateCaptcha();
+    drawCaptcha(text);
+    setFormData(prev => ({ ...prev, antibot: '' }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+
+    if (!validateEmail(formData.email)) {
+      setError('Please enter a valid UE email address (@ue.edu.ph).');
+      return;
+    }
+
+    if (formData.antibot.toLowerCase() !== captchaText.toLowerCase()) {
+      setError('Incorrect verification code. Please try again.');
+      return;
+    }
+
+    setLoading(true);
     try {
-        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/auth/login`, {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -43,7 +128,7 @@ export default function StudentLogin() {
       setLoading(false);
     }
   };
-
+  
   return (
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
 
@@ -54,7 +139,7 @@ export default function StudentLogin() {
       />
 
       {/* White card */}
-      <div className="relative z-10 bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md mx-4">
+      <div className="relative  z-10 bg-white rounded-2xl shadow-2xl  w-full max-w-md mx-4 p-10">
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-7">
@@ -117,19 +202,41 @@ export default function StudentLogin() {
           </div>
 
           <div>
-  <label htmlFor="antibot" className="block text-gray-700 text-sm font-medium mb-1.5">
-    Anti-bot Code
-  </label>
-  <input
-    type="text"
-    id="antibot"
-    placeholder="Enter the anti-bot code"
-    value={formData.antibot}
-    onChange={handleChange}
-    className="w-full px-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-colors"
-    required
-  />
-</div>
+            <label htmlFor="antibot" className="block text-gray-700 text-sm font-medium mb-1.5">Verification Code</label>
+            <input
+              type="text"
+              id="antibot"
+              placeholder="Click here to show code"
+              value={formData.antibot}
+              onChange={handleChange}
+              onFocus={handleAntibotFocus}
+              autoComplete="off"
+              disabled={loading}
+              required
+              className="w-full px-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-colors disabled:opacity-50"
+            />
+            {showCaptcha && (
+              <div className="flex items-center gap-3 mt-2">
+                <canvas
+                  ref={canvasRef}
+                  width={148}
+                  height={44}
+                  className="rounded-lg border border-gray-200"
+                />
+                <button
+                  type="button"
+                  onClick={handleRefreshCaptcha}
+                  disabled={loading}
+                  className="flex items-center gap-1.5 text-gray-400 hover:text-red-600 text-xs transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="flex gap-3">
             <button
