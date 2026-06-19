@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from app.database.database import supabase
 
+ALLOWED_DOMAINS = ["UE.EDU.PH", "ue.edu.ph"]
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Temporary test credentials for development/testing
@@ -49,6 +51,10 @@ class ConsentRequest(BaseModel):
     consent_given: bool
 
 
+def validate_email_domain(email: str) -> bool:
+    return email.strip().lower().endswith(ALLOWED_DOMAINS)
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
     """
@@ -56,6 +62,12 @@ def login(payload: LoginRequest):
     Returns a session token on successful login.
     """
     student_number = payload.student_number.strip()
+
+    if not validate_email_domain(payload.email):
+        raise HTTPException (
+            status_code=400,
+            detail=f"email must end with one of the following domains: {', '.join(ALLOWED_DOMAINS)}"
+        )
     
     # Check if student number exists in test credentials
     if student_number not in TEST_CREDENTIALS:
