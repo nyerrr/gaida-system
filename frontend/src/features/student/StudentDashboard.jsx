@@ -85,6 +85,14 @@ const SEVERITY_CONFIG = {
   Normal:   { bar: 'bg-slate-500',   text: 'text-slate-400',   border: 'border-slate-700',   width: 'w-0'   },
 };
 
+// Quick-start prompts shown when the conversation is empty.
+// Lowers the barrier for a student who doesn't know how to start.
+const QUICK_START_PROMPTS = [
+  { icon: 'school',      text: "I'm stressed about my exams" },
+  { icon: 'message-2',   text: "I just want to talk to someone" },
+  { icon: 'cloud-rain',  text: "Things have been hard lately" },
+];
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -126,7 +134,6 @@ function TypingBubble({ color }) {
 }
 
 function Avatar({ role, accent }) {
-  const isBot = role === 'bot';
   const isCounselor = role === 'counselor';
   const bg = isCounselor ? '#0e2a45' : 'transparent';
   const border = isCounselor ? '1px solid #1a4a6e' : `1px solid ${accent}`;
@@ -155,7 +162,7 @@ function MessageBubble({ message, theme }) {
 
   return (
     <div className={`flex flex-col gap-0.5 max-w-[78%] sm:max-w-[72%] lg:max-w-[65%] ${role === 'user' ? 'items-end' : 'items-start'}`}>
-      <div className="px-3 sm:px-4 py-2.5 sm:py-3 text-sm leading-relaxed" style={bubbleStyle}>
+      <div className="px-4 sm:px-5 py-3 sm:py-3.5 text-sm leading-relaxed" style={{ ...bubbleStyle, lineHeight: 1.6 }}>
         {isVoice && (
           <div className="flex items-center gap-1 mb-1" style={{ opacity: 0.6 }}>
             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
@@ -211,6 +218,44 @@ function MessageBubble({ message, theme }) {
   );
 }
 
+// Quick-start empty state — replaces the bare icon + caption.
+// Each chip pre-fills a common entry point so the student doesn't
+// have to find the words to start typing.
+function EmptyState({ theme, onPick }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center px-4">
+      <div
+        className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
+        style={{ background: theme.sidebar, border: `1px solid ${theme.border}` }}
+      >
+        <svg className="w-7 h-7" fill="none" stroke={theme.textSecondary} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      </div>
+      <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>Hi, I'm GAIDA.</p>
+      <p className="text-xs mt-1 mb-5" style={{ color: theme.textSecondary }}>
+        What's on your mind today? This space is private.
+      </p>
+
+      <div className="flex flex-col gap-2 w-full max-w-xs">
+        {QUICK_START_PROMPTS.map((p) => (
+          <button
+            key={p.text}
+            onClick={() => onPick(p.text)}
+            className="text-left text-xs px-3.5 py-2.5 rounded-xl transition-colors"
+            style={{ background: theme.sidebar, border: `1px solid ${theme.border}`, color: theme.textSecondary }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = theme.accent; e.currentTarget.style.color = theme.textPrimary; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.color = theme.textSecondary; }}
+          >
+            {p.text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────
@@ -228,6 +273,8 @@ export default function StudentDashboard() {
   const [voiceStatus,    setVoiceStatus]    = useState('');
   const [counselorTyping,setCounselorTyping]= useState(false);
   const [counselorActive,setCounselorActive]= useState(false);
+  const [settingsOpen,   setSettingsOpen]   = useState(false);
+  const wasCounselorActive = useRef(false);
   const [theme,          setTheme]          = useState(
     () => THEMES[localStorage.getItem('gaida_theme')] || THEMES.purple
   );
@@ -238,6 +285,7 @@ export default function StudentDashboard() {
   const inputRef            = useRef(null);
   const lastCounselorCount  = useRef(0);
   const typingTimeout       = useRef(null);
+  const settingsRef         = useRef(null);
 
   const severityConfig = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.Normal;
 
@@ -250,11 +298,33 @@ export default function StudentDashboard() {
 
     // Always start a fresh session on dashboard mount
     localStorage.removeItem('session_id');
+    const studentId = localStorage.getItem('student_id');
+    fetch(`${BACKEND}/api/session/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: studentId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.session_id) localStorage.setItem('session_id', data.session_id);
+      })
+      .catch(() => {});
 
     setSidebarOpen(window.innerWidth >= 1024);
     timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
     return () => clearInterval(timerRef.current);
   }, [navigate]);
+
+  // ── Close settings popover on outside click ───────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // ── Auto-scroll ───────────────────────────────────────────────
   useEffect(() => {
@@ -275,7 +345,14 @@ export default function StudentDashboard() {
 
         if (data.messages.some(m => m.sender === 'counselor')) setCounselorActive(true);
         setCounselorTyping(data.counselor_typing || false);
-        // severity is controlled only by /virtual-agent response, not counselor poll
+
+        // ── Detect counselor handing control back to GAIDA ──────
+        const isCounselorActiveNow = data.counselor_active || false;
+        if (wasCounselorActive.current && !isCounselorActiveNow) {
+          setCounselorActive(false);
+          setMessages(prev => [...prev, { role: 'system', text: 'GAIDA has resumed the conversation.' }]);
+        }
+        wasCounselorActive.current = isCounselorActiveNow;
 
         const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
         if (counselorMsgs.length > lastCounselorCount.current) {
@@ -330,8 +407,8 @@ export default function StudentDashboard() {
     typingTimeout.current = setTimeout(() => fireTyping(false), TYPING_DEBOUNCE);
   };
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const sendMessage = async (overrideText) => {
+    const text = (overrideText ?? input).trim();
     if (!text || sending) return;
 
     clearTimeout(typingTimeout.current);
@@ -344,6 +421,9 @@ export default function StudentDashboard() {
 
     const sessionId = localStorage.getItem('session_id');
     const token     = localStorage.getItem('session_token');
+    console.log('session_id being used:', sessionId);
+    console.log('student_id in storage:', localStorage.getItem('student_id'));
+
 
     // Mirror to counselor dashboard
     if (sessionId) {
@@ -355,13 +435,13 @@ export default function StudentDashboard() {
     }
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'}/virtual-agent`, {
+      const res = await fetch(`${BACKEND}/virtual-agent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token && { Authorization: `Bearer ${token}` }),
         },
-        body: JSON.stringify({ message: text, session_id: sessionId, intent: 'unknown' }),
+        body: JSON.stringify({ message: text, session_id: sessionId, intent: 'unknown', user_id: localStorage.getItem('student_id') }),
       });
 
       if (!res.ok) {
@@ -408,6 +488,19 @@ export default function StudentDashboard() {
     localStorage.setItem('gaida_theme', key);
   };
 
+  const requestCounselor = async () => {
+    const sessionId = localStorage.getItem('session_id');
+    if (!sessionId) return;
+    try {
+      await fetch(`${BACKEND}/api/counselor/request-counselor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, message: "Student requested to speak with a counselor." }),
+      });
+      setMessages(prev => [...prev, { role: 'system', text: "Your counselor has been notified. Someone will join shortly." }]);
+    } catch (_) {}
+  };
+
   // ─────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────
@@ -435,7 +528,7 @@ export default function StudentDashboard() {
         `}
         style={{ background: theme.sidebar, borderRight: `1px solid ${theme.border}` }}
       >
-        {/* Logo */}
+        {/* Logo + settings */}
         <div className="p-5 flex items-center justify-between" style={{ borderBottom: `1px solid ${theme.border}` }}>
           <div className="flex items-center gap-3">
             <div
@@ -493,29 +586,21 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* Theme Picker */}
+        {/* Talk to a counselor — low-pressure escalation path */}
         <div className="p-4" style={{ borderBottom: `1px solid ${theme.border}` }}>
-          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: theme.textMuted }}>Theme</p>
-          <div className="flex gap-2">
-            {Object.entries(THEMES).map(([key, t]) => (
-              <button
-                key={key}
-                onClick={() => switchTheme(key)}
-                title={key}
-                style={{
-                  width: '22px',
-                  height: '22px',
-                  borderRadius: '50%',
-                  background: t.preview,
-                  border: theme.name === key ? `2px solid ${theme.textPrimary}` : '2px solid transparent',
-                  outline: theme.name === key ? `2px solid ${t.preview}` : 'none',
-                  outlineOffset: '2px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              />
-            ))}
-          </div>
+          <button
+            onClick={requestCounselor}
+            disabled={sending || counselorActive}
+            className="w-full flex items-center gap-2.5 py-2.5 px-3 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+            style={{ background: theme.bg, border: `1px solid ${theme.border}`, color: theme.textSecondary }}
+            onMouseEnter={e => { if (!sending && !counselorActive) { e.currentTarget.style.borderColor = theme.accent; e.currentTarget.style.color = theme.textPrimary; } }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.color = theme.textSecondary; }}
+          >
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            {counselorActive ? 'Counselor is with you' : 'Talk to a real counselor'}
+          </button>
         </div>
 
         {/* Quick Tips */}
@@ -547,7 +632,7 @@ export default function StudentDashboard() {
 
         {/* Topbar */}
         <div
-          className="h-14 flex items-center px-4 gap-3 flex-shrink-0"
+          className="h-14 flex items-center px-4 gap-3 flex-shrink-0 relative"
           style={{ background: theme.sidebar, borderBottom: `1px solid ${theme.border}` }}
         >
           <button
@@ -567,16 +652,59 @@ export default function StudentDashboard() {
           </span>
 
           <div
-            className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${severityConfig.text} ${severityConfig.border}`}
+            className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold ${severityConfig.text} ${severityConfig.border}`}
             style={{ background: theme.bg }}
           >
             <div className={`w-1.5 h-1.5 rounded-full ${severityConfig.bar}`} />
             <span className="hidden sm:inline">{severity}</span>
           </div>
 
+          {/* Settings popover trigger — houses theme picker, decluttering the sidebar */}
+          <div ref={settingsRef} className="relative flex-shrink-0">
+            <button
+              onClick={() => setSettingsOpen(p => !p)}
+              className="p-1.5 rounded-lg transition-colors"
+              style={{ color: theme.textSecondary, background: settingsOpen ? theme.border : 'transparent' }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+
+            {settingsOpen && (
+              <div
+                className="absolute right-0 top-full mt-2 p-3 rounded-xl z-40"
+                style={{ background: theme.sidebar, border: `1px solid ${theme.border}`, minWidth: '160px' }}
+              >
+                <p className="text-xs uppercase tracking-widest mb-2.5" style={{ color: theme.textMuted }}>Theme</p>
+                <div className="flex gap-2">
+                  {Object.entries(THEMES).map(([key, t]) => (
+                    <button
+                      key={key}
+                      onClick={() => switchTheme(key)}
+                      title={key}
+                      style={{
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '50%',
+                        background: t.preview,
+                        border: theme.name === key ? `2px solid ${theme.textPrimary}` : '2px solid transparent',
+                        outline: theme.name === key ? `2px solid ${t.preview}` : 'none',
+                        outlineOffset: '2px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: theme.accent }} />
-            <span className="text-xs hidden sm:inline" style={{ color: theme.accent }}>Online</span>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: theme.accent }} />
+            <span className="text-xs hidden sm:inline" style={{ color: theme.textSecondary }}>GAIDA is here</span>
           </div>
         </div>
 
@@ -586,21 +714,9 @@ export default function StudentDashboard() {
           className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-3"
           style={{ background: theme.bg }}
         >
-          {/* Empty state */}
+          {/* Empty state with quick-start chips */}
           {messages.length === 0 && !voiceStatus && (
-            <div className="flex flex-col items-center justify-center h-full text-center px-4">
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
-                style={{ background: theme.sidebar, border: `1px solid ${theme.border}` }}
-              >
-                <svg className="w-7 h-7" fill="none" stroke={theme.textSecondary} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <p className="text-sm" style={{ color: theme.textPrimary }}>Start the conversation.</p>
-              <p className="text-xs mt-1" style={{ color: theme.textSecondary }}>Your session is private and secure.</p>
-            </div>
+            <EmptyState theme={theme} onPick={(text) => sendMessage(text)} />
           )}
 
           {/* Message list */}
@@ -705,7 +821,7 @@ export default function StudentDashboard() {
                 onStatusChange={setVoiceStatus}
               />
               <button
-                onClick={sendMessage}
+                onClick={() => sendMessage()}
                 disabled={sending || !input.trim()}
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all duration-200 flex-shrink-0"
                 style={

@@ -2,34 +2,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 from app.database.database import supabase
+from app.constants import TEST_CREDENTIALS
 
-ALLOWED_DOMAINS = ["UE.EDU.PH", "ue.edu.ph"]
+ALLOWED_DOMAIN = "@ue.edu.ph"
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-# Temporary test credentials for development/testing
-TEST_CREDENTIALS = {
-    "2024001": {
-        "email": "student1@ue.edu.ph",
-        "access_code": "ACCESS123",
-        "antibot": "HELLO",
-    },
-    "2024002": {
-        "email": "student2@ue.edu.ph",
-        "access_code": "ACCESS456",
-        "antibot": "WORLD",
-    },
-    "2024003": {
-        "email": "student3@ue.edu.ph",
-        "access_code": "ACCESS789",
-        "antibot": "GAIDA",
-    },
-    "COUNSELOR01": {
-        "email": "counselor@ue.edu.ph",
-        "access_code": "COUNSEL123",
-        "antibot": "GAIDA",
-    },
-}
 
 
 class LoginRequest(BaseModel):
@@ -52,7 +29,7 @@ class ConsentRequest(BaseModel):
 
 
 def validate_email_domain(email: str) -> bool:
-    return email.strip().lower().endswith(ALLOWED_DOMAINS)
+    return email.strip().lower().endswith(ALLOWED_DOMAIN)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -64,9 +41,9 @@ def login(payload: LoginRequest):
     student_number = payload.student_number.strip()
 
     if not validate_email_domain(payload.email):
-        raise HTTPException (
+        raise HTTPException(
             status_code=400,
-            detail=f"email must end with one of the following domains: {', '.join(ALLOWED_DOMAINS)}"
+            detail=f"Email must end with {ALLOWED_DOMAIN}"
         )
     
     # Check if student number exists in test credentials
@@ -75,10 +52,9 @@ def login(payload: LoginRequest):
     
     credentials = TEST_CREDENTIALS[student_number]
     
-    # Validate all fields
+    # Validate credentials (antibot is verified client-side via canvas captcha)
     if (payload.email != credentials["email"] or
-        payload.access_code != credentials["access_code"] or
-        payload.antibot != credentials["antibot"]):
+        payload.access_code != credentials["access_code"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Generate a simple session token (in production, use JWT)
@@ -162,3 +138,4 @@ def get_test_credentials():
             }
         ]
     }
+

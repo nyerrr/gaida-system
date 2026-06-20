@@ -20,6 +20,7 @@ const QUICK_RESPONSES = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const severityColor = (s) => {
   if (s === 'High' || s === 'Crisis') return { bg: 'bg-red-600', text: 'text-white', dot: 'bg-red-500', border: 'border-red-200', light: 'bg-red-50', hex: '#ef4444' };
+  if (s === 'Requested') return { bg: 'bg-blue-600', text: 'text-white', dot: 'bg-blue-500', border: 'border-blue-200', light: 'bg-blue-50', hex: '#3b82f6' };
   if (s === 'Moderate') return { bg: 'bg-amber-500', text: 'text-white', dot: 'bg-amber-400', border: 'border-amber-200', light: 'bg-amber-50', hex: '#f59e0b' };
   if (s === 'Low') return { bg: 'bg-green-500', text: 'text-white', dot: 'bg-green-400', border: 'border-green-200', light: 'bg-green-50', hex: '#22c55e' };
   return { bg: 'bg-gray-400', text: 'text-white', dot: 'bg-gray-400', border: 'border-gray-200', light: 'bg-gray-50', hex: '#9ca3af' };
@@ -83,6 +84,7 @@ const NAV = [
   { id: 'sessions',  label: 'Active Sessions',   icon: '◉' },
   { id: 'detection', label: 'Anxiety Detection', icon: '〜' },
   { id: 'reports',   label: 'Reports',           icon: '≡' },
+  { id: 'resolved',  label: 'Resolved Cases',    icon: '✓' },
 ];
 
 // ── Overview Page ─────────────────────────────────────────────────────────────
@@ -232,7 +234,11 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
   const AlertRow = ({ a }) => {
     const sc = severityColor(a.severity);
     return (
-      <div className={`p-4 border-l-4 ${a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500 bg-red-50' : 'border-amber-400 bg-amber-50'} rounded-r-xl mb-3`}>
+      <div className={`p-4 border-l-4 ${
+        a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500 bg-red-50' :
+        a.severity === 'Requested' ? 'border-blue-500 bg-blue-50' :
+        'border-amber-400 bg-amber-50'
+      } rounded-r-xl mb-3`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -349,14 +355,72 @@ function ChatModal({ sessionId, onClose }) {
   const [tookOver, setTookOver] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
   const [studentTyping, setStudentTyping] = useState(false);
+  const [returningToGaida, setReturningToGaida] = useState(false);
   const bottomRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolved, setResolved] = useState(false);
+  const [studentProfile, setStudentProfile] = useState(null);
 
+  // ── Case Notes state ──────────────────────────────────────────────────────
+  const [noteText, setNoteText] = useState('');
+  const [noteOutcome, setNoteOutcome] = useState('');
+  const [savedNote, setSavedNote] = useState(null);
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState('');
+
+  const OUTCOMES = [
+    { value: 'resolved',          label: 'Resolved',           desc: 'Handled, no further action needed' },
+    { value: 'false_alarm',       label: 'False alarm',        desc: 'Flagged by system but not concerning' },
+    { value: 'referred',          label: 'Referred',           desc: 'Escalated to in-person guidance office' },
+    { value: 'follow_up',         label: 'Follow-up scheduled',desc: 'Counselor will check in again' },
+    { value: 'ongoing',           label: 'Ongoing',            desc: 'Still being monitored' },
+  ];
+
+  const OUTCOME_COLORS = {
+    resolved:    { dot: 'bg-green-500',  badge: 'bg-green-100 text-green-800' },
+    false_alarm: { dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-700' },
+    referred:    { dot: 'bg-blue-500',   badge: 'bg-blue-100 text-blue-800' },
+    follow_up:   { dot: 'bg-amber-500',  badge: 'bg-amber-100 text-amber-800' },
+    ongoing:     { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-800' },
+  };
+
+
+  useEffect(() => {
+    // get user_id from the session first, then fetch profile
+    fetch(`${BACKEND}/api/counselor/chat/${sessionId}`)
+      .then(r => r.json())
+      .then(data => {
+        const userId = data.user_id;
+        if (userId) {
+          return fetch(`${BACKEND}/api/counselor/student-profile/${userId}`)
+            .then(r => r.json())
+            .then(d => setStudentProfile(d.profile));
+        }
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  
   useEffect(() => {
     fetchChat();
     const interval = setInterval(fetchChat, 3000);
     return () => clearInterval(interval);
+  }, [sessionId]);
+
+  // Load existing note when modal opens
+  useEffect(() => {
+    fetch(`${BACKEND}/api/counselor/session-notes/${sessionId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.notes && data.notes.length > 0) {
+          const latest = data.notes[0]; // already ordered desc
+          setSavedNote(latest);
+          setNoteText(latest.note || '');
+          setNoteOutcome(latest.outcome || '');
+        }
+      })
+      .catch(() => {});
   }, [sessionId]);
 
   useEffect(() => {
@@ -370,23 +434,10 @@ function ChatModal({ sessionId, onClose }) {
       const res = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
       const data = await res.json();
       if (data.messages) setMessages(data.messages);
-      // Update student typing indicator
       setStudentTyping(data.student_typing || false);
     } catch (e) {} finally {
       setLoading(false);
     }
-  };
-
-  const fetchAlerts = async () => {
-    console.log('Fetching alerts...', new Date().toLocaleTimeString());
-    try {
-      const res = await fetch(`${BACKEND}/api/counselor/alerts`);
-      const data = await res.json();
-      if (data.alerts) {
-        const newPending = data.alerts.filter(a => a.status === 'pending').length;
-        console.log('Pending alerts:', newPending); 
-      }
-    } catch (e) {}
   };
 
   const fireCounselorTyping = (isTyping) => {
@@ -422,11 +473,8 @@ const typingThrottleRef = useRef(null);
   const sendTakeover = async (msg) => {
     const text = msg || takeoverMsg;
     if (!text.trim()) return;
-
-    // Clear typing signal on send
     clearTimeout(typingTimeoutRef.current);
     fireCounselorTyping(false);
-
     setSending(true);
     try {
       const res = await fetch(`${BACKEND}/api/counselor/takeover`, {
@@ -445,6 +493,49 @@ const typingThrottleRef = useRef(null);
     }
   };
 
+  const handleReturnToGaida = async () => {
+    setReturningToGaida(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/return-to-gaida`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTookOver(false);
+        fetchChat();
+      }
+    } catch (e) {} finally {
+      setReturningToGaida(false);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteOutcome) { setNoteError('Please select an outcome.'); return; }
+    setNoteError('');
+    setSavingNote(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/session-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          note: noteText,
+          outcome: noteOutcome,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSavedNote({ note: noteText, outcome: noteOutcome, updated_at: new Date().toISOString() });
+      }
+    } catch (e) {
+      setNoteError('Failed to save. Please try again.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   const severityHistory = messages
     .filter(m => m.sender === 'user' && m.confidence)
     .map((m, i) => ({
@@ -460,6 +551,31 @@ const typingThrottleRef = useRef(null);
     return <circle cx={cx} cy={cy} r={4} fill={colors[payload.severity] || '#9ca3af'} stroke="white" strokeWidth={1.5} />;
   };
 
+  const TABS = [
+    { id: 'chat',  label: 'Chat Transcript' },
+    { id: 'graph', label: 'Anxiety Progression' },
+    { id: 'notes', label: 'Case Notes' },
+  ];
+  
+  const handleResolve = async () => {
+    if (!window.confirm('Mark this session as resolved? It will be removed from active sessions.')) return;
+    setResolving(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/sessions/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setResolved(true);
+        setTimeout(() => onClose(), 1500);
+      }
+    } catch (e) {} finally {
+      setResolving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -467,10 +583,35 @@ const typingThrottleRef = useRef(null);
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-sm font-bold text-gray-900">Live Session</h3>
-            <p className="text-xs text-gray-500">{sessionId.slice(0, 24)}...</p>
+            {studentProfile ? (
+              <>
+                <p className="text-sm font-bold text-gray-900">{studentProfile.name}</p>
+                <p className="text-xs text-gray-500">
+                  {studentProfile.student_id}
+                  {studentProfile.program && ` · ${studentProfile.program}`}
+                  {studentProfile.year && `, Year ${studentProfile.year}`}
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-bold text-gray-900">Live Session</h3>
+                <p className="text-xs text-gray-500">{sessionId.slice(0, 24)}...</p>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2">
+            {resolved ? (
+              <span className="text-xs text-green-600 font-medium">✓ Session resolved</span>
+            ) : (
+              <button
+                onClick={handleResolve}
+                disabled={resolving || !savedNote}
+                title={!savedNote ? 'Save a case note before resolving' : undefined}
+                className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {resolving ? 'Resolving...' : 'Resolve session'}
+              </button>
+            )}
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <span className="text-xs text-gray-400 mr-2">Live</span>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-bold">✕</button>
@@ -479,13 +620,16 @@ const typingThrottleRef = useRef(null);
 
         {/* Tabs */}
         <div className="flex border-b border-gray-100 flex-shrink-0">
-          {[{ id: 'chat', label: 'Chat Transcript' }, { id: 'graph', label: 'Anxiety Progression' }].map(t => (
+          {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex-1 py-2.5 text-xs font-medium transition-colors ${activeTab === t.id ? 'bg-gray-100 text-gray-900 border-b-2 border-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex-1 py-2.5 text-xs font-medium transition-colors relative ${activeTab === t.id ? 'bg-gray-100 text-gray-900 border-b-2 border-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
             >
               {t.label}
+              {t.id === 'notes' && savedNote && (
+                <span className="absolute top-1.5 right-3 w-1.5 h-1.5 rounded-full bg-blue-500" />
+              )}
             </button>
           ))}
         </div>
@@ -498,33 +642,38 @@ const typingThrottleRef = useRef(null);
             ) : messages.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">No messages yet</p>
             ) : (
-              messages.map((m, i) => (
-                <div key={i} className={`flex ${m.sender === 'student' || m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
-                    m.sender === 'student' || m.sender === 'user'
-                      ? 'bg-gray-800 text-white rounded-tr-sm'
-                      : m.sender === 'counselor'
-                      ? 'bg-blue-600 text-white rounded-tl-sm'
-                      : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
-                  }`}>
-                    {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">You (Counselor)</p>}
-                    <p>{m.text}</p>
-                    {(m.sender === 'user' || m.sender === 'student') && m.confidence && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                          confidenceToSeverity(m.confidence) === 'High' ? 'bg-red-400' :
-                          confidenceToSeverity(m.confidence) === 'Moderate' ? 'bg-amber-400' :
-                          confidenceToSeverity(m.confidence) === 'Low' ? 'bg-green-400' : 'bg-gray-400'
-                        }`} />
-                        <p className="text-gray-400 text-xs">{m.intent} • {(m.confidence * 100).toFixed(0)}% • {confidenceToSeverity(m.confidence)}</p>
-                      </div>
-                    )}
+              messages
+                .filter((m, i, arr) => {
+                  if (i === 0) return true;
+                  const prev = arr[i - 1];
+                  return !(prev.sender === m.sender && prev.text === m.text);
+                })
+                .map((m, i) => (
+                  <div key={i} className={`flex ${m.sender === 'student' || m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                      m.sender === 'student' || m.sender === 'user'
+                        ? 'bg-gray-800 text-white rounded-tr-sm'
+                        : m.sender === 'counselor'
+                        ? 'bg-blue-600 text-white rounded-tl-sm'
+                        : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
+                    }`}>
+                      {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">You (Counselor)</p>}
+                      {m.sender === 'bot' && <p className="text-gray-400 text-xs font-semibold mb-1">GAIDA</p>}
+                      <p>{m.text}</p>
+                      {(m.sender === 'user' || m.sender === 'student') && m.confidence && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            confidenceToSeverity(m.confidence) === 'High' ? 'bg-red-400' :
+                            confidenceToSeverity(m.confidence) === 'Moderate' ? 'bg-amber-400' :
+                            confidenceToSeverity(m.confidence) === 'Low' ? 'bg-green-400' : 'bg-gray-400'
+                          }`} />
+                          <p className="text-gray-400 text-xs">{m.intent} • {(m.confidence * 100).toFixed(0)}% • {confidenceToSeverity(m.confidence)}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))
             )}
-
-            {/* Student typing bubble */}
             {studentTyping && (
               <div className="flex justify-end">
                 <div className="bg-gray-700 px-3 py-2 rounded-xl rounded-tr-sm">
@@ -536,7 +685,6 @@ const typingThrottleRef = useRef(null);
                 </div>
               </div>
             )}
-
             <div ref={bottomRef} />
           </div>
         )}
@@ -604,39 +752,133 @@ const typingThrottleRef = useRef(null);
           </div>
         )}
 
-        {/* Quick Responses + Input */}
-        <div className="px-4 pt-3 border-t border-gray-100 flex-shrink-0">
-          <p className="text-xs text-gray-400 mb-2">Quick responses:</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {QUICK_RESPONSES.map((r) => (
-              <button
-                key={r.label}
-                onClick={() => sendTakeover(r.text)}
-                disabled={sending}
-                className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-100 hover:text-blue-700 text-gray-600 rounded-full border border-gray-200 hover:border-blue-300 transition-colors disabled:opacity-50"
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          {tookOver && <p className="text-xs text-blue-600 font-medium mb-2">✓ You have joined this session</p>}
-          <div className="flex gap-2 pb-3">
-            <input
-              value={takeoverMsg}
-              onChange={handleInputChange}
-              onKeyDown={e => e.key === 'Enter' && sendTakeover()}
-              placeholder="Type a message to the student..."
-              className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
-            />
+        {/* Case Notes Tab */}
+        {activeTab === 'notes' && (
+          <div className="flex-1 overflow-y-auto p-4 min-h-0">
+
+            {/* Saved note banner */}
+            {savedNote && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-500 text-xs">✓</span>
+                  <span className="text-xs text-blue-700 font-medium">Note saved</span>
+                  {savedNote.updated_at && (
+                    <span className="text-xs text-blue-400">{formatRelative(savedNote.updated_at)}</span>
+                  )}
+                </div>
+                {savedNote.outcome && (() => {
+                  const oc = OUTCOME_COLORS[savedNote.outcome];
+                  const outcomeLabel = OUTCOMES.find(o => o.value === savedNote.outcome)?.label;
+                  return (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${oc?.badge}`}>
+                      {outcomeLabel}
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Outcome selector */}
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-900 mb-2">Outcome</p>
+              <div className="space-y-2">
+                {OUTCOMES.map(o => {
+                  const oc = OUTCOME_COLORS[o.value];
+                  const selected = noteOutcome === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      onClick={() => setNoteOutcome(o.value)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                        selected
+                          ? 'border-gray-900 bg-gray-50'
+                          : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${oc.dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold ${selected ? 'text-gray-900' : 'text-gray-700'}`}>{o.label}</p>
+                        <p className="text-xs text-gray-400">{o.desc}</p>
+                      </div>
+                      {selected && <span className="text-gray-900 text-xs flex-shrink-0">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Notes textarea */}
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-900 mb-2">Notes</p>
+              <textarea
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="Document what happened, what was said, and any follow-up actions..."
+                rows={5}
+                className="w-full text-xs px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 resize-none leading-relaxed text-gray-800 placeholder-gray-400"
+              />
+            </div>
+
+            {noteError && (
+              <p className="text-xs text-red-600 mb-3">{noteError}</p>
+            )}
+
             <button
-              onClick={() => sendTakeover()}
-              disabled={sending || !takeoverMsg.trim()}
-              className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              onClick={handleSaveNote}
+              disabled={savingNote}
+              className="w-full py-2.5 bg-gray-900 text-white text-xs font-medium rounded-xl hover:bg-gray-700 disabled:opacity-50 transition-colors"
             >
-              {sending ? '...' : 'Send'}
+              {savingNote ? 'Saving...' : savedNote ? 'Update note' : 'Save note'}
             </button>
           </div>
-        </div>
+        )}
+
+        {/* Quick Responses + Input — hidden on notes tab */}
+        {activeTab !== 'notes' && (
+          <div className="px-4 pt-3 border-t border-gray-100 flex-shrink-0">
+            <p className="text-xs text-gray-400 mb-2">Quick responses:</p>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {QUICK_RESPONSES.map((r) => (
+                <button
+                  key={r.label}
+                  onClick={() => sendTakeover(r.text)}
+                  disabled={sending}
+                  className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-100 hover:text-blue-700 text-gray-600 rounded-full border border-gray-200 hover:border-blue-300 transition-colors disabled:opacity-50"
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            {tookOver && (
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-blue-600 font-medium">✓ You have joined this session</p>
+                <button
+                  onClick={handleReturnToGaida}
+                  disabled={returningToGaida}
+                  className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full border border-gray-200 transition-colors disabled:opacity-50"
+                >
+                  {returningToGaida ? 'Returning...' : '← Return to GAIDA'}
+                </button>
+              </div>
+            )}
+            <div className="flex gap-2 pb-3">
+              <input
+                value={takeoverMsg}
+                onChange={handleInputChange}
+                onKeyDown={e => e.key === 'Enter' && sendTakeover()}
+                placeholder="Type a message to the student..."
+                className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
+              />
+              <button
+                onClick={() => sendTakeover()}
+                disabled={sending || !takeoverMsg.trim()}
+                className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              >
+                {sending ? '...' : 'Send'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -858,12 +1100,147 @@ export default function CounselorDashboard() {
             {activePage === 'sessions' && <SessionsPage sessions={sessions} onViewChat={setChatSessionId} lastUpdated={lastUpdated} />}
             {activePage === 'detection' && <DetectionPage />}
             {activePage === 'reports'   && <ReportsPage />}
+            {activePage === 'resolved'  && <ResolvedCasesPage />}
           </div>
         </main>
       </div>
 
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Resolved Cases Page ───────────────────────────────────────────────────────
+function ResolvedCasesPage() {
+  const [cases, setCases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
+
+  const OUTCOME_COLORS = {
+    resolved:    { badge: 'bg-green-100 text-green-800' },
+    false_alarm: { badge: 'bg-gray-100 text-gray-700' },
+    referred:    { badge: 'bg-blue-100 text-blue-800' },
+    follow_up:   { badge: 'bg-amber-100 text-amber-800' },
+    ongoing:     { badge: 'bg-red-100 text-red-800' },
+  };
+
+  const OUTCOME_LABELS = {
+    resolved:    'Resolved',
+    false_alarm: 'False alarm',
+    referred:    'Referred',
+    follow_up:   'Follow-up scheduled',
+    ongoing:     'Ongoing',
+  };
+
+  useEffect(() => {
+    fetch(`${BACKEND}/api/counselor/sessions/resolved`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.sessions) setCases(data.sessions);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Resolved Cases</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Closed sessions with case notes and transcripts</p>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-gray-400 text-center py-20">Loading...</p>
+      ) : cases.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <p className="text-4xl mb-3">✓</p>
+          <p className="text-sm font-medium">No resolved cases yet</p>
+          <p className="text-xs mt-1">Sessions marked as resolved will appear here</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {cases.map((c, i) => {
+            const sc = severityColor(c.severity);
+            const isOpen = expanded === i;
+            const oc = OUTCOME_COLORS[c.note?.outcome];
+            return (
+              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* Case header */}
+                <div
+                  className="px-5 py-4 flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => setExpanded(isOpen ? null : i)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      {c.profile ? (
+                        <span className="text-sm font-semibold text-gray-900">{c.profile.name}</span>
+                      ) : (
+                        <span className="text-sm font-semibold text-gray-900">{c.student_id || 'Unknown'}</span>
+                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{c.severity}</span>
+                      {c.note?.outcome && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${oc?.badge}`}>
+                          {OUTCOME_LABELS[c.note.outcome]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {c.profile && (
+                        <span className="text-xs text-gray-400">
+                          {c.profile.student_id}
+                          {c.profile.program && ` · ${c.profile.program}`}
+                          {c.profile.year && `, Year ${c.profile.year}`}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">{formatRelative(c.timestamp)}</span>
+                      <span className="text-xs text-gray-400">{c.transcript?.length || 0} messages</span>
+                    </div>
+                  </div>
+                  <span className="text-gray-400 text-sm flex-shrink-0">{isOpen ? '▲' : '▼'}</span>
+                </div>
+
+                {/* Expanded content */}
+                {isOpen && (
+                  <div className="border-t border-gray-100">
+                    {/* Case note */}
+                    {c.note && (
+                      <div className="px-5 py-4 border-b border-gray-50">
+                        <p className="text-xs font-semibold text-gray-900 mb-1">Case Note</p>
+                        <p className="text-xs text-gray-600 leading-relaxed">{c.note.note || '—'}</p>
+                      </div>
+                    )}
+
+                    {/* Transcript */}
+                    <div className="px-5 py-4 bg-gray-50 max-h-80 overflow-y-auto space-y-2">
+                      <p className="text-xs font-semibold text-gray-900 mb-2">Transcript</p>
+                      {c.transcript?.length === 0 ? (
+                        <p className="text-xs text-gray-400">No messages recorded</p>
+                      ) : (
+                        c.transcript?.map((m, j) => (
+                          <div key={j} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                              m.sender === 'user'
+                                ? 'bg-gray-800 text-white rounded-tr-sm'
+                                : m.sender === 'counselor'
+                                ? 'bg-blue-600 text-white rounded-tl-sm'
+                                : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
+                            }`}>
+                              {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">Counselor</p>}
+                              {m.sender === 'bot' && <p className="text-gray-400 text-xs font-semibold mb-1">GAIDA</p>}
+                              <p>{m.message || m.text}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

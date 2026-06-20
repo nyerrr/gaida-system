@@ -57,6 +57,7 @@ app.add_middleware(
 class UserInput(BaseModel):
     message: str
     session_id: str | None = None
+    user_id: str | None = None
 
 class ConsentInput(BaseModel):
     session_id: str
@@ -123,6 +124,7 @@ def virtual_agent(input: UserInput):
     result = analyze_intent(
         user_message=input.message,
         session_id=input.session_id,
+        user_id=input.user_id,
     )
 
     if result.get("counselor_active"):

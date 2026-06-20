@@ -48,13 +48,13 @@ def _detect_urgent(text: str) -> bool:
     return any(kw in txt for kw in URGENT_PHYSICAL_KEYWORDS)
 
 
-def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str, Any]:
+def analyze_intent(user_message: str, session_id: str | None = None, user_id: str | None = None) -> Dict[str, Any]:
 
     # --- Step 1: Ensure session exists ---
     if session_id and get_session(session_id):
         session = get_session(session_id)
     else:
-        session_id = start_session()
+        session_id = start_session(user_id)
         session = get_session(session_id)
 
     # --- Step 2: Detect intent + raw confidence ---
@@ -253,6 +253,21 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
         )
     except Exception as e:
         logger.error(f"Failed to record interaction: {e}")
+
+    # --- Step 9a: Also log GAIDA's bot reply as its own visible message ---
+    # Only fires here because counselor_active sessions already return early in Step 6,
+    # so this code path only runs when GAIDA is the one actually replying.
+    if response_text:
+        try:
+            record_interaction(
+                session_id=session_id,
+                sender="bot",
+                text=response_text,
+                analysis={},
+                response=None,
+            )
+        except Exception as e:
+            logger.error(f"Failed to record bot interaction: {e}")
 
     # --- Step 9b: Track question themes to prevent repetition ---
     if response_text and "meta" in session:
