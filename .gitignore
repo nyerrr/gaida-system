@@ -48,3 +48,6 @@ htmlcov/
 backend/logs/
 consents.json
 interactions.json
+
+# PWA dev build output
+frontend/dev-dist/

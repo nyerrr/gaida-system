@@ -37,9 +37,10 @@ const formatRelative = (ts) => {
 const formatDuration = (startedAt) => {
   if (!startedAt) return '—';
   const diff = Math.floor((Date.now() - new Date(startedAt)) / 1000);
-  const m = Math.floor(diff / 60).toString().padStart(2, '0');
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
   const s = (diff % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+  return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 };
 
 const confidenceToSeverity = (c) => {
@@ -226,25 +227,103 @@ function OverviewPage({ alerts, sessions }) {
   );
 }
 
+// ── Escalation helpers ────────────────────────────────────────────────────────
+const getEscalationState = (timestamp) => {
+  const now = Date.now();
+  const alertTime = new Date(timestamp).getTime();
+  const ageMinutes = Math.floor((now - alertTime) / 60000);
 
-// ── Alerts Page ───────────────────────────────────────────────────────────────
+  const hour = new Date().getHours();
+  const day = new Date().getDay();
+  const isOffHours = hour < 8 || hour >= 17 || day === 0 || day === 6;
+
+  const warnThreshold  = isOffHours ? 5  : 10;
+  const urgentThreshold = isOffHours ? 15 : 30;
+
+  if (ageMinutes >= urgentThreshold) return { level: 'urgent',  ageMinutes, isOffHours };
+  if (ageMinutes >= warnThreshold)   return { level: 'warning', ageMinutes, isOffHours };
+  return { level: 'normal', ageMinutes, isOffHours };
+};
+
+
 function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
-  const pending = alerts.filter(a => a.status === 'pending');
+  const [now, setNow] = useState(Date.now());
+
+  // Tick every 30 seconds to update escalation states
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Re-play alert sound for urgent unattended alerts
+  useEffect(() => {
+    const urgentPending = alerts.filter(a => {
+      if (a.status !== 'pending') return false;
+      const esc = getEscalationState(a.timestamp);
+      return esc.level === 'urgent';
+    });
+    if (urgentPending.length > 0) playAlertSound();
+    const interval = setInterval(() => {
+      const stillUrgent = alerts.filter(a => {
+        if (a.status !== 'pending') return false;
+        const esc = getEscalationState(a.timestamp);
+        return esc.level === 'urgent';
+      });
+      if (stillUrgent.length > 0) playAlertSound();
+    }, 5 * 60 * 1000); // every 5 minutes
+    return () => clearInterval(interval);
+  }, [alerts]);
+
+  const pending  = alerts.filter(a => a.status === 'pending');
   const resolved = alerts.filter(a => a.status !== 'pending');
+
   const AlertRow = ({ a }) => {
-    const sc = severityColor(a.severity);
+    const sc  = severityColor(a.severity);
+    const esc = getEscalationState(a.timestamp);
+
+    const borderColor =
+      esc.level === 'urgent'  ? 'border-red-500' :
+      esc.level === 'warning' ? 'border-amber-400' :
+      a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500' :
+      a.severity === 'Requested' ? 'border-blue-500' :
+      'border-amber-400';
+
+    const bgColor =
+      esc.level === 'urgent'  ? 'bg-red-50' :
+      esc.level === 'warning' ? 'bg-amber-50' :
+      a.severity === 'High' || a.severity === 'Crisis' ? 'bg-red-50' :
+      a.severity === 'Requested' ? 'bg-blue-50' :
+      'bg-amber-50';
+
     return (
-      <div className={`p-4 border-l-4 ${
-        a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500 bg-red-50' :
-        a.severity === 'Requested' ? 'border-blue-500 bg-blue-50' :
-        'border-amber-400 bg-amber-50'
-      } rounded-r-xl mb-3`}>
+      <div className={`p-4 border-l-4 ${borderColor} ${bgColor} rounded-r-xl mb-3 ${
+        esc.level === 'urgent' ? 'ring-1 ring-red-300 ring-offset-1' : ''
+      }`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{a.severity}</span>
               <span className="text-xs text-gray-500">{a.intent}</span>
               <span className="text-xs text-gray-400">{formatRelative(a.timestamp)}</span>
+
+              {/* Escalation badge */}
+              {esc.level === 'urgent' && (
+                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-red-600 text-white animate-pulse">
+                  ⚠ Unattended {esc.ageMinutes}m
+                </span>
+              )}
+              {esc.level === 'warning' && (
+                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-500 text-white">
+                  Waiting {esc.ageMinutes}m+
+                </span>
+              )}
+
+              {/* Off-hours tag */}
+              {esc.isOffHours && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-200">
+                  Off-hours
+                </span>
+              )}
             </div>
             <p className="text-xs font-semibold text-gray-700 mb-1">Session: {a.session_id.slice(0, 16)}...</p>
             <p className="text-xs text-gray-600 truncate">"{a.message}"</p>
@@ -256,9 +335,21 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
             )}
           </div>
         </div>
+
+        {/* Urgent warning bar */}
+        {esc.level === 'urgent' && (
+          <div className="mt-3 pt-3 border-t border-red-200 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+            <p className="text-xs text-red-700 font-medium">
+              This alert has been waiting {esc.ageMinutes} minutes without a response.
+              {esc.isOffHours && ' Session occurred outside office hours.'}
+            </p>
+          </div>
+        )}
       </div>
     );
   };
+
   return (
     <div>
       <div className="mb-6">
@@ -324,6 +415,7 @@ function SessionsPage({ sessions, onViewChat, lastUpdated }) {
                       <span className="text-sm font-semibold text-gray-900">{s.session_id.slice(0, 16)}...</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{s.severity}</span>
                       {s.has_alert && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">⚠ Alert</span>}
+                      {s.assigned_counselor_id && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Assigned</span>}
                     </div>
                     <p className="text-xs text-gray-500">{s.message_count} messages • {formatDuration(s.started_at)} • intent: {s.intent}</p>
                   </div>
@@ -361,6 +453,7 @@ function ChatModal({ sessionId, onClose }) {
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   // ── Case Notes state ──────────────────────────────────────────────────────
   const [noteText, setNoteText] = useState('');
@@ -476,11 +569,12 @@ const typingThrottleRef = useRef(null);
     clearTimeout(typingTimeoutRef.current);
     fireCounselorTyping(false);
     setSending(true);
+    const counselorData = JSON.parse(localStorage.getItem('counselorData') || '{}');
     try {
       const res = await fetch(`${BACKEND}/api/counselor/takeover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message: text }),
+        body: JSON.stringify({ session_id: sessionId, message: text, counselor_id: counselorData.id || counselorData.student_number }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -505,11 +599,14 @@ const typingThrottleRef = useRef(null);
       if (data.ok) {
         setTookOver(false);
         fetchChat();
+      } else if (data.error === 'already_assigned') {
+        setNoteError(`This session is already being handled by another counselor.`);
       }
     } catch (e) {} finally {
       setReturningToGaida(false);
     }
   };
+
 
   const handleSaveNote = async () => {
     if (!noteOutcome) { setNoteError('Please select an outcome.'); return; }
@@ -576,6 +673,27 @@ const typingThrottleRef = useRef(null);
     }
   };
 
+  const handleExportSession = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/export-session/${sessionId}`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `GAIDA_Session_${sessionId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export error:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -600,6 +718,22 @@ const typingThrottleRef = useRef(null);
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportSession}
+              disabled={exporting}
+              className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-200 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {exporting ? (
+                '...'
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export
+                </>
+              )}
+            </button>
             {resolved ? (
               <span className="text-xs text-green-600 font-medium">✓ Session resolved</span>
             ) : (
@@ -1198,7 +1332,18 @@ function ResolvedCasesPage() {
                       <span className="text-xs text-gray-400">{c.transcript?.length || 0} messages</span>
                     </div>
                   </div>
-                  <span className="text-gray-400 text-sm flex-shrink-0">{isOpen ? '▲' : '▼'}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`${BACKEND}/api/counselor/export-session/${c.session_id}`, '_blank');
+                      }}
+                      className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg border border-gray-200 transition-colors"
+                    >
+                      Export PDF
+                    </button>
+                    <span className="text-gray-400 text-sm">{isOpen ? '▲' : '▼'}</span>
+                  </div>
                 </div>
 
                 {/* Expanded content */}

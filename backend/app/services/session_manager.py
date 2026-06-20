@@ -7,6 +7,7 @@ import asyncio
 from app.utils.consent_checker import has_consent
 
 SESSIONS: Dict[str, Dict[str, Any]] = {}
+SESSION_STALE_MINUTES = 30  # sessions with no activity in this window are excluded from "active"
 _SUBSCRIBERS: List[Callable] = []
 
 
@@ -16,7 +17,7 @@ def start_session(user_id: str | None = None) -> str:
     SESSIONS[session_id] = {
         "session_id": session_id,
         "user_id": user_id,
-        "started_at": datetime.utcnow().isoformat(),
+        "started_at": datetime.utcnow().isoformat() + "Z",
         "messages": [],
         "active": True,
         "meta": {
@@ -77,7 +78,7 @@ def record_interaction(session_id: str, sender: str, text: str, analysis: Dict |
         session = SESSIONS[session_id]
 
     entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
         "session_id": session_id,
         "sender": sender,
         "text": text,
@@ -144,11 +145,28 @@ def get_session(session_id: str):
 
 
 def list_active_sessions():
-    return [s for s in SESSIONS.values() if s.get("active")]
+    now = datetime.utcnow()
+    result = []
+    for s in SESSIONS.values():
+        if not s.get("active"):
+            continue
+        if len(s.get("messages", [])) == 0:
+            continue  # never sent a message — likely a stray/incomplete session
+        last_msg_time = s["messages"][-1].get("timestamp")
+        if last_msg_time:
+            try:
+                last_dt = datetime.fromisoformat(last_msg_time)
+                age_minutes = (now - last_dt).total_seconds() / 60
+                if age_minutes > SESSION_STALE_MINUTES:
+                    continue  # no activity in 30+ minutes — treat as abandoned
+            except (ValueError, TypeError):
+                pass
+        result.append(s)
+    return result
 
 
 def end_session(session_id: str):
     s = SESSIONS.get(session_id)
     if s:
         s["active"] = False
-        s["ended_at"] = datetime.utcnow().isoformat()
+        s["ended_at"] = datetime.utcnow().isoformat() + "Z"

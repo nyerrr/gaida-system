@@ -12,3 +12,4 @@ gtts
 python-multipart
 numpy
 scikit-learn
+reportlab==4.2.0
