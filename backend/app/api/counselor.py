@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -210,6 +210,7 @@ def get_chat_transcript(session_id: str):
             "severity": session.get("meta", {}).get("running_confidence", 0.3),
             "counselor_typing": typing.get("counselor", False),
             "student_typing": typing.get("student", False),
+            "counselor_active": session.get("meta", {}).get("counselor_active", False),
         }
     except Exception as e:
         return {"error": str(e), "messages": [], "counselor_typing": False, "student_typing": False}
@@ -282,6 +283,31 @@ def counselor_takeover(payload: TakeOverMessage):
         return {"ok": True, "message": payload.message}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@router.post("/return-to-gaida")
+def return_to_gaida(payload: dict):
+    from app.services.session_manager import get_session, record_interaction
+    
+    session_id = payload.get("session_id")
+    session = get_session(session_id)
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if "meta" not in session:
+        session["meta"] = {}
+    
+    session["meta"]["counselor_active"] = False
+    
+    record_interaction(
+        session_id=session_id,
+        sender="system",
+        text="Counselor returned the conversation to GAIDA.",
+        analysis={},
+        response=None,
+    )
+    
+    return {"ok": True, "session_id": session_id}
 
 
 @router.get("/severity/{anxiety_score}")

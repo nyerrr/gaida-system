@@ -354,6 +354,7 @@ function ChatModal({ sessionId, onClose }) {
   const [tookOver, setTookOver] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
   const [studentTyping, setStudentTyping] = useState(false);
+  const [returningToGaida, setReturningToGaida] = useState(false);
   const bottomRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -435,6 +436,24 @@ function ChatModal({ sessionId, onClose }) {
     }
   };
 
+  const handleReturnToGaida = async () => {
+    setReturningToGaida(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/return-to-gaida`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTookOver(false);
+        fetchChat();
+      }
+    } catch (e) {} finally {
+      setReturningToGaida(false);
+    }
+  };
+
   const severityHistory = messages
     .filter(m => m.sender === 'user' && m.confidence)
     .map((m, i) => ({
@@ -488,30 +507,37 @@ function ChatModal({ sessionId, onClose }) {
             ) : messages.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">No messages yet</p>
             ) : (
-              messages.map((m, i) => (
-                <div key={i} className={`flex ${m.sender === 'student' || m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
-                    m.sender === 'student' || m.sender === 'user'
-                      ? 'bg-gray-800 text-white rounded-tr-sm'
-                      : m.sender === 'counselor'
-                      ? 'bg-blue-600 text-white rounded-tl-sm'
-                      : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
-                  }`}>
-                    {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">You (Counselor)</p>}
-                    <p>{m.text}</p>
-                    {(m.sender === 'user' || m.sender === 'student') && m.confidence && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                          confidenceToSeverity(m.confidence) === 'High' ? 'bg-red-400' :
-                          confidenceToSeverity(m.confidence) === 'Moderate' ? 'bg-amber-400' :
-                          confidenceToSeverity(m.confidence) === 'Low' ? 'bg-green-400' : 'bg-gray-400'
-                        }`} />
-                        <p className="text-gray-400 text-xs">{m.intent} • {(m.confidence * 100).toFixed(0)}% • {confidenceToSeverity(m.confidence)}</p>
-                      </div>
-                    )}
+              messages
+                .filter((m, i, arr) => {
+                  if (i === 0) return true;
+                  const prev = arr[i - 1];
+                  return !(prev.sender === m.sender && prev.text === m.text);
+                })
+                .map((m, i) => (
+                  <div key={i} className={`flex ${m.sender === 'student' || m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                      m.sender === 'student' || m.sender === 'user'
+                        ? 'bg-gray-800 text-white rounded-tr-sm'
+                        : m.sender === 'counselor'
+                        ? 'bg-blue-600 text-white rounded-tl-sm'
+                        : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
+                    }`}>
+                      {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">You (Counselor)</p>}
+                      {m.sender === 'bot' && <p className="text-gray-400 text-xs font-semibold mb-1">GAIDA</p>}
+                      <p>{m.text}</p>
+                      {(m.sender === 'user' || m.sender === 'student') && m.confidence && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            confidenceToSeverity(m.confidence) === 'High' ? 'bg-red-400' :
+                            confidenceToSeverity(m.confidence) === 'Moderate' ? 'bg-amber-400' :
+                            confidenceToSeverity(m.confidence) === 'Low' ? 'bg-green-400' : 'bg-gray-400'
+                          }`} />
+                          <p className="text-gray-400 text-xs">{m.intent} • {(m.confidence * 100).toFixed(0)}% • {confidenceToSeverity(m.confidence)}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))
             )}
 
             {/* Student typing bubble */}
@@ -609,7 +635,18 @@ function ChatModal({ sessionId, onClose }) {
               </button>
             ))}
           </div>
-          {tookOver && <p className="text-xs text-blue-600 font-medium mb-2">✓ You have joined this session</p>}
+          {tookOver && (
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-blue-600 font-medium">✓ You have joined this session</p>
+              <button
+                onClick={handleReturnToGaida}
+                disabled={returningToGaida}
+                className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full border border-gray-200 transition-colors disabled:opacity-50"
+              >
+                {returningToGaida ? 'Returning...' : '← Return to GAIDA'}
+              </button>
+            </div>
+          )}
           <div className="flex gap-2 pb-3">
             <input
               value={takeoverMsg}

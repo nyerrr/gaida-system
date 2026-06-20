@@ -274,6 +274,7 @@ export default function StudentDashboard() {
   const [counselorTyping,setCounselorTyping]= useState(false);
   const [counselorActive,setCounselorActive]= useState(false);
   const [settingsOpen,   setSettingsOpen]   = useState(false);
+  const wasCounselorActive = useRef(false);
   const [theme,          setTheme]          = useState(
     () => THEMES[localStorage.getItem('gaida_theme')] || THEMES.purple
   );
@@ -333,6 +334,14 @@ export default function StudentDashboard() {
 
         if (data.messages.some(m => m.sender === 'counselor')) setCounselorActive(true);
         setCounselorTyping(data.counselor_typing || false);
+
+        // ── Detect counselor handing control back to GAIDA ──────
+        const isCounselorActiveNow = data.counselor_active || false;
+        if (wasCounselorActive.current && !isCounselorActiveNow) {
+          setCounselorActive(false);
+          setMessages(prev => [...prev, { role: 'system', text: 'GAIDA has resumed the conversation.' }]);
+        }
+        wasCounselorActive.current = isCounselorActiveNow;
 
         const counselorMsgs = data.messages.filter(m => m.sender === 'counselor');
         if (counselorMsgs.length > lastCounselorCount.current) {

@@ -254,6 +254,21 @@ def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str
     except Exception as e:
         logger.error(f"Failed to record interaction: {e}")
 
+    # --- Step 9a: Also log GAIDA's bot reply as its own visible message ---
+    # Only fires here because counselor_active sessions already return early in Step 6,
+    # so this code path only runs when GAIDA is the one actually replying.
+    if response_text:
+        try:
+            record_interaction(
+                session_id=session_id,
+                sender="bot",
+                text=response_text,
+                analysis={},
+                response=None,
+            )
+        except Exception as e:
+            logger.error(f"Failed to record bot interaction: {e}")
+
     # --- Step 9b: Track question themes to prevent repetition ---
     if response_text and "meta" in session:
         if "covered_themes" not in session["meta"]:
