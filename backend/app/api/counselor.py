@@ -2,6 +2,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from fastapi.responses import Response as FastAPIResponse
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 router = APIRouter(prefix="/api/counselor", tags=["counselor"])
 
@@ -45,11 +52,11 @@ def process_alert(
 
         if existing:
             existing["last_message"] = message
-            existing["timestamp"] = datetime.utcnow().isoformat()
+            existing["timestamp"] = datetime.utcnow().isoformat() + "Z"
             existing["intent"] = intent
         else:
             alert_entry = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.utcnow().isoformat() + "Z",
                 "session_id": session_id,
                 "user_id": user_id,
                 "intent": intent,
@@ -120,6 +127,7 @@ class ResolveSession(BaseModel):
 # API endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post("/sessions/resolve")
 def resolve_session(payload: ResolveSession):
     try:
@@ -131,14 +139,14 @@ def resolve_session(payload: ResolveSession):
         if "meta" not in session:
             session["meta"] = {}
         session["meta"]["resolved"] = True
-        session["meta"]["resolved_at"] = datetime.utcnow().isoformat()
+        session["meta"]["resolved_at"] = datetime.utcnow().isoformat() + "Z"
         session["meta"]["resolved_by"] = payload.resolved_by
 
         # Also mark the alert as resolved
         for alert in ALERTS:
             if alert["session_id"] == payload.session_id:
                 alert["status"] = "resolved"
-                alert["resolved_at"] = datetime.utcnow().isoformat()
+                alert["resolved_at"] = datetime.utcnow().isoformat() + "z"
 
         try:
             from app.database.database import supabase
@@ -148,7 +156,7 @@ def resolve_session(payload: ResolveSession):
 
             supabase.table("sessions").update({
                 "resolved": True,
-                "resolved_at": datetime.utcnow().isoformat(),
+                "resolved_at": datetime.utcnow().isoformat() + "Z",
                 "resolved_by": payload.resolved_by,
             }).eq("session_token", payload.session_id).execute()
         except Exception as e:
@@ -227,7 +235,7 @@ def add_session_note(payload: SessionNote):
             "session_id": payload.session_id,
             "note": payload.note,
             "outcome": payload.outcome,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.utcnow().isoformat() + "Z",
         }).execute()
         return {"ok": True}
     except Exception as e:
@@ -259,7 +267,7 @@ def update_alert_status(payload: AlertStatusUpdate):
     for alert in ALERTS:
         if alert["session_id"] == payload.session_id:
             alert["status"] = payload.status
-            alert["updated_at"] = datetime.utcnow().isoformat()
+            alert["updated_at"] = datetime.utcnow().isoformat() + "Z"
             try:
                 from app.database.database import supabase
                 supabase.table("counselor_alerts").update({
@@ -514,10 +522,10 @@ def request_counselor(payload: CounselorRequest):
         existing = next((a for a in ALERTS if a["session_id"] == payload.session_id), None)
         if existing:
             existing["last_message"] = payload.message
-            existing["timestamp"] = datetime.utcnow().isoformat()
+            existing["timestamp"] = datetime.utcnow().isoformat() + "Z"
         else:
             alert_entry = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.utcnow().isoformat() + "Z",
                 "session_id": payload.session_id,
                 "user_id": None,
                 "intent": "student_requested",
@@ -561,3 +569,144 @@ def get_student_profile(student_id: str):
         "program": creds.get("program"),
         "year": creds.get("year"),
     }}
+
+
+@router.get("/export-session/{session_id}")
+def export_session_pdf(session_id: str):
+    from app.services.session_manager import get_session
+    from app.constants import TEST_CREDENTIALS
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages = session.get("messages", [])
+    meta = session.get("meta", {})
+    user_id = session.get("user_id")
+
+    # Pull student profile if available, matching student-profile endpoint logic
+    creds = TEST_CREDENTIALS.get(user_id, {}) if user_id else {}
+    student_name = creds.get("name", "Not identified")
+    student_program = creds.get("program", "—")
+    student_year = creds.get("year", "—")
+    student_email = creds.get("email", "—")
+
+    # Pull latest case note if one exists
+    note_text = "—"
+    note_outcome = "—"
+    try:
+        from app.database.database import supabase
+        notes = supabase.table("session_notes")\
+            .select("*")\
+            .eq("session_id", session_id)\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+        if notes.data:
+            note_text = notes.data[0].get("note") or "—"
+            note_outcome = notes.data[0].get("outcome") or "—"
+    except Exception as e:
+        print(f"Note fetch error during export: {e}")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.6*inch, bottomMargin=0.6*inch)
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=4)
+    meta_style = ParagraphStyle('Meta', parent=styles['Normal'], fontSize=9, textColor=colors.grey)
+    label_style = ParagraphStyle('Label', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#374151'), spaceBefore=2, spaceAfter=2)
+
+    elements = []
+
+    # ── Header ─────────────────────────────────────────────
+    elements.append(Paragraph("GAIDA — Session Referral Report", title_style))
+    elements.append(Paragraph("University of the East — Guidance & Counseling Office", meta_style))
+    elements.append(Spacer(1, 12))
+
+    # ── Student info table ─────────────────────────────────
+    student_data = [
+        ["Student Name", student_name],
+        ["Student ID", user_id or "Not identified"],
+        ["Program / Year", f"{student_program}, Year {student_year}" if student_program != "—" else "—"],
+        ["Email", student_email],
+    ]
+    student_table = Table(student_data, colWidths=[150, 350])
+    student_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#374151')),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(student_table)
+    elements.append(Spacer(1, 16))
+
+    # ── Session metadata table ────────────────────────────
+    summary_data = [
+        ["Session ID", session_id],
+        ["Started At", session.get("started_at", "—")],
+        ["Total Messages", str(len(messages))],
+        ["Peak Anxiety Level", meta.get("running_intent", "—").title()],
+        ["Final Confidence Score", f"{meta.get('running_confidence', 0):.0%}"],
+        ["Resolved By", meta.get("resolved_by") or "Not yet resolved"],
+        ["Outcome", note_outcome.replace("_", " ").title() if note_outcome != "—" else "—"],
+        ["Case Note", note_text],
+    ]
+    summary_table = Table(summary_data, colWidths=[150, 350])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#374151')),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 20))
+
+    # ── Conversation transcript ───────────────────────────
+    elements.append(Paragraph("Conversation Transcript", styles['Heading2']))
+    elements.append(Spacer(1, 8))
+
+    sender_labels = {
+        "user": "Student",
+        "assistant": "GAIDA",
+        "bot": "GAIDA",
+        "counselor": "Counselor",
+        "system": "System",
+    }
+
+    for m in messages:
+        sender = sender_labels.get(m.get("sender"), m.get("sender", "Unknown"))
+        text = m.get("text", "") or ""
+        timestamp = m.get("timestamp", "")
+        analysis = m.get("analysis", {})
+        intent = analysis.get("intent")
+        confidence = analysis.get("confidence")
+
+        tag = f"<b>{sender}</b>"
+        if intent and confidence is not None:
+            tag += f" <font size=8 color='#9ca3af'>({intent}, {confidence:.0%})</font>"
+        tag += f" <font size=7 color='#9ca3af'>{timestamp}</font>"
+
+        elements.append(Paragraph(tag, label_style))
+        elements.append(Paragraph(text.replace('\n', '<br/>'), styles['Normal']))
+        elements.append(Spacer(1, 8))
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    return FastAPIResponse(
+        content=buffer.read(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=GAIDA_Session_{session_id[:8]}.pdf"
+        },
+    )

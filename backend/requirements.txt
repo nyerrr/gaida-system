@@ -8,3 +8,4 @@ librosa
 opensmile
 pyaudio
 speechrecognition
+reportlab==4.2.0

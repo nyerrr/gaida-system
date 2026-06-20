@@ -37,9 +37,10 @@ const formatRelative = (ts) => {
 const formatDuration = (startedAt) => {
   if (!startedAt) return '—';
   const diff = Math.floor((Date.now() - new Date(startedAt)) / 1000);
-  const m = Math.floor(diff / 60).toString().padStart(2, '0');
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
   const s = (diff % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+  return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 };
 
 const confidenceToSeverity = (c) => {
@@ -452,6 +453,7 @@ function ChatModal({ sessionId, onClose }) {
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   // ── Case Notes state ──────────────────────────────────────────────────────
   const [noteText, setNoteText] = useState('');
@@ -561,7 +563,8 @@ function ChatModal({ sessionId, onClose }) {
       });
       const data = await res.json();
       if (data.ok) {
-        setTookOver(false);
+        setTookOver(true);
+        setTakeoverMsg('');
         fetchChat();
       }
     } catch (e) {} finally {
@@ -579,8 +582,7 @@ function ChatModal({ sessionId, onClose }) {
       });
       const data = await res.json();
       if (data.ok) {
-        setTookOver(true);
-        setTakeoverMsg('');
+        setTookOver(false);
         fetchChat();
       } else if (data.error === 'already_assigned') {
         setNoteError(`This session is already being handled by another counselor.`);
@@ -589,6 +591,7 @@ function ChatModal({ sessionId, onClose }) {
       setReturningToGaida(false);
     }
   };
+
 
   const handleSaveNote = async () => {
     if (!noteOutcome) { setNoteError('Please select an outcome.'); return; }
@@ -655,6 +658,27 @@ function ChatModal({ sessionId, onClose }) {
     }
   };
 
+  const handleExportSession = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/export-session/${sessionId}`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `GAIDA_Session_${sessionId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export error:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -679,6 +703,22 @@ function ChatModal({ sessionId, onClose }) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportSession}
+              disabled={exporting}
+              className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-200 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {exporting ? (
+                '...'
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export
+                </>
+              )}
+            </button>
             {resolved ? (
               <span className="text-xs text-green-600 font-medium">✓ Session resolved</span>
             ) : (
@@ -1277,7 +1317,18 @@ function ResolvedCasesPage() {
                       <span className="text-xs text-gray-400">{c.transcript?.length || 0} messages</span>
                     </div>
                   </div>
-                  <span className="text-gray-400 text-sm flex-shrink-0">{isOpen ? '▲' : '▼'}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`${BACKEND}/api/counselor/export-session/${c.session_id}`, '_blank');
+                      }}
+                      className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg border border-gray-200 transition-colors"
+                    >
+                      Export PDF
+                    </button>
+                    <span className="text-gray-400 text-sm">{isOpen ? '▲' : '▼'}</span>
+                  </div>
                 </div>
 
                 {/* Expanded content */}
