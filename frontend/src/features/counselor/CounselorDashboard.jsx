@@ -357,6 +357,8 @@ function ChatModal({ sessionId, onClose }) {
   const [returningToGaida, setReturningToGaida] = useState(false);
   const bottomRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolved, setResolved] = useState(false);
 
   // ── Case Notes state ──────────────────────────────────────────────────────
   const [noteText, setNoteText] = useState('');
@@ -520,6 +522,25 @@ function ChatModal({ sessionId, onClose }) {
     { id: 'graph', label: 'Anxiety Progression' },
     { id: 'notes', label: 'Case Notes' },
   ];
+  
+  const handleResolve = async () => {
+    if (!window.confirm('Mark this session as resolved? It will be removed from active sessions.')) return;
+    setResolving(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/sessions/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setResolved(true);
+        setTimeout(() => onClose(), 1500);
+      }
+    } catch (e) {} finally {
+      setResolving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -532,6 +553,18 @@ function ChatModal({ sessionId, onClose }) {
             <p className="text-xs text-gray-500">{sessionId.slice(0, 24)}...</p>
           </div>
           <div className="flex items-center gap-2">
+            {resolved ? (
+              <span className="text-xs text-green-600 font-medium">✓ Session resolved</span>
+            ) : (
+              <button
+                onClick={handleResolve}
+                disabled={resolving || !savedNote}
+                title={!savedNote ? 'Save a case note before resolving' : undefined}
+                className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {resolving ? 'Resolving...' : 'Resolve session'}
+              </button>
+            )}
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <span className="text-xs text-gray-400 mr-2">Live</span>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-bold">✕</button>

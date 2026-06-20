@@ -111,11 +111,48 @@ class SessionNote(BaseModel):
     note: str
     outcome: str # e.g. "resolved", "false_alarm", "referred", "follow_up_scheduled"
 
+class ResolveSession(BaseModel):
+    session_id: str
+    resolved_by: Optional[str] = None
+
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/session-notes")
+@router.post("/sessions/resolve")
+def resolve_session(payload: ResolveSession):
+    try:
+        from app.services.session_manager import get_session
+        session = get_session(payload.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        if "meta" not in session:
+            session["meta"] = {}
+        session["meta"]["resolved"] = True
+        session["meta"]["resolved_at"] = datetime.utcnow().isoformat()
+        session["meta"]["resolved_by"] = payload.resolved_by
+
+        # Also mark the alert as resolved
+        for alert in ALERTS:
+            if alert["session_id"] == payload.session_id:
+                alert["status"] = "resolved"
+                alert["resolved_at"] = datetime.utcnow().isoformat()
+
+        try:
+            from app.database.database import supabase
+            supabase.table("counselor_alerts").update({
+                "status": "resolved"
+            }).eq("session_id", payload.session_id).execute()
+        except Exception as e:
+            print(f"Supabase resolve error: {e}")
+
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 @router.post("/session-notes")
 def add_session_note(payload: SessionNote):
     try:
@@ -139,7 +176,7 @@ def get_session_notes(session_id: str):
     except Exception as e:
         return {"notes": [], "error": str(e)}
     
-    
+
 @router.get("/alerts")
 def get_alerts():
     return {"alerts": ALERTS, "count": len(ALERTS)}
@@ -175,6 +212,9 @@ def get_active_sessions():
         sessions = list_active_sessions()
         result = []
         for s in sessions:
+            # Skip resolved sessions
+            if s.get("meta", {}).get("resolved"):
+                continue
             meta = s.get("meta", {})
             severity = meta.get("severity", "Normal")
             confidence = meta.get("running_confidence", 0.3)
