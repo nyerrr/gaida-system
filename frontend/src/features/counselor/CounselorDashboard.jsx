@@ -324,6 +324,7 @@ function SessionsPage({ sessions, onViewChat, lastUpdated }) {
                       <span className="text-sm font-semibold text-gray-900">{s.session_id.slice(0, 16)}...</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{s.severity}</span>
                       {s.has_alert && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">⚠ Alert</span>}
+                      {s.assigned_counselor_id && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Assigned</span>}
                     </div>
                     <p className="text-xs text-gray-500">{s.message_count} messages • {formatDuration(s.started_at)} • intent: {s.intent}</p>
                   </div>
@@ -461,17 +462,20 @@ function ChatModal({ sessionId, onClose }) {
     clearTimeout(typingTimeoutRef.current);
     fireCounselorTyping(false);
     setSending(true);
+    const counselorData = JSON.parse(localStorage.getItem('counselorData') || '{}');
     try {
       const res = await fetch(`${BACKEND}/api/counselor/takeover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message: text }),
+        body: JSON.stringify({ session_id: sessionId, message: text, counselor_id: counselorData.id || counselorData.student_number }),
       });
       const data = await res.json();
       if (data.ok) {
         setTookOver(true);
         setTakeoverMsg('');
         fetchChat();
+      } else if (data.error === 'already_assigned') {
+        setNoteError('This session is already being handled by another counselor.');
       }
     } catch (e) {} finally {
       setSending(false);
@@ -488,8 +492,11 @@ function ChatModal({ sessionId, onClose }) {
       });
       const data = await res.json();
       if (data.ok) {
-        setTookOver(false);
+        setTookOver(true);
+        setTakeoverMsg('');
         fetchChat();
+      } else if (data.error === 'already_assigned') {
+        setNoteError(`This session is already being handled by another counselor.`);
       }
     } catch (e) {} finally {
       setReturningToGaida(false);

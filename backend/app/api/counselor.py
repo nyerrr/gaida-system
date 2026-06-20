@@ -93,6 +93,7 @@ class AlertStatusUpdate(BaseModel):
 class TakeOverMessage(BaseModel):
     session_id: str
     message: str
+    counselor_id: str | None = None
 
 class TypingPayload(BaseModel):
     is_typing: bool
@@ -308,6 +309,7 @@ def get_active_sessions():
                 "intent": meta.get("running_intent", "neutral"),
                 "has_alert": has_alert,
                 "active": s.get("active", True),
+                "assigned_counselor_id": meta.get("assigned_counselor_id"),
             })
 
         return {"sessions": result, "count": len(result)}
@@ -347,6 +349,7 @@ def get_chat_transcript(session_id: str):
             "counselor_typing": typing.get("counselor", False),
             "student_typing": typing.get("student", False),
             "counselor_active": session.get("meta", {}).get("counselor_active", False),
+            "assigned_counselor_id": session.get("meta", {}).get("assigned_counselor_id"),
         }
     except Exception as e:
         return {"error": str(e), "messages": [], "counselor_typing": False, "student_typing": False}
@@ -399,8 +402,15 @@ def counselor_takeover(payload: TakeOverMessage):
 
         if "meta" not in session:
             session["meta"] = {}
+
+        # Block if already assigned to a different counselor
+        assigned = session["meta"].get("assigned_counselor_id")
+        if assigned and assigned != payload.counselor_id:
+            return {"ok": False, "error": "already_assigned", "assigned_to": assigned}
+
         session["meta"]["counselor_active"] = True
         session["meta"]["counselor_message"] = payload.message
+        session["meta"]["assigned_counselor_id"] = payload.counselor_id
 
         record_interaction(
             session_id=payload.session_id,
@@ -434,6 +444,7 @@ def return_to_gaida(payload: dict):
         session["meta"] = {}
     
     session["meta"]["counselor_active"] = False
+    session["meta"]["assigned_counselor_id"] = None
     
     record_interaction(
         session_id=session_id,

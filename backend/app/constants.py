@@ -21,8 +21,8 @@ TEST_CREDENTIALS = {
         "year": 1,
     },
     "COUNSELOR01": {
-        "email": "counselor@ue.edu.ph",
-        "access_code": "COUNSEL123",
+        "email": "counselor01",
+        "access_code": "counsel123",
         "name": "Dr. Patricia Lim",
     },
 }

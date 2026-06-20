@@ -46,3 +46,6 @@ htmlcov/
 # Runtime data files
 consents.json
 interactions.json
+
+# PWA dev build output
+frontend/dev-dist/
