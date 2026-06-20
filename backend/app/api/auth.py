@@ -2,30 +2,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 from app.database.database import supabase
+from app.constants import TEST_CREDENTIALS
 
 ALLOWED_DOMAIN = "@ue.edu.ph"
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-# Temporary test credentials for development/testing
-TEST_CREDENTIALS = {
-    "2024001": {
-        "email": "student1@ue.edu.ph",
-        "access_code": "ACCESS123",
-    },
-    "2024002": {
-        "email": "student2@ue.edu.ph",
-        "access_code": "ACCESS456",
-    },
-    "2024003": {
-        "email": "student3@ue.edu.ph",
-        "access_code": "ACCESS789",
-    },
-    "COUNSELOR01": {
-        "email": "counselor@ue.edu.ph",
-        "access_code": "COUNSEL123",
-    },
-}
 
 
 class LoginRequest(BaseModel):
@@ -157,3 +138,4 @@ def get_test_credentials():
             }
         ]
     }
+

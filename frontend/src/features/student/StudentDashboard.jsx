@@ -298,6 +298,17 @@ export default function StudentDashboard() {
 
     // Always start a fresh session on dashboard mount
     localStorage.removeItem('session_id');
+    const studentId = localStorage.getItem('student_id');
+    fetch(`${BACKEND}/api/session/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: studentId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.session_id) localStorage.setItem('session_id', data.session_id);
+      })
+      .catch(() => {});
 
     setSidebarOpen(window.innerWidth >= 1024);
     timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
@@ -410,6 +421,9 @@ export default function StudentDashboard() {
 
     const sessionId = localStorage.getItem('session_id');
     const token     = localStorage.getItem('session_token');
+    console.log('session_id being used:', sessionId);
+    console.log('student_id in storage:', localStorage.getItem('student_id'));
+
 
     // Mirror to counselor dashboard
     if (sessionId) {
@@ -427,7 +441,7 @@ export default function StudentDashboard() {
           'Content-Type': 'application/json',
           ...(token && { Authorization: `Bearer ${token}` }),
         },
-        body: JSON.stringify({ message: text, session_id: sessionId, intent: 'unknown' }),
+        body: JSON.stringify({ message: text, session_id: sessionId, intent: 'unknown', user_id: localStorage.getItem('student_id') }),
       });
 
       if (!res.ok) {

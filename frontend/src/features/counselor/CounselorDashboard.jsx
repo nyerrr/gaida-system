@@ -359,6 +359,7 @@ function ChatModal({ sessionId, onClose }) {
   const typingTimeoutRef = useRef(null);
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
+  const [studentProfile, setStudentProfile] = useState(null);
 
   // ── Case Notes state ──────────────────────────────────────────────────────
   const [noteText, setNoteText] = useState('');
@@ -383,6 +384,23 @@ function ChatModal({ sessionId, onClose }) {
     ongoing:     { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-800' },
   };
 
+
+  useEffect(() => {
+    // get user_id from the session first, then fetch profile
+    fetch(`${BACKEND}/api/counselor/chat/${sessionId}`)
+      .then(r => r.json())
+      .then(data => {
+        const userId = data.user_id;
+        if (userId) {
+          return fetch(`${BACKEND}/api/counselor/student-profile/${userId}`)
+            .then(r => r.json())
+            .then(d => setStudentProfile(d.profile));
+        }
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  
   useEffect(() => {
     fetchChat();
     const interval = setInterval(fetchChat, 3000);
@@ -549,8 +567,21 @@ function ChatModal({ sessionId, onClose }) {
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-sm font-bold text-gray-900">Live Session</h3>
-            <p className="text-xs text-gray-500">{sessionId.slice(0, 24)}...</p>
+            {studentProfile ? (
+              <>
+                <p className="text-sm font-bold text-gray-900">{studentProfile.name}</p>
+                <p className="text-xs text-gray-500">
+                  {studentProfile.student_id}
+                  {studentProfile.program && ` · ${studentProfile.program}`}
+                  {studentProfile.year && `, Year ${studentProfile.year}`}
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-bold text-gray-900">Live Session</h3>
+                <p className="text-xs text-gray-500">{sessionId.slice(0, 24)}...</p>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {resolved ? (

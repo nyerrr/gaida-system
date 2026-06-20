@@ -48,13 +48,13 @@ def _detect_urgent(text: str) -> bool:
     return any(kw in txt for kw in URGENT_PHYSICAL_KEYWORDS)
 
 
-def analyze_intent(user_message: str, session_id: str | None = None) -> Dict[str, Any]:
+def analyze_intent(user_message: str, session_id: str | None = None, user_id: str | None = None) -> Dict[str, Any]:
 
     # --- Step 1: Ensure session exists ---
     if session_id and get_session(session_id):
         session = get_session(session_id)
     else:
-        session_id = start_session()
+        session_id = start_session(user_id)
         session = get_session(session_id)
 
     # --- Step 2: Detect intent + raw confidence ---

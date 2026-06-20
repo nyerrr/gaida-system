@@ -276,6 +276,7 @@ def get_chat_transcript(session_id: str):
 
         return {
             "session_id": session_id,
+            "user_id": session.get("user_id"),
             "messages": messages,
             "severity": session.get("meta", {}).get("running_confidence", 0.3),
             "counselor_typing": typing.get("counselor", False),
@@ -470,3 +471,17 @@ def request_counselor(payload: CounselorRequest):
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+    
+@router.get("/student-profile/{student_id}")
+def get_student_profile(student_id: str):
+    from app.constants import TEST_CREDENTIALS
+    creds = TEST_CREDENTIALS.get(student_id)
+    if not creds or "name" not in creds:
+        return {"profile": None}
+    return {"profile": {
+        "student_id": student_id,
+        "name": creds["name"],
+        "email": creds["email"],
+        "program": creds.get("program"),
+        "year": creds.get("year"),
+    }}
