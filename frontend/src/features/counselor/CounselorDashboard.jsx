@@ -357,12 +357,49 @@ function ChatModal({ sessionId, onClose }) {
   const [returningToGaida, setReturningToGaida] = useState(false);
   const bottomRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
+
+  // ── Case Notes state ──────────────────────────────────────────────────────
+  const [noteText, setNoteText] = useState('');
+  const [noteOutcome, setNoteOutcome] = useState('');
+  const [savedNote, setSavedNote] = useState(null);
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState('');
+
+  const OUTCOMES = [
+    { value: 'resolved',          label: 'Resolved',           desc: 'Handled, no further action needed' },
+    { value: 'false_alarm',       label: 'False alarm',        desc: 'Flagged by system but not concerning' },
+    { value: 'referred',          label: 'Referred',           desc: 'Escalated to in-person guidance office' },
+    { value: 'follow_up',         label: 'Follow-up scheduled',desc: 'Counselor will check in again' },
+    { value: 'ongoing',           label: 'Ongoing',            desc: 'Still being monitored' },
+  ];
+
+  const OUTCOME_COLORS = {
+    resolved:    { dot: 'bg-green-500',  badge: 'bg-green-100 text-green-800' },
+    false_alarm: { dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-700' },
+    referred:    { dot: 'bg-blue-500',   badge: 'bg-blue-100 text-blue-800' },
+    follow_up:   { dot: 'bg-amber-500',  badge: 'bg-amber-100 text-amber-800' },
+    ongoing:     { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-800' },
+  };
 
   useEffect(() => {
     fetchChat();
     const interval = setInterval(fetchChat, 3000);
     return () => clearInterval(interval);
+  }, [sessionId]);
+
+  // Load existing note when modal opens
+  useEffect(() => {
+    fetch(`${BACKEND}/api/counselor/session-notes/${sessionId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.notes && data.notes.length > 0) {
+          const latest = data.notes[0]; // already ordered desc
+          setSavedNote(latest);
+          setNoteText(latest.note || '');
+          setNoteOutcome(latest.outcome || '');
+        }
+      })
+      .catch(() => {});
   }, [sessionId]);
 
   useEffect(() => {
@@ -376,23 +413,10 @@ function ChatModal({ sessionId, onClose }) {
       const res = await fetch(`${BACKEND}/api/counselor/chat/${sessionId}`);
       const data = await res.json();
       if (data.messages) setMessages(data.messages);
-      // Update student typing indicator
       setStudentTyping(data.student_typing || false);
     } catch (e) {} finally {
       setLoading(false);
     }
-  };
-
-  const fetchAlerts = async () => {
-    console.log('Fetching alerts...', new Date().toLocaleTimeString());
-    try {
-      const res = await fetch(`${BACKEND}/api/counselor/alerts`);
-      const data = await res.json();
-      if (data.alerts) {
-        const newPending = data.alerts.filter(a => a.status === 'pending').length;
-        console.log('Pending alerts:', newPending); 
-      }
-    } catch (e) {}
   };
 
   const fireCounselorTyping = (isTyping) => {
@@ -413,11 +437,8 @@ function ChatModal({ sessionId, onClose }) {
   const sendTakeover = async (msg) => {
     const text = msg || takeoverMsg;
     if (!text.trim()) return;
-
-    // Clear typing signal on send
     clearTimeout(typingTimeoutRef.current);
     fireCounselorTyping(false);
-
     setSending(true);
     try {
       const res = await fetch(`${BACKEND}/api/counselor/takeover`, {
@@ -454,6 +475,31 @@ function ChatModal({ sessionId, onClose }) {
     }
   };
 
+  const handleSaveNote = async () => {
+    if (!noteOutcome) { setNoteError('Please select an outcome.'); return; }
+    setNoteError('');
+    setSavingNote(true);
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/session-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          note: noteText,
+          outcome: noteOutcome,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSavedNote({ note: noteText, outcome: noteOutcome, updated_at: new Date().toISOString() });
+      }
+    } catch (e) {
+      setNoteError('Failed to save. Please try again.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   const severityHistory = messages
     .filter(m => m.sender === 'user' && m.confidence)
     .map((m, i) => ({
@@ -468,6 +514,12 @@ function ChatModal({ sessionId, onClose }) {
     const colors = { Crisis: '#b91c1c', High: '#ef4444', Moderate: '#f59e0b', Low: '#22c55e', Normal: '#9ca3af' };
     return <circle cx={cx} cy={cy} r={4} fill={colors[payload.severity] || '#9ca3af'} stroke="white" strokeWidth={1.5} />;
   };
+
+  const TABS = [
+    { id: 'chat',  label: 'Chat Transcript' },
+    { id: 'graph', label: 'Anxiety Progression' },
+    { id: 'notes', label: 'Case Notes' },
+  ];
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -488,13 +540,16 @@ function ChatModal({ sessionId, onClose }) {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-100 flex-shrink-0">
-          {[{ id: 'chat', label: 'Chat Transcript' }, { id: 'graph', label: 'Anxiety Progression' }].map(t => (
+          {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex-1 py-2.5 text-xs font-medium transition-colors ${activeTab === t.id ? 'bg-gray-100 text-gray-900 border-b-2 border-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex-1 py-2.5 text-xs font-medium transition-colors relative ${activeTab === t.id ? 'bg-gray-100 text-gray-900 border-b-2 border-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
             >
               {t.label}
+              {t.id === 'notes' && savedNote && (
+                <span className="absolute top-1.5 right-3 w-1.5 h-1.5 rounded-full bg-blue-500" />
+              )}
             </button>
           ))}
         </div>
@@ -539,8 +594,6 @@ function ChatModal({ sessionId, onClose }) {
                   </div>
                 ))
             )}
-
-            {/* Student typing bubble */}
             {studentTyping && (
               <div className="flex justify-end">
                 <div className="bg-gray-700 px-3 py-2 rounded-xl rounded-tr-sm">
@@ -552,7 +605,6 @@ function ChatModal({ sessionId, onClose }) {
                 </div>
               </div>
             )}
-
             <div ref={bottomRef} />
           </div>
         )}
@@ -620,50 +672,133 @@ function ChatModal({ sessionId, onClose }) {
           </div>
         )}
 
-        {/* Quick Responses + Input */}
-        <div className="px-4 pt-3 border-t border-gray-100 flex-shrink-0">
-          <p className="text-xs text-gray-400 mb-2">Quick responses:</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {QUICK_RESPONSES.map((r) => (
-              <button
-                key={r.label}
-                onClick={() => sendTakeover(r.text)}
-                disabled={sending}
-                className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-100 hover:text-blue-700 text-gray-600 rounded-full border border-gray-200 hover:border-blue-300 transition-colors disabled:opacity-50"
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          {tookOver && (
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-blue-600 font-medium">✓ You have joined this session</p>
-              <button
-                onClick={handleReturnToGaida}
-                disabled={returningToGaida}
-                className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full border border-gray-200 transition-colors disabled:opacity-50"
-              >
-                {returningToGaida ? 'Returning...' : '← Return to GAIDA'}
-              </button>
+        {/* Case Notes Tab */}
+        {activeTab === 'notes' && (
+          <div className="flex-1 overflow-y-auto p-4 min-h-0">
+
+            {/* Saved note banner */}
+            {savedNote && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-500 text-xs">✓</span>
+                  <span className="text-xs text-blue-700 font-medium">Note saved</span>
+                  {savedNote.updated_at && (
+                    <span className="text-xs text-blue-400">{formatRelative(savedNote.updated_at)}</span>
+                  )}
+                </div>
+                {savedNote.outcome && (() => {
+                  const oc = OUTCOME_COLORS[savedNote.outcome];
+                  const outcomeLabel = OUTCOMES.find(o => o.value === savedNote.outcome)?.label;
+                  return (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${oc?.badge}`}>
+                      {outcomeLabel}
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Outcome selector */}
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-900 mb-2">Outcome</p>
+              <div className="space-y-2">
+                {OUTCOMES.map(o => {
+                  const oc = OUTCOME_COLORS[o.value];
+                  const selected = noteOutcome === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      onClick={() => setNoteOutcome(o.value)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                        selected
+                          ? 'border-gray-900 bg-gray-50'
+                          : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${oc.dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold ${selected ? 'text-gray-900' : 'text-gray-700'}`}>{o.label}</p>
+                        <p className="text-xs text-gray-400">{o.desc}</p>
+                      </div>
+                      {selected && <span className="text-gray-900 text-xs flex-shrink-0">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-          <div className="flex gap-2 pb-3">
-            <input
-              value={takeoverMsg}
-              onChange={handleInputChange}
-              onKeyDown={e => e.key === 'Enter' && sendTakeover()}
-              placeholder="Type a message to the student..."
-              className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
-            />
+
+            {/* Notes textarea */}
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-900 mb-2">Notes</p>
+              <textarea
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="Document what happened, what was said, and any follow-up actions..."
+                rows={5}
+                className="w-full text-xs px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 resize-none leading-relaxed text-gray-800 placeholder-gray-400"
+              />
+            </div>
+
+            {noteError && (
+              <p className="text-xs text-red-600 mb-3">{noteError}</p>
+            )}
+
             <button
-              onClick={() => sendTakeover()}
-              disabled={sending || !takeoverMsg.trim()}
-              className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              onClick={handleSaveNote}
+              disabled={savingNote}
+              className="w-full py-2.5 bg-gray-900 text-white text-xs font-medium rounded-xl hover:bg-gray-700 disabled:opacity-50 transition-colors"
             >
-              {sending ? '...' : 'Send'}
+              {savingNote ? 'Saving...' : savedNote ? 'Update note' : 'Save note'}
             </button>
           </div>
-        </div>
+        )}
+
+        {/* Quick Responses + Input — hidden on notes tab */}
+        {activeTab !== 'notes' && (
+          <div className="px-4 pt-3 border-t border-gray-100 flex-shrink-0">
+            <p className="text-xs text-gray-400 mb-2">Quick responses:</p>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {QUICK_RESPONSES.map((r) => (
+                <button
+                  key={r.label}
+                  onClick={() => sendTakeover(r.text)}
+                  disabled={sending}
+                  className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-100 hover:text-blue-700 text-gray-600 rounded-full border border-gray-200 hover:border-blue-300 transition-colors disabled:opacity-50"
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            {tookOver && (
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-blue-600 font-medium">✓ You have joined this session</p>
+                <button
+                  onClick={handleReturnToGaida}
+                  disabled={returningToGaida}
+                  className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full border border-gray-200 transition-colors disabled:opacity-50"
+                >
+                  {returningToGaida ? 'Returning...' : '← Return to GAIDA'}
+                </button>
+              </div>
+            )}
+            <div className="flex gap-2 pb-3">
+              <input
+                value={takeoverMsg}
+                onChange={handleInputChange}
+                onKeyDown={e => e.key === 'Enter' && sendTakeover()}
+                placeholder="Type a message to the student..."
+                className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
+              />
+              <button
+                onClick={() => sendTakeover()}
+                disabled={sending || !takeoverMsg.trim()}
+                className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              >
+                {sending ? '...' : 'Send'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

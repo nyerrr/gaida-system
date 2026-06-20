@@ -106,10 +106,40 @@ class CounselorRequest(BaseModel):
     session_id: str
     message: str
 
+class SessionNote(BaseModel):
+    session_id: str
+    note: str
+    outcome: str # e.g. "resolved", "false_alarm", "referred", "follow_up_scheduled"
+
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------
 
+@router.post("/session-notes")
+@router.post("/session-notes")
+def add_session_note(payload: SessionNote):
+    try:
+        from app.database.database import supabase
+        supabase.table("session_notes").insert({
+            "session_id": payload.session_id,
+            "note": payload.note,
+            "outcome": payload.outcome,
+            "created_at": datetime.utcnow().isoformat(),
+        }).execute()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@router.get("/session-notes/{session_id}")
+def get_session_notes(session_id: str):
+    try:
+        from app.database.database import supabase
+        result = supabase.table("session_notes").select("*").eq("session_id", session_id).order("created_at", desc=True).execute()
+        return {"notes": result.data}
+    except Exception as e:
+        return {"notes": [], "error": str(e)}
+    
+    
 @router.get("/alerts")
 def get_alerts():
     return {"alerts": ALERTS, "count": len(ALERTS)}
