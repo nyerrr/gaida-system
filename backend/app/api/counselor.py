@@ -102,6 +102,10 @@ class StudentMessage(BaseModel):
     sender: str
     text: str
 
+class CounselorRequest(BaseModel):
+    session_id: str
+    message: str
+
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------
@@ -330,3 +334,43 @@ def get_analytics_overview():
         }
     except Exception as e:
         return {"error": str(e)}
+
+@router.post("/request-counselor")
+def request_counselor(payload: CounselorRequest):
+    try:
+        existing = next((a for a in ALERTS if a["session_id"] == payload.session_id), None)
+        if existing:
+            existing["last_message"] = payload.message
+            existing["timestamp"] = datetime.utcnow().isoformat()
+        else:
+            alert_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "session_id": payload.session_id,
+                "user_id": None,
+                "intent": "student_requested",
+                "anxiety_score": 0,
+                "severity": "Requested",
+                "message": payload.message,
+                "last_message": payload.message,
+                "status": "pending",
+                "counselor_took_over": False,
+            }
+            ALERTS.append(alert_entry)
+
+            try:
+                from app.database.database import supabase
+                supabase.table("counselor_alerts").insert({
+                    "session_id": payload.session_id,
+                    "user_id": payload.session_id,
+                    "intent": "student_requested",
+                    "anxiety_score": 0,
+                    "severity": "Requested",
+                    "message": payload.message,
+                    "status": "pending",
+                }).execute()
+            except Exception as e:
+                print(f"Supabase alert insert error: {e}")
+
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

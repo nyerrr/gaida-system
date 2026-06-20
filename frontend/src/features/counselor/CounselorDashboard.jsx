@@ -20,6 +20,7 @@ const QUICK_RESPONSES = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const severityColor = (s) => {
   if (s === 'High' || s === 'Crisis') return { bg: 'bg-red-600', text: 'text-white', dot: 'bg-red-500', border: 'border-red-200', light: 'bg-red-50', hex: '#ef4444' };
+  if (s === 'Requested') return { bg: 'bg-blue-600', text: 'text-white', dot: 'bg-blue-500', border: 'border-blue-200', light: 'bg-blue-50', hex: '#3b82f6' };
   if (s === 'Moderate') return { bg: 'bg-amber-500', text: 'text-white', dot: 'bg-amber-400', border: 'border-amber-200', light: 'bg-amber-50', hex: '#f59e0b' };
   if (s === 'Low') return { bg: 'bg-green-500', text: 'text-white', dot: 'bg-green-400', border: 'border-green-200', light: 'bg-green-50', hex: '#22c55e' };
   return { bg: 'bg-gray-400', text: 'text-white', dot: 'bg-gray-400', border: 'border-gray-200', light: 'bg-gray-50', hex: '#9ca3af' };
@@ -232,7 +233,11 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
   const AlertRow = ({ a }) => {
     const sc = severityColor(a.severity);
     return (
-      <div className={`p-4 border-l-4 ${a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500 bg-red-50' : 'border-amber-400 bg-amber-50'} rounded-r-xl mb-3`}>
+      <div className={`p-4 border-l-4 ${
+        a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500 bg-red-50' :
+        a.severity === 'Requested' ? 'border-blue-500 bg-blue-50' :
+        'border-amber-400 bg-amber-50'
+      } rounded-r-xl mb-3`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
