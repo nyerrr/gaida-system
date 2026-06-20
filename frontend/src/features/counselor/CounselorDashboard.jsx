@@ -226,25 +226,103 @@ function OverviewPage({ alerts, sessions }) {
   );
 }
 
+// ── Escalation helpers ────────────────────────────────────────────────────────
+const getEscalationState = (timestamp) => {
+  const now = Date.now();
+  const alertTime = new Date(timestamp).getTime();
+  const ageMinutes = Math.floor((now - alertTime) / 60000);
 
-// ── Alerts Page ───────────────────────────────────────────────────────────────
+  const hour = new Date().getHours();
+  const day = new Date().getDay();
+  const isOffHours = hour < 8 || hour >= 17 || day === 0 || day === 6;
+
+  const warnThreshold  = isOffHours ? 5  : 10;
+  const urgentThreshold = isOffHours ? 15 : 30;
+
+  if (ageMinutes >= urgentThreshold) return { level: 'urgent',  ageMinutes, isOffHours };
+  if (ageMinutes >= warnThreshold)   return { level: 'warning', ageMinutes, isOffHours };
+  return { level: 'normal', ageMinutes, isOffHours };
+};
+
+
 function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
-  const pending = alerts.filter(a => a.status === 'pending');
+  const [now, setNow] = useState(Date.now());
+
+  // Tick every 30 seconds to update escalation states
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Re-play alert sound for urgent unattended alerts
+  useEffect(() => {
+    const urgentPending = alerts.filter(a => {
+      if (a.status !== 'pending') return false;
+      const esc = getEscalationState(a.timestamp);
+      return esc.level === 'urgent';
+    });
+    if (urgentPending.length > 0) playAlertSound();
+    const interval = setInterval(() => {
+      const stillUrgent = alerts.filter(a => {
+        if (a.status !== 'pending') return false;
+        const esc = getEscalationState(a.timestamp);
+        return esc.level === 'urgent';
+      });
+      if (stillUrgent.length > 0) playAlertSound();
+    }, 5 * 60 * 1000); // every 5 minutes
+    return () => clearInterval(interval);
+  }, [alerts]);
+
+  const pending  = alerts.filter(a => a.status === 'pending');
   const resolved = alerts.filter(a => a.status !== 'pending');
+
   const AlertRow = ({ a }) => {
-    const sc = severityColor(a.severity);
+    const sc  = severityColor(a.severity);
+    const esc = getEscalationState(a.timestamp);
+
+    const borderColor =
+      esc.level === 'urgent'  ? 'border-red-500' :
+      esc.level === 'warning' ? 'border-amber-400' :
+      a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500' :
+      a.severity === 'Requested' ? 'border-blue-500' :
+      'border-amber-400';
+
+    const bgColor =
+      esc.level === 'urgent'  ? 'bg-red-50' :
+      esc.level === 'warning' ? 'bg-amber-50' :
+      a.severity === 'High' || a.severity === 'Crisis' ? 'bg-red-50' :
+      a.severity === 'Requested' ? 'bg-blue-50' :
+      'bg-amber-50';
+
     return (
-      <div className={`p-4 border-l-4 ${
-        a.severity === 'High' || a.severity === 'Crisis' ? 'border-red-500 bg-red-50' :
-        a.severity === 'Requested' ? 'border-blue-500 bg-blue-50' :
-        'border-amber-400 bg-amber-50'
-      } rounded-r-xl mb-3`}>
+      <div className={`p-4 border-l-4 ${borderColor} ${bgColor} rounded-r-xl mb-3 ${
+        esc.level === 'urgent' ? 'ring-1 ring-red-300 ring-offset-1' : ''
+      }`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{a.severity}</span>
               <span className="text-xs text-gray-500">{a.intent}</span>
               <span className="text-xs text-gray-400">{formatRelative(a.timestamp)}</span>
+
+              {/* Escalation badge */}
+              {esc.level === 'urgent' && (
+                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-red-600 text-white animate-pulse">
+                  ⚠ Unattended {esc.ageMinutes}m
+                </span>
+              )}
+              {esc.level === 'warning' && (
+                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-500 text-white">
+                  Waiting {esc.ageMinutes}m+
+                </span>
+              )}
+
+              {/* Off-hours tag */}
+              {esc.isOffHours && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-200">
+                  Off-hours
+                </span>
+              )}
             </div>
             <p className="text-xs font-semibold text-gray-700 mb-1">Session: {a.session_id.slice(0, 16)}...</p>
             <p className="text-xs text-gray-600 truncate">"{a.message}"</p>
@@ -256,9 +334,21 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus }) {
             )}
           </div>
         </div>
+
+        {/* Urgent warning bar */}
+        {esc.level === 'urgent' && (
+          <div className="mt-3 pt-3 border-t border-red-200 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+            <p className="text-xs text-red-700 font-medium">
+              This alert has been waiting {esc.ageMinutes} minutes without a response.
+              {esc.isOffHours && ' Session occurred outside office hours.'}
+            </p>
+          </div>
+        )}
       </div>
     );
   };
+
   return (
     <div>
       <div className="mb-6">
@@ -471,11 +561,8 @@ function ChatModal({ sessionId, onClose }) {
       });
       const data = await res.json();
       if (data.ok) {
-        setTookOver(true);
-        setTakeoverMsg('');
+        setTookOver(false);
         fetchChat();
-      } else if (data.error === 'already_assigned') {
-        setNoteError('This session is already being handled by another counselor.');
       }
     } catch (e) {} finally {
       setSending(false);
