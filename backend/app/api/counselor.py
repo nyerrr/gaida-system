@@ -144,6 +144,12 @@ def resolve_session(payload: ResolveSession):
             supabase.table("counselor_alerts").update({
                 "status": "resolved"
             }).eq("session_id", payload.session_id).execute()
+
+            supabase.table("sessions").update({
+                "resolved": True,
+                "resolved_at": datetime.utcnow().isoformat(),
+                "resolved_by": payload.resolved_by,
+            }).eq("session_token", payload.session_id).execute()
         except Exception as e:
             print(f"Supabase resolve error: {e}")
 
@@ -152,6 +158,65 @@ def resolve_session(payload: ResolveSession):
         raise
     except Exception as e:
         return {"ok": False, "error": str(e)}
+    
+@router.get("/sessions/resolved")
+def get_resolved_sessions():
+    try:
+        from app.database.database import supabase
+        from app.constants import TEST_CREDENTIALS
+
+        # Get all resolved alerts
+        alerts = supabase.table("counselor_alerts")\
+            .select("*")\
+            .eq("status", "resolved")\
+            .order("created_at", desc=True)\
+            .execute()
+
+        result = []
+        for alert in alerts.data:
+            session_id = alert.get("session_id")
+            student_id = alert.get("user_id")
+
+            # Get case note
+            notes = supabase.table("session_notes")\
+                .select("*")\
+                .eq("session_id", session_id)\
+                .order("created_at", desc=True)\
+                .limit(1)\
+                .execute()
+
+            # Get interactions/transcript
+            interactions = supabase.table("interactions")\
+                .select("*")\
+                .eq("session_id", session_id)\
+                .order("timestamp")\
+                .execute()
+
+            # Get student profile
+            creds = TEST_CREDENTIALS.get(student_id, {})
+            profile = {
+                "student_id": student_id,
+                "name": creds.get("name"),
+                "program": creds.get("program"),
+                "year": creds.get("year"),
+                "email": creds.get("email"),
+            } if creds else None
+
+            result.append({
+                "session_id": session_id,
+                "student_id": student_id,
+                "profile": profile,
+                "severity": alert.get("severity"),
+                "intent": alert.get("intent"),
+                "timestamp": alert.get("created_at"),
+                "resolved_at": alert.get("resolved_at"),
+                "note": notes.data[0] if notes.data else None,
+                "transcript": interactions.data,
+            })
+
+        return {"sessions": result, "count": len(result)}
+    except Exception as e:
+        return {"sessions": [], "error": str(e)}
 
 @router.post("/session-notes")
 def add_session_note(payload: SessionNote):

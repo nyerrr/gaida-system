@@ -84,6 +84,7 @@ const NAV = [
   { id: 'sessions',  label: 'Active Sessions',   icon: '◉' },
   { id: 'detection', label: 'Anxiety Detection', icon: '〜' },
   { id: 'reports',   label: 'Reports',           icon: '≡' },
+  { id: 'resolved',  label: 'Resolved Cases',    icon: '✓' },
 ];
 
 // ── Overview Page ─────────────────────────────────────────────────────────────
@@ -1084,12 +1085,147 @@ export default function CounselorDashboard() {
             {activePage === 'sessions' && <SessionsPage sessions={sessions} onViewChat={setChatSessionId} lastUpdated={lastUpdated} />}
             {activePage === 'detection' && <DetectionPage />}
             {activePage === 'reports'   && <ReportsPage />}
+            {activePage === 'resolved'  && <ResolvedCasesPage />}
           </div>
         </main>
       </div>
 
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Resolved Cases Page ───────────────────────────────────────────────────────
+function ResolvedCasesPage() {
+  const [cases, setCases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
+
+  const OUTCOME_COLORS = {
+    resolved:    { badge: 'bg-green-100 text-green-800' },
+    false_alarm: { badge: 'bg-gray-100 text-gray-700' },
+    referred:    { badge: 'bg-blue-100 text-blue-800' },
+    follow_up:   { badge: 'bg-amber-100 text-amber-800' },
+    ongoing:     { badge: 'bg-red-100 text-red-800' },
+  };
+
+  const OUTCOME_LABELS = {
+    resolved:    'Resolved',
+    false_alarm: 'False alarm',
+    referred:    'Referred',
+    follow_up:   'Follow-up scheduled',
+    ongoing:     'Ongoing',
+  };
+
+  useEffect(() => {
+    fetch(`${BACKEND}/api/counselor/sessions/resolved`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.sessions) setCases(data.sessions);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Resolved Cases</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Closed sessions with case notes and transcripts</p>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-gray-400 text-center py-20">Loading...</p>
+      ) : cases.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <p className="text-4xl mb-3">✓</p>
+          <p className="text-sm font-medium">No resolved cases yet</p>
+          <p className="text-xs mt-1">Sessions marked as resolved will appear here</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {cases.map((c, i) => {
+            const sc = severityColor(c.severity);
+            const isOpen = expanded === i;
+            const oc = OUTCOME_COLORS[c.note?.outcome];
+            return (
+              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* Case header */}
+                <div
+                  className="px-5 py-4 flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => setExpanded(isOpen ? null : i)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      {c.profile ? (
+                        <span className="text-sm font-semibold text-gray-900">{c.profile.name}</span>
+                      ) : (
+                        <span className="text-sm font-semibold text-gray-900">{c.student_id || 'Unknown'}</span>
+                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{c.severity}</span>
+                      {c.note?.outcome && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${oc?.badge}`}>
+                          {OUTCOME_LABELS[c.note.outcome]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {c.profile && (
+                        <span className="text-xs text-gray-400">
+                          {c.profile.student_id}
+                          {c.profile.program && ` · ${c.profile.program}`}
+                          {c.profile.year && `, Year ${c.profile.year}`}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">{formatRelative(c.timestamp)}</span>
+                      <span className="text-xs text-gray-400">{c.transcript?.length || 0} messages</span>
+                    </div>
+                  </div>
+                  <span className="text-gray-400 text-sm flex-shrink-0">{isOpen ? '▲' : '▼'}</span>
+                </div>
+
+                {/* Expanded content */}
+                {isOpen && (
+                  <div className="border-t border-gray-100">
+                    {/* Case note */}
+                    {c.note && (
+                      <div className="px-5 py-4 border-b border-gray-50">
+                        <p className="text-xs font-semibold text-gray-900 mb-1">Case Note</p>
+                        <p className="text-xs text-gray-600 leading-relaxed">{c.note.note || '—'}</p>
+                      </div>
+                    )}
+
+                    {/* Transcript */}
+                    <div className="px-5 py-4 bg-gray-50 max-h-80 overflow-y-auto space-y-2">
+                      <p className="text-xs font-semibold text-gray-900 mb-2">Transcript</p>
+                      {c.transcript?.length === 0 ? (
+                        <p className="text-xs text-gray-400">No messages recorded</p>
+                      ) : (
+                        c.transcript?.map((m, j) => (
+                          <div key={j} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                              m.sender === 'user'
+                                ? 'bg-gray-800 text-white rounded-tr-sm'
+                                : m.sender === 'counselor'
+                                ? 'bg-blue-600 text-white rounded-tl-sm'
+                                : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
+                            }`}>
+                              {m.sender === 'counselor' && <p className="text-blue-200 text-xs font-semibold mb-1">Counselor</p>}
+                              {m.sender === 'bot' && <p className="text-gray-400 text-xs font-semibold mb-1">GAIDA</p>}
+                              <p>{m.message || m.text}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
