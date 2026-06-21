@@ -47,6 +47,15 @@ def _detect_urgent(text: str) -> bool:
     txt = text.lower()
     return any(kw in txt for kw in URGENT_PHYSICAL_KEYWORDS)
 
+def _scaled_boost(raw_confidence: float, base_multiplier: float, threshold: float = 0.5) -> float:
+    """Scales the boost so confidence just above threshold gets minimal boost,
+    while confidence well above threshold gets close to the full multiplier."""
+    if raw_confidence <= threshold:
+        return raw_confidence
+    excess = (raw_confidence - threshold) / (1.0 - threshold)
+    scaled_multiplier = 1.0 + (base_multiplier - 1.0) * excess
+    return min(0.98, raw_confidence * scaled_multiplier)
+
 
 def analyze_intent(user_message: str, session_id: str | None = None, user_id: str | None = None) -> Dict[str, Any]:
 
@@ -88,9 +97,9 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
             if (
                 intent == previous_intent
                 and intent not in ("neutral", "academic")
-                and raw_confidence > 0.3
+                and raw_confidence > 0.5
             ):
-                boosted_raw = min(0.98, raw_confidence * REPETITION_BOOST)
+                boosted_raw = _scaled_boost(raw_confidence, REPETITION_BOOST)
 
             RELATED_INTENTS = {
                 "anxiety":    ("stress", "sadness", "academic"),
@@ -103,10 +112,10 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
             related = RELATED_INTENTS.get(intent, ())
             if (
                 previous_intent in related
-                and raw_confidence > 0.3
+                and raw_confidence > 0.5
                 and boosted_raw == raw_confidence
             ):
-                boosted_raw = min(0.98, raw_confidence * 1.15)
+                boosted_raw = _scaled_boost(raw_confidence, 1.15)
 
             if _detect_urgent(user_message):
                 running_confidence = (previous_confidence * 0.4) + (boosted_raw * 0.6)
@@ -115,7 +124,7 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
                 running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
 
             # Prevent confidence from dropping more than 20% in a single message
-            max_drop = previous_confidence * 0.60
+            max_drop = previous_confidence * 0.50
             running_confidence = max(max_drop, running_confidence)
             running_confidence = round(running_confidence, 3)
 
