@@ -4,8 +4,10 @@ python-dotenv
 openai
 pytest
 httpx
+scikit-learn
+openai-whisper
 librosa
 opensmile
 pyaudio
-speechrecognition
 reportlab==4.2.0
+supabase
