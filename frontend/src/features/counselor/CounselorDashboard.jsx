@@ -1252,6 +1252,25 @@ function ResolvedCasesPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
 
+  const handleDelete = async (sessionId, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Remove this case from the list? This can be undone from the database if needed.')) return;
+
+    try {
+      const res = await fetch(`${BACKEND}/api/counselor/sessions/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCases(prev => prev.filter(c => c.session_id !== sessionId));
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
   const OUTCOME_COLORS = {
     resolved:    { badge: 'bg-green-100 text-green-800' },
     false_alarm: { badge: 'bg-gray-100 text-gray-700' },
@@ -1342,6 +1361,13 @@ function ResolvedCasesPage() {
                     >
                       Export PDF
                     </button>
+                    <button
+                      onClick={(e) => handleDelete(c.session_id, e)}
+                      className="text-xs px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg border border-red-100 transition-colors"
+                    >
+                      Delete
+                    </button>
+                    
                     <span className="text-gray-400 text-sm">{isOpen ? '▲' : '▼'}</span>
                   </div>
                 </div>

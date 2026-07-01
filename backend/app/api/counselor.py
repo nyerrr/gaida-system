@@ -1,19 +1,31 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Optional
+"""
+Counselor API routes: alerts, live sessions, chat mirroring/typing indicators,
+counselor takeover/handoff, session notes, analytics, and PDF export.
+"""
+
 from datetime import datetime
-from fastapi.responses import Response as FastAPIResponse
 from io import BytesIO
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response as FastAPIResponse
+from pydantic import BaseModel
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 router = APIRouter(prefix="/api/counselor", tags=["counselor"])
 
 # ---------------------------------------------------------------------------
-# Severity mapping
+# Constants
 # ---------------------------------------------------------------------------
 SEVERITY_MAP = {
     0: "Normal",
@@ -22,21 +34,71 @@ SEVERITY_MAP = {
     5: "High",
 }
 
-def get_severity(anxiety_score: int) -> str:
-    return SEVERITY_MAP.get(anxiety_score, "Normal")
-
-def should_alert_counselor(severity: str) -> bool:
-    return severity in ("High", "Crisis")
-
 # ---------------------------------------------------------------------------
 # In-memory stores
+#
+# NOTE: These reset on process restart and are not safe across multiple
+# workers/instances. They are mirrored into Supabase best-effort, but the
+# in-memory copy is the source of truth for live/active session state.
 # ---------------------------------------------------------------------------
 ALERTS: list[dict] = []
 TYPING_STATES: dict = {}  # { session_id: { "counselor": bool, "student": bool } }
 
+
 # ---------------------------------------------------------------------------
-# Internal function called by intent_router.py
+# Pydantic models
 # ---------------------------------------------------------------------------
+class AlertStatusUpdate(BaseModel):
+    session_id: str
+    status: str
+
+
+class TakeOverMessage(BaseModel):
+    session_id: str
+    message: str
+    counselor_id: Optional[str] = None
+
+
+class TypingPayload(BaseModel):
+    is_typing: bool
+    sender: str  # "counselor" or "student"
+
+
+class StudentMessage(BaseModel):
+    sender: str
+    text: str
+
+
+class CounselorRequest(BaseModel):
+    session_id: str
+    message: str
+
+
+class SessionNote(BaseModel):
+    session_id: str
+    note: str
+    outcome: str  # e.g. "resolved", "false_alarm", "referred", "follow_up_scheduled"
+
+
+class ResolveSession(BaseModel):
+    session_id: str
+    resolved_by: Optional[str] = None
+
+class DeleteCases(BaseModel):
+    session_id: str
+    deleted_by: Optional[str] = None
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def get_severity(anxiety_score: int) -> str:
+    return SEVERITY_MAP.get(anxiety_score, "Normal")
+
+
+def should_alert_counselor(severity: str) -> bool:
+    return severity == "High"
+
+
 def process_alert(
     session_id: str,
     user_id: Optional[str],
@@ -44,6 +106,7 @@ def process_alert(
     anxiety_score: int,
     message: str,
 ) -> dict:
+    """Called by intent_router.py after each analyzed student message."""
     severity = get_severity(anxiety_score)
     alert_sent = False
 
@@ -71,15 +134,18 @@ def process_alert(
 
             try:
                 from app.database.database import supabase
-                supabase.table("counselor_alerts").insert({
-                    "session_id": session_id,
-                    "user_id": user_id or session_id,
-                    "intent": intent,
-                    "anxiety_score": anxiety_score,
-                    "severity": severity,
-                    "message": message,
-                    "status": "pending",
-                }).execute()
+
+                supabase.table("counselor_alerts").insert(
+                    {
+                        "session_id": session_id,
+                        "user_id": user_id or session_id,
+                        "intent": intent,
+                        "anxiety_score": anxiety_score,
+                        "severity": severity,
+                        "message": message,
+                        "status": "pending",
+                    }
+                ).execute()
             except Exception as e:
                 print(f"Supabase alert insert error: {e}")
 
@@ -90,167 +156,10 @@ def process_alert(
         "alert_sent": alert_sent,
     }
 
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
-class AlertStatusUpdate(BaseModel):
-    session_id: str
-    status: str
 
-class TakeOverMessage(BaseModel):
-    session_id: str
-    message: str
-    counselor_id: str | None = None
-
-class TypingPayload(BaseModel):
-    is_typing: bool
-    sender: str  # "counselor" or "student"
-
-class StudentMessage(BaseModel):
-    sender: str
-    text: str
-
-class CounselorRequest(BaseModel):
-    session_id: str
-    message: str
-
-class SessionNote(BaseModel):
-    session_id: str
-    note: str
-    outcome: str # e.g. "resolved", "false_alarm", "referred", "follow_up_scheduled"
-
-class ResolveSession(BaseModel):
-    session_id: str
-    resolved_by: Optional[str] = None
-
-# ---------------------------------------------------------------------------
-# API endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.post("/sessions/resolve")
-def resolve_session(payload: ResolveSession):
-    try:
-        from app.services.session_manager import get_session
-        session = get_session(payload.session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        
-        if "meta" not in session:
-            session["meta"] = {}
-        session["meta"]["resolved"] = True
-        session["meta"]["resolved_at"] = datetime.utcnow().isoformat() + "Z"
-        session["meta"]["resolved_by"] = payload.resolved_by
-
-        # Also mark the alert as resolved
-        for alert in ALERTS:
-            if alert["session_id"] == payload.session_id:
-                alert["status"] = "resolved"
-                alert["resolved_at"] = datetime.utcnow().isoformat() + "z"
-
-        try:
-            from app.database.database import supabase
-            supabase.table("counselor_alerts").update({
-                "status": "resolved"
-            }).eq("session_id", payload.session_id).execute()
-
-            supabase.table("sessions").update({
-                "resolved": True,
-                "resolved_at": datetime.utcnow().isoformat() + "Z",
-                "resolved_by": payload.resolved_by,
-            }).eq("session_token", payload.session_id).execute()
-        except Exception as e:
-            print(f"Supabase resolve error: {e}")
-
-        return {"ok": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    
-@router.get("/sessions/resolved")
-def get_resolved_sessions():
-    try:
-        from app.database.database import supabase
-        from app.constants import TEST_CREDENTIALS
-
-        # Get all resolved alerts
-        alerts = supabase.table("counselor_alerts")\
-            .select("*")\
-            .eq("status", "resolved")\
-            .order("created_at", desc=True)\
-            .execute()
-
-        result = []
-        for alert in alerts.data:
-            session_id = alert.get("session_id")
-            student_id = alert.get("user_id")
-
-            # Get case note
-            notes = supabase.table("session_notes")\
-                .select("*")\
-                .eq("session_id", session_id)\
-                .order("created_at", desc=True)\
-                .limit(1)\
-                .execute()
-
-            # Get interactions/transcript
-            interactions = supabase.table("interactions")\
-                .select("*")\
-                .eq("session_id", session_id)\
-                .order("timestamp")\
-                .execute()
-
-            # Get student profile
-            creds = TEST_CREDENTIALS.get(student_id, {})
-            profile = {
-                "student_id": student_id,
-                "name": creds.get("name"),
-                "program": creds.get("program"),
-                "year": creds.get("year"),
-                "email": creds.get("email"),
-            } if creds else None
-
-            result.append({
-                "session_id": session_id,
-                "student_id": student_id,
-                "profile": profile,
-                "severity": alert.get("severity"),
-                "intent": alert.get("intent"),
-                "timestamp": alert.get("created_at"),
-                "resolved_at": alert.get("resolved_at"),
-                "note": notes.data[0] if notes.data else None,
-                "transcript": interactions.data,
-            })
-
-        return {"sessions": result, "count": len(result)}
-    except Exception as e:
-        return {"sessions": [], "error": str(e)}
-
-@router.post("/session-notes")
-def add_session_note(payload: SessionNote):
-    try:
-        from app.database.database import supabase
-        supabase.table("session_notes").insert({
-            "session_id": payload.session_id,
-            "note": payload.note,
-            "outcome": payload.outcome,
-            "created_at": datetime.utcnow().isoformat() + "Z",
-        }).execute()
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-@router.get("/session-notes/{session_id}")
-def get_session_notes(session_id: str):
-    try:
-        from app.database.database import supabase
-        result = supabase.table("session_notes").select("*").eq("session_id", session_id).order("created_at", desc=True).execute()
-        return {"notes": result.data}
-    except Exception as e:
-        return {"notes": [], "error": str(e)}
-    
-
+# ===========================================================================
+# Alerts
+# ===========================================================================
 @router.get("/alerts")
 def get_alerts():
     return {"alerts": ALERTS, "count": len(ALERTS)}
@@ -270,26 +179,87 @@ def update_alert_status(payload: AlertStatusUpdate):
             alert["updated_at"] = datetime.utcnow().isoformat() + "Z"
             try:
                 from app.database.database import supabase
-                supabase.table("counselor_alerts").update({
-                    "status": payload.status,
-                }).eq("session_id", payload.session_id).execute()
+
+                supabase.table("counselor_alerts").update(
+                    {"status": payload.status}
+                ).eq("session_id", payload.session_id).execute()
             except Exception as e:
                 print(f"Supabase alert update error: {e}")
             return {"ok": True}
     return {"ok": False, "error": "Alert not found"}
 
 
+@router.post("/request-counselor")
+def request_counselor(payload: CounselorRequest):
+    try:
+        existing = next((a for a in ALERTS if a["session_id"] == payload.session_id), None)
+        if existing:
+            existing["last_message"] = payload.message
+            existing["timestamp"] = datetime.utcnow().isoformat() + "Z"
+        else:
+            alert_entry = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "session_id": payload.session_id,
+                "user_id": None,
+                "intent": "student_requested",
+                "anxiety_score": 0,
+                "severity": "Requested",
+                "message": payload.message,
+                "last_message": payload.message,
+                "status": "pending",
+                "counselor_took_over": False,
+            }
+            ALERTS.append(alert_entry)
+
+            try:
+                from app.database.database import supabase
+
+                supabase.table("counselor_alerts").insert(
+                    {
+                        "session_id": payload.session_id,
+                        "user_id": payload.session_id,
+                        "intent": "student_requested",
+                        "anxiety_score": 0,
+                        "severity": "Requested",
+                        "message": payload.message,
+                        "status": "pending",
+                    }
+                ).execute()
+            except Exception as e:
+                print(f"Supabase alert insert error: {e}")
+
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/severity/{anxiety_score}")
+def check_severity(anxiety_score: int):
+    severity = get_severity(anxiety_score)
+    return {
+        "anxiety_score": anxiety_score,
+        "severity": severity,
+        "requires_alert": should_alert_counselor(severity),
+    }
+
+
+# ===========================================================================
+# Live / active sessions
+# ===========================================================================
 @router.get("/sessions/active")
 def get_active_sessions():
     try:
         from app.services.session_manager import list_active_sessions
+
         sessions = list_active_sessions()
         result = []
         for s in sessions:
-            # Skip resolved sessions
-            if s.get("meta", {}).get("resolved"):
-                continue
             meta = s.get("meta", {})
+
+            # Skip resolved sessions
+            if meta.get("resolved"):
+                continue
+
             severity = meta.get("severity", "Normal")
             confidence = meta.get("running_confidence", 0.3)
 
@@ -308,44 +278,171 @@ def get_active_sessions():
                 for a in ALERTS
             )
 
-            result.append({
-                "session_id": s["session_id"],
-                "started_at": s.get("started_at"),
-                "message_count": len(s.get("messages", [])),
-                "severity": severity,
-                "confidence": round(confidence, 3),
-                "intent": meta.get("running_intent", "neutral"),
-                "has_alert": has_alert,
-                "active": s.get("active", True),
-                "assigned_counselor_id": meta.get("assigned_counselor_id"),
-            })
+            result.append(
+                {
+                    "session_id": s["session_id"],
+                    "started_at": s.get("started_at"),
+                    "message_count": len(s.get("messages", [])),
+                    "severity": severity,
+                    "confidence": round(confidence, 3),
+                    "intent": meta.get("running_intent", "neutral"),
+                    "has_alert": has_alert,
+                    "active": s.get("active", True),
+                    "assigned_counselor_id": meta.get("assigned_counselor_id"),
+                }
+            )
 
         return {"sessions": result, "count": len(result)}
     except Exception as e:
         return {"sessions": [], "count": 0, "error": str(e)}
 
 
+@router.post("/sessions/resolve")
+def resolve_session(payload: ResolveSession):
+    try:
+        from app.services.session_manager import get_session
+
+        session = get_session(payload.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if "meta" not in session:
+            session["meta"] = {}
+        session["meta"]["resolved"] = True
+        session["meta"]["resolved_at"] = datetime.utcnow().isoformat() + "Z"
+        session["meta"]["resolved_by"] = payload.resolved_by
+
+        # Also mark the alert as resolved
+        for alert in ALERTS:
+            if alert["session_id"] == payload.session_id:
+                alert["status"] = "resolved"
+                alert["resolved_at"] = datetime.utcnow().isoformat() + "Z"
+
+        try:
+            from app.database.database import supabase
+
+            supabase.table("counselor_alerts").update({"status": "resolved"}).eq(
+                "session_id", payload.session_id
+            ).execute()
+
+            supabase.table("sessions").update(
+                {
+                    "resolved": True,
+                    "resolved_at": datetime.utcnow().isoformat() + "Z",
+                    "resolved_by": payload.resolved_by,
+                }
+            ).eq("session_token", payload.session_id).execute()
+        except Exception as e:
+            print(f"Supabase resolve error: {e}")
+
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/sessions/resolved")
+def get_resolved_sessions():
+    try:
+        from app.database.database import supabase
+        from app.constants import TEST_CREDENTIALS
+
+        alerts = (
+        supabase.table("counselor_alerts")
+        .select("*")
+        .eq("status", "resolved")
+        .eq("deleted", False)   # ← added
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+        result = []
+        for alert in alerts.data:
+            session_id = alert.get("session_id")
+            student_id = alert.get("user_id")
+
+            notes = (
+                supabase.table("session_notes")
+                .select("*")
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+            interactions = (
+                supabase.table("interactions")
+                .select("*")
+                .eq("session_id", session_id)
+                .order("timestamp")
+                .execute()
+            )
+
+            creds = TEST_CREDENTIALS.get(student_id, {})
+            profile = (
+                {
+                    "student_id": student_id,
+                    "name": creds.get("name"),
+                    "program": creds.get("program"),
+                    "year": creds.get("year"),
+                    "email": creds.get("email"),
+                }
+                if creds
+                else None
+            )
+
+            result.append(
+                {
+                    "session_id": session_id,
+                    "student_id": student_id,
+                    "profile": profile,
+                    "severity": alert.get("severity"),
+                    "intent": alert.get("intent"),
+                    "timestamp": alert.get("created_at"),
+                    "resolved_at": alert.get("resolved_at"),
+                    "note": notes.data[0] if notes.data else None,
+                    "transcript": interactions.data,
+                }
+            )
+
+        return {"sessions": result, "count": len(result)}
+    except Exception as e:
+        return {"sessions": [], "error": str(e)}
+
+
+# ===========================================================================
+# Chat mirroring / typing indicators
+# ===========================================================================
 @router.get("/chat/{session_id}")
 def get_chat_transcript(session_id: str):
     """
-    Returns full chat transcript including student messages mirrored via POST /chat/{session_id}.
-    Also returns typing state for both counselor and student.
+    Returns full chat transcript including student messages mirrored via
+    POST /chat/{session_id}. Also returns typing state for both parties.
     """
     try:
         from app.services.session_manager import get_session
+
         session = get_session(session_id)
         if not session:
-            return {"error": "Session not found", "messages": [], "counselor_typing": False, "student_typing": False}
+            return {
+                "error": "Session not found",
+                "messages": [],
+                "counselor_typing": False,
+                "student_typing": False,
+            }
 
         messages = []
         for m in session.get("messages", []):
-            messages.append({
-                "sender": m.get("sender"),
-                "text": m.get("text"),
-                "timestamp": m.get("timestamp"),
-                "intent": m.get("analysis", {}).get("intent"),
-                "confidence": m.get("analysis", {}).get("confidence"),
-            })
+            messages.append(
+                {
+                    "sender": m.get("sender"),
+                    "text": m.get("text"),
+                    "timestamp": m.get("timestamp"),
+                    "intent": m.get("analysis", {}).get("intent"),
+                    "confidence": m.get("analysis", {}).get("confidence"),
+                }
+            )
 
         typing = TYPING_STATES.get(session_id, {})
 
@@ -366,11 +463,12 @@ def get_chat_transcript(session_id: str):
 @router.post("/chat/{session_id}")
 def post_student_message(session_id: str, payload: StudentMessage):
     """
-    Student dashboard mirrors messages here so counselor can see them in real time.
-    Called after every student message send.
+    Student dashboard mirrors messages here so counselor can see them in
+    real time. Called after every student message send.
     """
     try:
         from app.services.session_manager import get_session, record_interaction
+
         session = get_session(session_id)
         if not session:
             return {"ok": False, "error": "Session not found"}
@@ -396,14 +494,18 @@ def set_typing(session_id: str, payload: TypingPayload):
     return {"ok": True}
 
 
+# ===========================================================================
+# Counselor takeover / handoff
+# ===========================================================================
 @router.post("/takeover")
 def counselor_takeover(payload: TakeOverMessage):
     """
     Counselor sends a message directly to the student.
-    Sets counselor_active = True so VA stops responding.
+    Sets counselor_active = True so the VA stops responding.
     """
     try:
         from app.services.session_manager import get_session, record_interaction
+
         session = get_session(payload.session_id)
         if not session:
             return {"ok": False, "error": "Session not found"}
@@ -438,47 +540,106 @@ def counselor_takeover(payload: TakeOverMessage):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+
 @router.post("/return-to-gaida")
 def return_to_gaida(payload: dict):
-    from app.services.session_manager import get_session, record_interaction
-    
-    session_id = payload.get("session_id")
-    session = get_session(session_id)
-    
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    if "meta" not in session:
-        session["meta"] = {}
-    
-    session["meta"]["counselor_active"] = False
-    session["meta"]["assigned_counselor_id"] = None
-    
-    record_interaction(
-        session_id=session_id,
-        sender="system",
-        text="Counselor returned the conversation to GAIDA.",
-        analysis={},
-        response=None,
-    )
-    
-    return {"ok": True, "session_id": session_id}
+    try:
+        from app.services.session_manager import get_session, record_interaction
+
+        session_id = payload.get("session_id")
+        session = get_session(session_id)
+
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if "meta" not in session:
+            session["meta"] = {}
+
+        session["meta"]["counselor_active"] = False
+        session["meta"]["assigned_counselor_id"] = None
+
+        record_interaction(
+            session_id=session_id,
+            sender="system",
+            text="Counselor returned the conversation to GAIDA.",
+            analysis={},
+            response=None,
+        )
+
+        return {"ok": True, "session_id": session_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
-@router.get("/severity/{anxiety_score}")
-def check_severity(anxiety_score: int):
-    severity = get_severity(anxiety_score)
+# ===========================================================================
+# Session notes
+# ===========================================================================
+@router.post("/session-notes")
+def add_session_note(payload: SessionNote):
+    try:
+        from app.database.database import supabase
+
+        supabase.table("session_notes").insert(
+            {
+                "session_id": payload.session_id,
+                "note": payload.note,
+                "outcome": payload.outcome,
+                "created_at": datetime.utcnow().isoformat() + "Z",
+            }
+        ).execute()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/session-notes/{session_id}")
+def get_session_notes(session_id: str):
+    try:
+        from app.database.database import supabase
+
+        result = (
+            supabase.table("session_notes")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return {"notes": result.data}
+    except Exception as e:
+        return {"notes": [], "error": str(e)}
+
+
+# ===========================================================================
+# Student profile
+# ===========================================================================
+@router.get("/student-profile/{student_id}")
+def get_student_profile(student_id: str):
+    from app.constants import TEST_CREDENTIALS
+
+    creds = TEST_CREDENTIALS.get(student_id)
+    if not creds or "name" not in creds:
+        return {"profile": None}
     return {
-        "anxiety_score": anxiety_score,
-        "severity": severity,
-        "requires_alert": should_alert_counselor(severity),
+        "profile": {
+            "student_id": student_id,
+            "name": creds["name"],
+            "email": creds["email"],
+            "program": creds.get("program"),
+            "year": creds.get("year"),
+        }
     }
 
+
+# ===========================================================================
+# Analytics
+# ===========================================================================
 @router.get("/analytics/overview")
 def get_analytics_overview():
     try:
         from app.database.database import supabase
-        from datetime import datetime, timedelta
+        from datetime import timedelta
 
         # Anxiety distribution from interactions
         interactions = supabase.table("interactions").select("severity").execute()
@@ -490,7 +651,9 @@ def get_analytics_overview():
 
         # Sessions this week
         week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
-        sessions = supabase.table("sessions").select("created_at").gte("created_at", week_ago).execute()
+        sessions = (
+            supabase.table("sessions").select("created_at").gte("created_at", week_ago).execute()
+        )
 
         days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         week_data = {d: 0 for d in days}
@@ -500,213 +663,248 @@ def get_analytics_overview():
                 if day in week_data:
                     week_data[day] += 1
 
-        # Alerts per month
         alerts = supabase.table("counselor_alerts").select("created_at, severity").execute()
 
         return {
             "anxiety_distribution": [
                 {"name": k, "value": v} for k, v in severity_counts.items() if v > 0
             ],
-            "sessions_this_week": [
-                {"day": d, "count": week_data[d]} for d in days
-            ],
+            "sessions_this_week": [{"day": d, "count": week_data[d]} for d in days],
             "total_sessions": len(supabase.table("sessions").select("id").execute().data),
             "total_alerts": len(alerts.data),
         }
     except Exception as e:
         return {"error": str(e)}
 
-@router.post("/request-counselor")
-def request_counselor(payload: CounselorRequest):
-    try:
-        existing = next((a for a in ALERTS if a["session_id"] == payload.session_id), None)
-        if existing:
-            existing["last_message"] = payload.message
-            existing["timestamp"] = datetime.utcnow().isoformat() + "Z"
-        else:
-            alert_entry = {
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "session_id": payload.session_id,
-                "user_id": None,
-                "intent": "student_requested",
-                "anxiety_score": 0,
-                "severity": "Requested",
-                "message": payload.message,
-                "last_message": payload.message,
-                "status": "pending",
-                "counselor_took_over": False,
-            }
-            ALERTS.append(alert_entry)
 
-            try:
-                from app.database.database import supabase
-                supabase.table("counselor_alerts").insert({
-                    "session_id": payload.session_id,
-                    "user_id": payload.session_id,
-                    "intent": "student_requested",
-                    "anxiety_score": 0,
-                    "severity": "Requested",
-                    "message": payload.message,
-                    "status": "pending",
-                }).execute()
-            except Exception as e:
-                print(f"Supabase alert insert error: {e}")
-
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    
-@router.get("/student-profile/{student_id}")
-def get_student_profile(student_id: str):
-    from app.constants import TEST_CREDENTIALS
-    creds = TEST_CREDENTIALS.get(student_id)
-    if not creds or "name" not in creds:
-        return {"profile": None}
-    return {"profile": {
-        "student_id": student_id,
-        "name": creds["name"],
-        "email": creds["email"],
-        "program": creds.get("program"),
-        "year": creds.get("year"),
-    }}
-
-
+# ===========================================================================
+# PDF export
+# ===========================================================================
 @router.get("/export-session/{session_id}")
 def export_session_pdf(session_id: str):
-    from app.services.session_manager import get_session
-    from app.constants import TEST_CREDENTIALS
-
-    session = get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    messages = session.get("messages", [])
-    meta = session.get("meta", {})
-    user_id = session.get("user_id")
-
-    # Pull student profile if available, matching student-profile endpoint logic
-    creds = TEST_CREDENTIALS.get(user_id, {}) if user_id else {}
-    student_name = creds.get("name", "Not identified")
-    student_program = creds.get("program", "—")
-    student_year = creds.get("year", "—")
-    student_email = creds.get("email", "—")
-
-    # Pull latest case note if one exists
-    note_text = "—"
-    note_outcome = "—"
     try:
         from app.database.database import supabase
-        notes = supabase.table("session_notes")\
-            .select("*")\
-            .eq("session_id", session_id)\
-            .order("created_at", desc=True)\
-            .limit(1)\
+        from app.constants import TEST_CREDENTIALS
+
+        try:
+            session_result = (
+                supabase.table("sessions")
+                .select("*")
+                .eq("session_id", session_id)
+                .single()
+                .execute()
+            )
+        except Exception:
+            session_result = None
+
+        if not session_result or not session_result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = session_result.data
+        meta = session.get("meta") or {}
+
+        interactions_result = (
+            supabase.table("interactions")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("timestamp")
             .execute()
-        if notes.data:
-            note_text = notes.data[0].get("note") or "—"
-            note_outcome = notes.data[0].get("outcome") or "—"
-    except Exception as e:
-        print(f"Note fetch error during export: {e}")
+        )
+        interactions = interactions_result.data or []
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.6*inch, bottomMargin=0.6*inch)
-    styles = getSampleStyleSheet()
+        messages = []
+        for row in interactions:
+            messages.append(
+                {
+                    "sender": "user",
+                    "text": row["message"],
+                    "timestamp": row["timestamp"],
+                    "analysis": {
+                        "intent": row.get("intent"),
+                        "confidence": row.get("confidence"),
+                    },
+                }
+            )
+            if row.get("response"):
+                messages.append(
+                    {
+                        "sender": "assistant",
+                        "text": row["response"],
+                        "timestamp": row["timestamp"],
+                    }
+                )
 
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=4)
-    meta_style = ParagraphStyle('Meta', parent=styles['Normal'], fontSize=9, textColor=colors.grey)
-    label_style = ParagraphStyle('Label', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#374151'), spaceBefore=2, spaceAfter=2)
+        user_id = session["student_id"]
+        started_at = session["created_at"]
 
-    elements = []
+        creds = TEST_CREDENTIALS.get(user_id, {}) if user_id else {}
+        student_name = creds.get("name", "Not identified")
+        student_program = creds.get("program", "—")
+        student_year = creds.get("year", "—")
+        student_email = creds.get("email", "—")
 
-    # ── Header ─────────────────────────────────────────────
-    elements.append(Paragraph("GAIDA — Session Referral Report", title_style))
-    elements.append(Paragraph("University of the East — Guidance & Counseling Office", meta_style))
-    elements.append(Spacer(1, 12))
+        # Latest case note, if one exists
+        note_text = "—"
+        note_outcome = "—"
+        try:
+            notes = (
+                supabase.table("session_notes")
+                .select("*")
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if notes.data:
+                note_text = notes.data[0].get("note") or "—"
+                note_outcome = notes.data[0].get("outcome") or "—"
+        except Exception as e:
+            print(f"Note fetch error during export: {e}")
 
-    # ── Student info table ─────────────────────────────────
-    student_data = [
-        ["Student Name", student_name],
-        ["Student ID", user_id or "Not identified"],
-        ["Program / Year", f"{student_program}, Year {student_year}" if student_program != "—" else "—"],
-        ["Email", student_email],
-    ]
-    student_table = Table(student_data, colWidths=[150, 350])
-    student_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#374151')),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    elements.append(student_table)
-    elements.append(Spacer(1, 16))
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.6 * inch, bottomMargin=0.6 * inch)
+        styles = getSampleStyleSheet()
 
-    # ── Session metadata table ────────────────────────────
-    summary_data = [
-        ["Session ID", session_id],
-        ["Started At", session.get("started_at", "—")],
-        ["Total Messages", str(len(messages))],
-        ["Peak Anxiety Level", meta.get("running_intent", "—").title()],
-        ["Final Confidence Score", f"{meta.get('running_confidence', 0):.0%}"],
-        ["Resolved By", meta.get("resolved_by") or "Not yet resolved"],
-        ["Outcome", note_outcome.replace("_", " ").title() if note_outcome != "—" else "—"],
-        ["Case Note", note_text],
-    ]
-    summary_table = Table(summary_data, colWidths=[150, 350])
-    summary_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#374151')),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    elements.append(summary_table)
-    elements.append(Spacer(1, 20))
+        title_style = ParagraphStyle("CustomTitle", parent=styles["Heading1"], fontSize=16, spaceAfter=4)
+        meta_style = ParagraphStyle("Meta", parent=styles["Normal"], fontSize=9, textColor=colors.grey)
+        label_style = ParagraphStyle(
+            "Label", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#374151"),
+            spaceBefore=2, spaceAfter=2,
+        )
 
-    # ── Conversation transcript ───────────────────────────
-    elements.append(Paragraph("Conversation Transcript", styles['Heading2']))
-    elements.append(Spacer(1, 8))
+        elements = []
 
-    sender_labels = {
-        "user": "Student",
-        "assistant": "GAIDA",
-        "bot": "GAIDA",
-        "counselor": "Counselor",
-        "system": "System",
-    }
+        # ── Header ─────────────────────────────────────────────
+        elements.append(Paragraph("GAIDA — Session Referral Report", title_style))
+        elements.append(Paragraph("University of the East — Guidance & Counseling Office", meta_style))
+        elements.append(Spacer(1, 12))
 
-    for m in messages:
-        sender = sender_labels.get(m.get("sender"), m.get("sender", "Unknown"))
-        text = m.get("text", "") or ""
-        timestamp = m.get("timestamp", "")
-        analysis = m.get("analysis", {})
-        intent = analysis.get("intent")
-        confidence = analysis.get("confidence")
+        # ── Student info table ─────────────────────────────────
+        student_data = [
+            ["Student Name", student_name],
+            ["Student ID", user_id or "Not identified"],
+            ["Program / Year", f"{student_program}, Year {student_year}" if student_program != "—" else "—"],
+            ["Email", student_email],
+        ]
+        student_table = Table(student_data, colWidths=[150, 350])
+        student_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f3f4f6")),
+                    ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#374151")),
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        elements.append(student_table)
+        elements.append(Spacer(1, 16))
 
-        tag = f"<b>{sender}</b>"
-        if intent and confidence is not None:
-            tag += f" <font size=8 color='#9ca3af'>({intent}, {confidence:.0%})</font>"
-        tag += f" <font size=7 color='#9ca3af'>{timestamp}</font>"
+        # ── Session metadata table ────────────────────────────
+        summary_data = [
+            ["Session ID", session_id],
+            ["Started At", started_at],
+            ["Total Messages", str(len(messages))],
+            ["Peak Anxiety Level", str(meta.get("running_intent", "—")).title()],
+            ["Final Confidence Score", f"{meta.get('running_confidence', 0):.0%}"],
+            ["Resolved By", meta.get("resolved_by") or "Not yet resolved"],
+            ["Outcome", note_outcome.replace("_", " ").title() if note_outcome != "—" else "—"],
+            ["Case Note", note_text],
+        ]
+        summary_table = Table(summary_data, colWidths=[150, 350])
+        summary_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f3f4f6")),
+                    ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#374151")),
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        elements.append(summary_table)
+        elements.append(Spacer(1, 20))
 
-        elements.append(Paragraph(tag, label_style))
-        elements.append(Paragraph(text.replace('\n', '<br/>'), styles['Normal']))
+        # ── Conversation transcript ───────────────────────────
+        elements.append(Paragraph("Conversation Transcript", styles["Heading2"]))
         elements.append(Spacer(1, 8))
 
-    doc.build(elements)
-    buffer.seek(0)
+        sender_labels = {
+            "user": "Student",
+            "assistant": "GAIDA",
+            "bot": "GAIDA",
+            "counselor": "Counselor",
+            "system": "System",
+        }
 
-    return FastAPIResponse(
-        content=buffer.read(),
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=GAIDA_Session_{session_id[:8]}.pdf"
-        },
-    )
+        for m in messages:
+            sender = sender_labels.get(m.get("sender"), m.get("sender", "Unknown"))
+            text = m.get("text", "") or ""
+            timestamp = m.get("timestamp", "")
+            analysis = m.get("analysis", {})
+            intent = analysis.get("intent")
+            confidence = analysis.get("confidence")
+
+            tag = f"<b>{sender}</b>"
+            if intent and confidence is not None:
+                tag += f" <font size=8 color='#9ca3af'>({intent}, {confidence:.0%})</font>"
+            tag += f" <font size=7 color='#9ca3af'>{timestamp}</font>"
+
+            elements.append(Paragraph(tag, label_style))
+            elements.append(Paragraph(text.replace("\n", "<br/>"), styles["Normal"]))
+            elements.append(Spacer(1, 8))
+
+        doc.build(elements)
+        buffer.seek(0)
+
+        return FastAPIResponse(
+            content=buffer.read(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=GAIDA_Session_{session_id[:8]}.pdf"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}")
+    
+@router.post("/sessions/delete")
+def soft_delete_cases(payload: DeleteCases):
+    """
+    Soft delete a session and its associated data.
+    Marks the session as deleted in the database and removes it from active memory.
+    """
+    found = False
+    for alert in ALERTS:
+        if alert["session_id"] == payload.session_id:
+            alert["deleted"] = True
+            alert["deleted_at"] = datetime.utcnow().isoformat() + "Z"
+            alert["deleted_by"] = payload.deleted_by
+            found = True
+            break
+    try:
+        from app.database.database import supabase
+
+        supabase.table("counselor_alerts").update({
+            "deleted": True,
+            "deleted_at": datetime.utcnow().isoformat() + "Z",
+            "deleted_by": payload.deleted_by,
+        }).eq("session_id", payload.session_id).execute()
+    except Exception as e:
+        print(f"Supabase delete error: {e}")
+
+    if not found:
+        # still return ok — the Supabase row may exist even if not in the
+        # in-memory ALERTS list (e.g. after a server restart)
+        return {"ok": True, "note": "not found in memory, supabase update attempted"}
+    
+    return {"ok": True}
