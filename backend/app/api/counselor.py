@@ -88,6 +88,10 @@ class DeleteCases(BaseModel):
     session_id: str
     deleted_by: Optional[str] = None
 
+class SessionRating(BaseModel):
+    session_id: str
+    rating: int  # 1-5
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -160,6 +164,20 @@ def process_alert(
 # ===========================================================================
 # Alerts
 # ===========================================================================
+@router.post("/session/rate")
+def rate_session(payload: SessionRating):
+    try:
+        from app.database.database import supabase
+        supabase.table("session_ratings").insert({
+            "session_id": payload.session_id,
+            "rating": payload.rating,
+            "rated_at": datetime.utcnow().isoformat() + "Z",
+        }).execute()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @router.get("/alerts")
 def get_alerts():
     return {"alerts": ALERTS, "count": len(ALERTS)}
