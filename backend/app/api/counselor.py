@@ -7,7 +7,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response as FastAPIResponse
 from pydantic import BaseModel
 from reportlab.lib import colors
@@ -90,7 +90,8 @@ class DeleteCases(BaseModel):
 
 class SessionRating(BaseModel):
     session_id: str
-    rating: int  # 1-5
+    wellbeing_rating: int
+    severity_at_end: str
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -164,13 +165,43 @@ def process_alert(
 # ===========================================================================
 # Alerts
 # ===========================================================================
+@router.get("/student/checkin/{student_id}")
+def get_checkin_status(student_id: str):
+    try:
+        from app.database.database import supabase
+        result = supabase.table("sessions")\
+            .select("session_token, peak_severity, created_at")\
+            .eq("student_id", student_id)\
+            .not_.is_("ended_at", "null")\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+
+        if not result.data:
+            return {"needs_checkin": False}
+
+        last = result.data[0]
+        peak = last.get("peak_severity", "Normal")
+
+        if peak in ("High", "Crisis"):
+            return {
+                "needs_checkin": True,
+                "peak_severity": peak,
+                "last_session": last.get("created_at"),
+            }
+
+        return {"needs_checkin": False}
+    except Exception as e:
+        return {"needs_checkin": False, "error": str(e)}
+    
 @router.post("/session/rate")
 def rate_session(payload: SessionRating):
     try:
         from app.database.database import supabase
         supabase.table("session_ratings").insert({
             "session_id": payload.session_id,
-            "rating": payload.rating,
+            "wellbeing_rating": payload.wellbeing_rating,
+            "severity_at_end": payload.severity_at_end,
             "rated_at": datetime.utcnow().isoformat() + "Z",
         }).execute()
         return {"ok": True}
@@ -478,29 +509,6 @@ def get_chat_transcript(session_id: str):
         return {"error": str(e), "messages": [], "counselor_typing": False, "student_typing": False}
 
 
-@router.post("/chat/{session_id}")
-def post_student_message(session_id: str, payload: StudentMessage):
-    """
-    Student dashboard mirrors messages here so counselor can see them in
-    real time. Called after every student message send.
-    """
-    try:
-        from app.services.session_manager import get_session, record_interaction
-
-        session = get_session(session_id)
-        if not session:
-            return {"ok": False, "error": "Session not found"}
-
-        record_interaction(
-            session_id=session_id,
-            sender=payload.sender,
-            text=payload.text,
-            analysis={},
-            response=None,
-        )
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
 
 
 @router.post("/typing/{session_id}")

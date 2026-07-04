@@ -58,39 +58,12 @@ class UserInput(BaseModel):
     message: str
     session_id: str | None = None
     user_id: str | None = None
+    intent: str | None = None
+    vent_mode: bool = False
 
 class ConsentInput(BaseModel):
     session_id: str
     consent_given: bool
-
-
-# ----------------------------
-# Logging
-# ----------------------------
-def log_interaction(
-    session_id: str,
-    user_message: str,
-    assistant_reply: str,
-    intent: str = None,
-    confidence: float = None,
-    anxiety_score: int = None,
-    method: str = None,
-    severity: str = None,
-):
-    try:
-        supabase.table("interactions").insert({
-            "session_id": session_id,
-            "student_id": session_id,
-            "message": user_message,
-            "response": assistant_reply,
-            "intent": intent,
-            "confidence": confidence,
-            "anxiety_score": anxiety_score,
-            "method": method,
-            "severity": severity,
-        }).execute()
-    except Exception as e:
-        print(f"Supabase log error: {e}")
 
 
 # ----------------------------
@@ -125,6 +98,7 @@ def virtual_agent(input: UserInput):
         user_message=input.message,
         session_id=input.session_id,
         user_id=input.user_id,
+        vent_mode=input.vent_mode,
     )
 
     if result.get("counselor_active"):
@@ -133,17 +107,6 @@ def virtual_agent(input: UserInput):
             "counselor_active": True,
             "response": None,
         }
-
-    log_interaction(
-        session_id=result.get("session_id") or input.session_id or "unknown",
-        user_message=input.message,
-        assistant_reply=result.get("response", ""),
-        intent=result.get("intent"),
-        confidence=result.get("confidence"),
-        anxiety_score=result.get("anxiety_score"),
-        method=result.get("method"),
-        severity=result.get("severity"),
-    )
 
     return {
         "session_id": result.get("session_id"),

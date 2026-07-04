@@ -57,20 +57,95 @@ def _scaled_boost(raw_confidence: float, base_multiplier: float, threshold: floa
     return min(0.98, raw_confidence * scaled_multiplier)
 
 
-def analyze_intent(user_message: str, session_id: str | None = None, user_id: str | None = None) -> Dict[str, Any]:
+def analyze_intent(user_message: str, session_id: str | None = None, user_id: str | None = None, vent_mode: bool = False) -> Dict[str, Any]:
 
     # --- Step 1: Ensure session exists ---
     if session_id and get_session(session_id):
         session = get_session(session_id)
     else:
-        session_id = start_session(user_id)
+        session_id = start_session(user_id, session_id=session_id)
         session = get_session(session_id)
 
-    # --- Step 2: Detect intent + raw confidence ---
+    # --- Step 2: Detect intent (always — even in vent mode for safety) ---
     detection = detect_intent_and_level(user_message)
-    intent = detection["intent"]
+    detected_intent = detection["intent"]
     raw_confidence = detection["confidence"]
     crisis_resources = detection["crisis_resources"]
+
+    # --- VENT MODE: silently track real analysis but respond with listening prompt ---
+    if vent_mode and detected_intent != "suicidal" and raw_confidence < 0.99:
+        intent = detected_intent
+        running_confidence = raw_confidence
+
+        final_detection = _build_result(detected_intent, raw_confidence)
+        severity = final_detection["severity"]
+        anxiety_level = final_detection["anxiety_level"]
+        anxiety_score = final_detection["anxiety_score"]
+
+        if "meta" not in session:
+            session["meta"] = {}
+        session["meta"]["running_confidence"] = running_confidence
+        session["meta"]["running_intent"] = intent
+
+        gpt_result = generate_response_with_gpt(
+            user_message=user_message,
+            session_context=session,
+            anxiety_level="venting",
+            counselor_protocol=None,
+        )
+
+        if gpt_result.get("used") and gpt_result.get("response"):
+            response_text = gpt_result["response"]
+            method = "gpt"
+        else:
+            response_text = "I'm listening. Take your time — I'm right here."
+            method = "fallback"
+
+        try:
+            record_interaction(
+                session_id=session_id,
+                sender="user",
+                text=user_message,
+                analysis={
+                    "intent": intent,
+                    "confidence": running_confidence,
+                    "intensity": anxiety_score,
+                    "severity": severity,
+                    "escalate": False,
+                },
+                response=response_text,
+            )
+        except Exception as e:
+            logger.error(f"Failed to record vent interaction: {e}")
+
+        if response_text:
+            try:
+                record_interaction(
+                    session_id=session_id,
+                    sender="bot",
+                    text=response_text,
+                    analysis={},
+                    response=None,
+                )
+            except Exception as e:
+                logger.error(f"Failed to record vent bot interaction: {e}")
+
+        return {
+            "session_id": session_id,
+            "intent": intent,
+            "confidence": running_confidence,
+            "anxiety_level": anxiety_level,
+            "severity": severity,
+            "anxiety_score": anxiety_score,
+            "response": response_text,
+            "method": method,
+        }
+
+    # --- VENT MODE CRISIS OVERRIDE: student said something crisis/suicidal ---
+    if vent_mode and (detected_intent == "suicidal" or raw_confidence >= 0.99):
+        logger.warning("VENT MODE OVERRIDE: crisis detected in vent session %s", session_id)
+
+    intent = detected_intent
 
     # --- Step 3: Crisis bypass ---
     if intent == "suicidal" or raw_confidence >= 0.99:
@@ -119,11 +194,10 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
 
             if _detect_urgent(user_message):
                 running_confidence = (previous_confidence * 0.4) + (boosted_raw * 0.6)
-                running_confidence = max(running_confidence, 0.60)  # Moderate floor, not always High
+                running_confidence = max(running_confidence, 0.60)
             else:
                 running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
 
-            # Prevent confidence from dropping more than 20% in a single message
             max_drop = previous_confidence * 0.50
             running_confidence = max(max_drop, running_confidence)
             running_confidence = round(running_confidence, 3)
@@ -187,17 +261,18 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
     if session.get("meta", {}).get("counselor_active"):
         try:
             record_interaction(
-                session_id=session_id,
-                sender="user",
-                text=user_message,
-                analysis={
-                    "intent": intent,
-                    "confidence": running_confidence,
-                    "intensity": anxiety_score,
-                    "escalate": anxiety_level in ("high", "crisis"),
-                },
-                response=None,
-            )
+            session_id=session_id,
+            sender="user",
+            text=user_message,
+            analysis={
+                "intent": intent,
+                "confidence": running_confidence,
+                "intensity": anxiety_score,
+                "severity": severity,
+                "escalate": anxiety_level in ("high", "crisis") or running_confidence >= 0.99,
+            },
+            response=None,
+        )
         except Exception as e:
             logger.error(f"Failed to record interaction: {e}")
 
@@ -249,23 +324,22 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
     # --- Step 9: Record interaction ---
     try:
         record_interaction(
-            session_id=session_id,
-            sender="user",
-            text=user_message,
-            analysis={
-                "intent": intent,
-                "confidence": running_confidence,
-                "intensity": anxiety_score,
-                "escalate": anxiety_level in ("high", "crisis"),
-            },
-            response=response_text,
-        )
+        session_id=session_id,
+        sender="user",
+        text=user_message,
+        analysis={
+            "intent": intent,
+            "confidence": running_confidence,
+            "intensity": anxiety_score,
+            "severity": severity,
+            "escalate": anxiety_level in ("high", "crisis") or running_confidence >= 0.99,
+        },
+        response=response_text,
+    )
     except Exception as e:
         logger.error(f"Failed to record interaction: {e}")
 
     # --- Step 9a: Also log GAIDA's bot reply as its own visible message ---
-    # Only fires here because counselor_active sessions already return early in Step 6,
-    # so this code path only runs when GAIDA is the one actually replying.
     if response_text:
         try:
             record_interaction(

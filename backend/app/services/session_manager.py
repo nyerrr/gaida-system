@@ -12,28 +12,35 @@ _SUBSCRIBERS: List[Callable] = []
 
 
 
-def start_session(user_id: str | None = None) -> str:
-    session_id = str(uuid.uuid4())
-    SESSIONS[session_id] = {
-        "session_id": session_id,
+def start_session(user_id: str | None = None, session_id: str | None = None) -> str:
+    sid = session_id or str(uuid.uuid4())
+    if sid in SESSIONS:
+        return sid
+    SESSIONS[sid] = {
+        "session_id": sid,
         "user_id": user_id,
         "started_at": datetime.utcnow().isoformat() + "Z",
         "messages": [],
         "active": True,
         "meta": {
-            # ---------------------------------------------------------------------------
-            # Cumulative confidence tracking
-            # running_confidence: blended score across all messages in session
-            # running_intent: highest distress intent detected so far
-            # Starts neutral at 0.3 — builds up or down as conversation progresses
-            # ---------------------------------------------------------------------------
             "running_confidence": 0.3,
             "running_intent": "neutral",
-            "peak_severity": "Normal",    
-            "peak_confidence": 0.3,   
+            "peak_severity": "Normal",
+            "peak_confidence": 0.3,
         }
     }
-    return session_id
+    # Insert row into Supabase so end_session() can update it later
+    try:
+        from app.database.database import supabase
+        supabase.table("sessions").insert({
+            "session_token": sid,
+            "student_id": user_id,
+            "peak_severity": "Normal",
+            "started_at": SESSIONS[sid]["started_at"],
+        }).execute()
+    except Exception as e:
+        print(f"DEBUG start_session Supabase insert error: {e}")
+    return sid
 
 
 def subscribe(callback: Callable):
@@ -58,19 +65,33 @@ def _notify_subscribers(session_id: str, entry: Dict[str, Any]):
 
 
 def _persist_entry(entry: Dict[str, Any]):
+    if entry.get("sender") == "bot":
+        return
     try:
+        analysis = entry.get("analysis", {}) or {}
         supabase.table("interactions").insert({
             "session_id": entry.get("session_id"),
-            "student_id": entry.get("session_id"),  
+            "student_id": entry.get("session_id"),
             "message": entry.get("text"),
             "response": entry.get("response") or "",
             "timestamp": entry.get("timestamp"),
+            "intent": str(analysis.get("intent", "")) if analysis.get("intent") else None,
+            "confidence": float(analysis.get("confidence", 0)) if analysis.get("confidence") else None,
+            "anxiety_score": analysis.get("intensity"),
+            "severity": analysis.get("severity"),
+            "method": "gpt",
         }).execute()
     except Exception as e:
         print(f"Supabase insert error: {e}")
 
 
 def record_interaction(session_id: str, sender: str, text: str, analysis: Dict | None = None, response: str | None = None):
+    if not text or text.strip() == "":
+        import traceback
+        print(f"DEBUG empty text called by:")
+        traceback.print_stack()
+    print(f"DEBUG record_interaction called: sender={sender}, text={repr(text[:50] if text else 'NONE')}")
+    print(f"DEBUG record_interaction called: sender={sender}, analysis={analysis}")  
     session = SESSIONS.get(session_id)
     if session is None:
         # create ephemeral session if missing
@@ -164,9 +185,23 @@ def list_active_sessions():
         result.append(s)
     return result
 
-
 def end_session(session_id: str):
+    print(f"DEBUG end_session called with: {session_id}")
+    print(f"DEBUG SESSIONS keys: {list(SESSIONS.keys())[:5]}")
     s = SESSIONS.get(session_id)
+    print(f"DEBUG session found: {s is not None}")
     if s:
         s["active"] = False
         s["ended_at"] = datetime.utcnow().isoformat() + "Z"
+        peak = s["meta"].get("peak_severity", "Normal")
+        student_id = s.get("user_id")
+        print(f"DEBUG end_session: peak_severity={peak} student_id={student_id}")
+        try:
+            from app.database.database import supabase
+            result = supabase.table("sessions").update({
+                "ended_at": s["ended_at"],
+                "peak_severity": peak,
+                "student_id": student_id,
+            }).eq("session_token", session_id).execute()
+        except Exception as e:
+            print(f"DEBUG end_session Supabase error: {e}")

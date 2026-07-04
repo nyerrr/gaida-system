@@ -308,11 +308,29 @@ export default function StudentDashboard() {
   // ── Auth + session reset on mount ────────────────────────────
   useEffect(() => {
     const token   = localStorage.getItem('session_token');
+    // Feature 3: check-in prompt for returning High/Crisis students
+    const studentId = localStorage.getItem('student_id');
+    if (studentId) {
+      fetch(`${BACKEND}/api/counselor/student/checkin/${studentId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.needs_checkin) {
+            setMessages([{
+              role: 'bot',
+              text: data.peak_severity === 'Crisis'
+                ? "Kumusta ka na? Last time we talked, you were going through something really heavy. How have you been feeling since then?"
+                : "Hey, kumusta? It's been a few days since we last talked - just checking in. How are you feeling today?",
+              timestamp: new Date(),
+              isCheckin: true,
+            }]);
+          }
+        })
+        .catch(() => {});
+    }
     const consent = localStorage.getItem('consent_given');
     if (!token)   { navigate('/student-login'); return; }
     if (!consent) { navigate('/consent');       return; }
 
-    localStorage.removeItem('session_id');
     setSidebarOpen(window.innerWidth >= 1024);
     timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
     return () => clearInterval(timerRef.current);
@@ -398,6 +416,27 @@ export default function StudentDashboard() {
     typingTimeout.current = setTimeout(() => fireTyping(false), TYPING_DEBOUNCE);
   };
 
+  const handleEndSession = () => {
+    const currentSessionId = localStorage.getItem('session_id'); // capture NOW
+    setCurrentSessionId(currentSessionId); // store in state
+    setShowRating(true);
+  };
+  
+  const submitRating = async (rating) => {
+    if (currentSessionId) {
+      await fetch(`${BACKEND}/api/counselor/session/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: currentSessionId,
+          wellbeing_rating: rating,
+          severity_at_end: severity,
+        }),
+      }).catch(() => {});
+    }
+    confirmEndSession();
+  };
+
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || sending) return;
@@ -413,13 +452,6 @@ export default function StudentDashboard() {
     const sessionId = localStorage.getItem('session_id');
     const token     = localStorage.getItem('session_token');
 
-    if (sessionId) {
-      fetch(`${BACKEND}/api/counselor/chat/${sessionId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sender: 'student', text }),
-      }).catch(() => {});
-    }
 
     try {
       const res = await fetch(`${BACKEND}/virtual-agent`, {
@@ -431,7 +463,7 @@ export default function StudentDashboard() {
         body: JSON.stringify({
           message:    text,
           session_id: sessionId,
-          student_id: localStorage.getItem('student_id'),
+          user_id: localStorage.getItem('student_id'),
           intent:     ventMode ? 'venting' : 'unknown',
           vent_mode:  ventMode,
         }),
@@ -474,7 +506,7 @@ export default function StudentDashboard() {
     if (!sessionId) return;
     setRequestingCounselor(true);
     try {
-      const res = await fetch(`${BACKEND}/api/counselor/request`, {
+      const res = await fetch(`${BACKEND}/api/counselor/request-counselor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId }),
@@ -503,7 +535,16 @@ export default function StudentDashboard() {
     }
   };
 
-  const confirmEndSession = () => {
+  const confirmEndSession = async () => {
+    const sessionId = localStorage.getItem('session_id');
+    if (sessionId) {
+      try {
+        await fetch(`${BACKEND}/api/session/${sessionId}/end`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (_) {}
+    }
     ['session_token', 'student_id', 'consent_given', 'session_id'].forEach(k =>
       localStorage.removeItem(k)
     );
@@ -515,7 +556,7 @@ export default function StudentDashboard() {
     const sessionId = localStorage.getItem('session_id');
     if (sessionId) {
       try {
-        await fetch(`${BACKEND}/api/session/rate`, {
+        await fetch(`${BACKEND}/api/counselor/session/rate`, {  
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

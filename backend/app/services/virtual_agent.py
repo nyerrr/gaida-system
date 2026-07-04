@@ -281,8 +281,8 @@ def _build_result(intent: str, confidence: float, post_crisis: bool = False) -> 
         return {
             "intent": intent,
             "confidence": confidence,
-            "anxiety_level": "crisis",
-            "severity": "High",
+            "anxiety_level": "Crisis",
+            "severity": "Crisis",
             "counselor_protocol": COUNSELOR_PROTOCOLS["crisis"],
             "crisis_resources": CRISIS_RESOURCES,
             "anxiety_score": 5,
