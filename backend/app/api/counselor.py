@@ -71,7 +71,7 @@ class StudentMessage(BaseModel):
 
 class CounselorRequest(BaseModel):
     session_id: str
-    message: str
+    message: str = ""
 
 
 class SessionNote(BaseModel):

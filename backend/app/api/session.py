@@ -87,7 +87,6 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
-manager = ConnectionManager()
 
 # Register session_manager subscriber to broadcast new interactions
 from app.services.session_manager import subscribe

@@ -1,8 +1,6 @@
 # backend/app/main.py
 import sys
 import os
-from datetime import datetime
-from app.database.database import supabase
 from fastapi import Response
 
 
@@ -17,14 +15,14 @@ if project_root not in sys.path:
 # ----------------------------
 # Imports
 # ----------------------------
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 
 from app.services.intent_router import analyze_intent
 from app.services.rate_limiter import check_rate_limit
-from app.utils.consent_checker import log_consent
 from app.api import auth
 from app.api.voice import router as audio_router
 from app.api.counselor import router as counselor_router
@@ -43,13 +41,30 @@ app.include_router(session_router)
 # ----------------------------
 # CORS
 # ----------------------------
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://gaida-system.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ----------------------------
+# Security headers
+# ----------------------------
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # ----------------------------
 # Models
@@ -60,11 +75,6 @@ class UserInput(BaseModel):
     user_id: str | None = None
     intent: str | None = None
     vent_mode: bool = False
-
-class ConsentInput(BaseModel):
-    session_id: str
-    consent_given: bool
-
 
 # ----------------------------
 # Routes
@@ -78,16 +88,6 @@ def root_head():
 @app.get("/")
 def root():
     return {"status": "ok", "message": "GAIDA Backend"}
-
-
-@app.post("/consent")
-def record_consent(input: ConsentInput):
-    log_consent(session_id=input.session_id, consent_given=input.consent_given)
-    return {
-        "status": "ok",
-        "session_id": input.session_id,
-        "consent_given": input.consent_given,
-    }
 
 
 @app.post("/virtual-agent")

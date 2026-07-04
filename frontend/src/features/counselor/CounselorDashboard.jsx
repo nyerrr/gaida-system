@@ -5,7 +5,7 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine
 } from 'recharts';
 
-const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+import { BACKEND_URL as BACKEND } from '../../config';
 
 // ── Quick response templates ──────────────────────────────────────────────────
 const QUICK_RESPONSES = [

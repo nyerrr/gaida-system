@@ -29,7 +29,6 @@ def start_session(user_id: str | None = None, session_id: str | None = None) -> 
             "peak_confidence": 0.3,
         }
     }
-    # Insert row into Supabase so end_session() can update it later
     try:
         from app.database.database import supabase
         supabase.table("sessions").insert({
@@ -39,7 +38,7 @@ def start_session(user_id: str | None = None, session_id: str | None = None) -> 
             "started_at": SESSIONS[sid]["started_at"],
         }).execute()
     except Exception as e:
-        print(f"DEBUG start_session Supabase insert error: {e}")
+        print(f"Session insert error: {e}")
     return sid
 
 
@@ -64,14 +63,19 @@ def _notify_subscribers(session_id: str, entry: Dict[str, Any]):
             pass
 
 
+def _resolve_student_id(session_id: str) -> str | None:
+    s = SESSIONS.get(session_id)
+    return s.get("user_id") if s else None
+
 def _persist_entry(entry: Dict[str, Any]):
     if entry.get("sender") == "bot":
         return
     try:
         analysis = entry.get("analysis", {}) or {}
+        session_id = entry.get("session_id", "")
         supabase.table("interactions").insert({
-            "session_id": entry.get("session_id"),
-            "student_id": entry.get("session_id"),
+            "session_id": session_id,
+            "student_id": _resolve_student_id(session_id) or session_id,
             "message": entry.get("text"),
             "response": entry.get("response") or "",
             "timestamp": entry.get("timestamp"),
@@ -86,12 +90,6 @@ def _persist_entry(entry: Dict[str, Any]):
 
 
 def record_interaction(session_id: str, sender: str, text: str, analysis: Dict | None = None, response: str | None = None):
-    if not text or text.strip() == "":
-        import traceback
-        print(f"DEBUG empty text called by:")
-        traceback.print_stack()
-    print(f"DEBUG record_interaction called: sender={sender}, text={repr(text[:50] if text else 'NONE')}")
-    print(f"DEBUG record_interaction called: sender={sender}, analysis={analysis}")  
     session = SESSIONS.get(session_id)
     if session is None:
         # create ephemeral session if missing
@@ -186,16 +184,12 @@ def list_active_sessions():
     return result
 
 def end_session(session_id: str):
-    print(f"DEBUG end_session called with: {session_id}")
-    print(f"DEBUG SESSIONS keys: {list(SESSIONS.keys())[:5]}")
     s = SESSIONS.get(session_id)
-    print(f"DEBUG session found: {s is not None}")
     if s:
         s["active"] = False
         s["ended_at"] = datetime.utcnow().isoformat() + "Z"
         peak = s["meta"].get("peak_severity", "Normal")
         student_id = s.get("user_id")
-        print(f"DEBUG end_session: peak_severity={peak} student_id={student_id}")
         try:
             from app.database.database import supabase
             result = supabase.table("sessions").update({
@@ -204,4 +198,4 @@ def end_session(session_id: str):
                 "student_id": student_id,
             }).eq("session_token", session_id).execute()
         except Exception as e:
-            print(f"DEBUG end_session Supabase error: {e}")
+            print(f"Session end update error: {e}")

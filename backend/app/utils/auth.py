@@ -1,3 +1,7 @@
+# NOTE: auth middleware placeholder — not currently applied to any route.
+# To use, add `dependencies=[Depends(get_api_key)]` to a router or endpoint.
+# See app.api.auth for the actual login/consent endpoints.
+
 from fastapi import Security, HTTPException
 from fastapi.security import APIKeyHeader
 

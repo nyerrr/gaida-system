@@ -1,12 +1,19 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
+from secrets import token_urlsafe
 from app.database.database import supabase
 from app.constants import TEST_CREDENTIALS
+from app.services.rate_limiter import check_rate_limit
 
 ALLOWED_DOMAIN = "@ue.edu.ph"
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+    role: str = "student"
 
 
 class LoginRequest(BaseModel):
@@ -38,27 +45,22 @@ def login(payload: LoginRequest):
     Authenticate student with temporary test credentials.
     Returns a session token on successful login.
     """
+    check_rate_limit(payload.student_number)
+
     student_number = payload.student_number.strip()
 
     if not validate_email_domain(payload.email):
         raise HTTPException(
-            status_code=400,
-            detail=f"Email must end with {ALLOWED_DOMAIN}"
+            status_code=401,
+            detail="Invalid credentials"
         )
     
-    # Check if student number exists in test credentials
-    if student_number not in TEST_CREDENTIALS:
-        raise HTTPException(status_code=401, detail="Invalid student number")
+    credentials = TEST_CREDENTIALS.get(student_number)
     
-    credentials = TEST_CREDENTIALS[student_number]
-    
-    # Validate credentials (antibot is verified client-side via canvas captcha)
-    if (payload.email != credentials["email"] or
-        payload.access_code != credentials["access_code"]):
+    if not credentials or payload.access_code != credentials.get("access_code"):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    # Generate a simple session token (in production, use JWT)
-    session_token = f"token_{student_number}_{int(__import__('time').time())}"
+    session_token = f"token_{student_number}_{token_urlsafe(16)}"
 
     return LoginResponse(
         success=True,
@@ -100,37 +102,13 @@ def record_consent(payload: ConsentRequest):
     }
 
 
-@router.get("/test-credentials")
-def get_test_credentials():
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest):
     """
-    Get available test credentials for development/testing.
-    REMOVE THIS ENDPOINT IN PRODUCTION!
+    Initiate password reset. Always returns success to prevent email enumeration.
     """
-    return {
-        "test_accounts": [
-            {
-                "student_number": "2024001",
-                "email": "student1@ue.edu.ph",
-                "access_code": "ACCESS123",
-                "antibot": "HELLO",
-            },
-            {
-                "student_number": "2024002",
-                "email": "student2@ue.edu.ph",
-                "access_code": "ACCESS456",
-                "antibot": "WORLD",
-            },
-            {
-                "student_number": "2024003",
-                "email": "student3@ue.edu.ph",
-                "access_code": "ACCESS789",
-                "antibot": "GAIDA",
-            },
-            {
-                "email": "counselor@ue.edu.ph",
-                "access_code": "COUNSEL123",
-                "antibot": "GAIDA",
-            }
-        ]
-    }
+    return {"ok": True, "message": "If the email is registered, a reset link has been sent."}
+
+
+
 

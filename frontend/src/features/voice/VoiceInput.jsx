@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+import { BACKEND_URL } from '../../config';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const hasSpeechRecognition = !!SpeechRecognition;
 
-export default function VoiceInput({ onTranscript, onAgentResponse, sessionId, onStatusChange }) {
+export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) {
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

@@ -31,11 +31,6 @@ async def speech_to_text(
     audio: UploadFile = File(...),
     session_id: str = Form(None),
 ):
-    print(f"DEBUG: Received audio file")
-    print(f"DEBUG: content_type={audio.content_type}")
-    print(f"DEBUG: filename={audio.filename}")
-    print(f"DEBUG: session_id={session_id}")
-
     try:
         # Accept any audio content type — browser sends various formats
         content_type = audio.content_type or ""

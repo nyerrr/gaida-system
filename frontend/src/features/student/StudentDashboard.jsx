@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+import { BACKEND_URL as BACKEND } from '../../config';
 const POLL_INTERVAL = 3000;
 const TYPING_DEBOUNCE = 2000;
 
@@ -218,44 +218,6 @@ function MessageBubble({ message, theme }) {
   );
 }
 
-// Quick-start empty state — replaces the bare icon + caption.
-// Each chip pre-fills a common entry point so the student doesn't
-// have to find the words to start typing.
-function EmptyState({ theme, onPick }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-4">
-      <div
-        className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
-        style={{ background: theme.sidebar, border: `1px solid ${theme.border}` }}
-      >
-        <svg className="w-7 h-7" fill="none" stroke={theme.textSecondary} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      </div>
-      <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>Hi, I'm GAIDA.</p>
-      <p className="text-xs mt-1 mb-5" style={{ color: theme.textSecondary }}>
-        What's on your mind today? This space is private.
-      </p>
-
-      <div className="flex flex-col gap-2 w-full max-w-xs">
-        {QUICK_START_PROMPTS.map((p) => (
-          <button
-            key={p.text}
-            onClick={() => onPick(p.text)}
-            className="text-left text-xs px-3.5 py-2.5 rounded-xl transition-colors"
-            style={{ background: theme.sidebar, border: `1px solid ${theme.border}`, color: theme.textSecondary }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = theme.accent; e.currentTarget.style.color = theme.textPrimary; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.color = theme.textSecondary; }}
-          >
-            {p.text}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────
@@ -377,7 +339,9 @@ export default function StudentDashboard() {
           ]);
           lastCounselorCount.current = counselorMsgs.length;
         }
-      } catch (_) {}
+      } catch (e) {
+        console.error('Poll chat error:', e);
+      }
     };
 
     const interval = setInterval(poll, POLL_INTERVAL);
@@ -406,7 +370,7 @@ export default function StudentDashboard() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sender: 'student', is_typing: isTyping }),
-    }).catch(() => {});
+    }).catch((e) => { console.error('Typing indicator error:', e); });
   }, []);
 
   const handleInputChange = (e) => {
@@ -417,22 +381,25 @@ export default function StudentDashboard() {
   };
 
   const handleEndSession = () => {
-    const currentSessionId = localStorage.getItem('session_id'); // capture NOW
-    setCurrentSessionId(currentSessionId); // store in state
     setShowRating(true);
   };
-  
+
   const submitRating = async (rating) => {
-    if (currentSessionId) {
-      await fetch(`${BACKEND}/api/counselor/session/rate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: currentSessionId,
-          wellbeing_rating: rating,
-          severity_at_end: severity,
-        }),
-      }).catch(() => {});
+    const sessionId = localStorage.getItem('session_id');
+    if (sessionId) {
+      try {
+        await fetch(`${BACKEND}/api/counselor/session/rate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            wellbeing_rating: rating,
+            severity_at_end: severity,
+          }),
+        });
+      } catch (e) {
+        console.error('Submit rating error:', e);
+      }
     }
     confirmEndSession();
   };
@@ -543,7 +510,9 @@ export default function StudentDashboard() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
-      } catch (_) {}
+      } catch (e) {
+        console.error('End session error:', e);
+      }
     }
     ['session_token', 'student_id', 'consent_given', 'session_id'].forEach(k =>
       localStorage.removeItem(k)
@@ -931,17 +900,6 @@ export default function StudentDashboard() {
               <VoiceInput
                 sessionId={localStorage.getItem('session_id')}
                 onTranscript={(text) => setInput(text)}
-                onAgentResponse={(data, transcript) => {
-                  if (data.session_id)       localStorage.setItem('session_id', data.session_id);
-                  if (data.severity)         setSeverity(data.severity);
-                  if (data.counselor_active) setCounselorActive(true);
-                  setMessages(prev => [
-                    ...prev,
-                    ...(transcript ? [{ role: 'user', text: transcript, isVoice: true, timestamp: new Date() }] : []),
-                    ...(!data.counselor_active ? [{ role: 'bot', text: data.response, acoustic: data.acoustic, timestamp: new Date() }] : []),
-                  ]);
-                  setInput('');
-                }}
                 onStatusChange={setVoiceStatus}
               />
               <button

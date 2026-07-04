@@ -29,14 +29,18 @@ const APP_SHELL_FILES = [
 
 // ── API routes to cache responses from ───────────────────────
 const API_CACHE_ROUTES = [
-  "/api/session",
-  "/api/history",
+  "/api/session/",
+  "/api/counselor/chat/",
+  "/api/counselor/alerts",
+  "/api/counselor/student-profile/",
 ];
 
 // ── API routes that should be queued when offline ────────────
 const QUEUEABLE_ROUTES = [
-  "/api/chat",
-  "/api/analyze",
+  "/virtual-agent",
+  "/api/counselor/request-counselor",
+  "/api/counselor/takeover",
+  "/api/counselor/typing/",
 ];
 
 
