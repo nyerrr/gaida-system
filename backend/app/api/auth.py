@@ -59,11 +59,6 @@ def login(payload: LoginRequest):
     
     # Generate a simple session token (in production, use JWT)
     session_token = f"token_{student_number}_{int(__import__('time').time())}"
-    supabase.table("sessions").insert({
-        "student_id": student_number,
-        "session_token": session_token,
-        "is_counselor": student_number.startswith("COUNSELOR")
-    }).execute()
 
     return LoginResponse(
         success=True,
