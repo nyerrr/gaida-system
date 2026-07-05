@@ -30,6 +30,29 @@ from app.api.session import router as session_router
 
 app = FastAPI(title="GAIDA Backend")
 
+
+# ----------------------------
+# Pre-warm cold-start dependencies at startup
+# ----------------------------
+@app.on_event("startup")
+def prewarm():
+    # 1. Pre-load ML classifier models
+    try:
+        from app.services.ml_classifier import _load_all_models
+        _load_all_models()
+        print("[startup] ML models loaded")
+    except Exception as e:
+        print(f"[startup] ML model load skipped: {e}")
+
+    # 2. Warm Supabase connection pool
+    try:
+        from app.database.database import supabase
+        supabase.table("sessions").select("id").limit(1).execute()
+        print("[startup] Supabase connection warmed")
+    except Exception as e:
+        print(f"[startup] Supabase warm skipped: {e}")
+
+
 # ----------------------------
 # Routers
 # ----------------------------
