@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { BACKEND_URL } from '../../config';
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/auth/forgot-password`, {
+      const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, role }),
@@ -54,7 +55,7 @@ export default function ForgotPassword() {
       {/* Full bleed UE background */}
       <div
         className="absolute inset-0 bg-center bg-cover bg-no-repeat"
-        style={{ backgroundImage: "url('https://www.ue.edu.ph/mla/wp-content/uploads/2023/04/uesocialogp.png')" }}
+        style={{ backgroundImage: "url('/images/ue-background.png')" }}
       />
 
       {/* White card */}
@@ -63,7 +64,7 @@ export default function ForgotPassword() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-7">
           <img
-            src="https://www.ue.edu.ph/mla/wp-content/uploads/2023/04/uesocialogp.png"
+            src="/images/ue-logo.png"
             alt="University of the East"
             className="w-20 h-20 object-cover object-right rounded-full mb-4 shadow-lg border-4 border-red-700"
           />

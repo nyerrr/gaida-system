@@ -167,7 +167,7 @@ export default function CounselorLogin() {
       {/* Full bleed UE background */}
       <div
         className="absolute inset-0 bg-center bg-cover bg-no-repeat"
-        style={{ backgroundImage: "url('https://www.ue.edu.ph/mla/wp-content/uploads/2023/04/uesocialogp.png')" }}
+        style={{ backgroundImage: "url('/images/ue-background.png')" }}
       >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
       </div>
@@ -178,7 +178,7 @@ export default function CounselorLogin() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-7">
           <img
-            src="https://www.ue.edu.ph/mla/wp-content/uploads/2020/12/UE_RED_SEAL_09.png"
+            src="/images/ue-logo.png"
             alt="University of the East"
             className="w-20 h-20 object-cover object-right rounded-full mb-4 shadow-lg border-4 border-red-700"
           />

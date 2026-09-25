@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth } from '../../api';
+import { BACKEND_URL } from '../../config';
 
 export default function InformedConsent() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ const handleAccept = async (e) => {
     // Get session_id from localStorage (set during login)
     const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
 
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/auth/consent`, {
+    const response = await fetch(`${BACKEND_URL}/api/auth/consent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

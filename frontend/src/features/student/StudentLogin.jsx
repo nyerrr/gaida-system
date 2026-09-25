@@ -113,14 +113,11 @@ export default function StudentLogin() {
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/auth/login`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
       const data = await response.json();
       if (response.ok) {
         // A stale counselor_token on a shared device would keep counselor
@@ -183,8 +180,7 @@ export default function StudentLogin() {
       <div
         className="absolute inset-0 bg-center bg-cover bg-no-repeat"
         style={{
-          backgroundImage:
-            "url('https://www.ue.edu.ph/mla/wp-content/uploads/2023/04/uesocialogp.png')",
+          backgroundImage: "url('/images/ue-background.png')",
         }}
       >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
@@ -195,7 +191,7 @@ export default function StudentLogin() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-5">
           <img
-            src="https://www.ue.edu.ph/mla/wp-content/uploads/2020/12/UE_RED_SEAL_09.png"
+            src="/images/ue-logo.png"
             alt="University of the East"
             className="w-24 h-24 object-cover object-right rounded-full mb-3 shadow-lg border-4 border-red-700"
           />
