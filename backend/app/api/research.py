@@ -370,6 +370,7 @@ class SusRequest(BaseModel):
     # 10 answers, each 1-5, in SUS question order (see frontend
     # ResearchSUS.jsx for the exact wording shown to participants).
     answers: list[int] = Field(min_length=10, max_length=10)
+    comment: str = Field(default="", max_length=1000)
 
 
 class SusResponse(BaseModel):
@@ -407,6 +408,7 @@ def submit_sus(payload: SusRequest, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Session does not belong to this user")
 
     score = _sus_score(payload.answers)
+    comment = payload.comment.strip()
 
     try:
         supabase.table("sus_responses").insert({
@@ -417,6 +419,7 @@ def submit_sus(payload: SusRequest, user: dict = Depends(get_current_user)):
             "q7": payload.answers[6], "q8": payload.answers[7],
             "q9": payload.answers[8], "q10": payload.answers[9],
             "sus_score": score,
+            "comment": comment or None,
         }).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to store SUS response: {e}")

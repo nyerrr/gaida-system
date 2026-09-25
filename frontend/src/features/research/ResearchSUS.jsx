@@ -50,6 +50,7 @@ export default function ResearchSUS() {
   const navigate = useNavigate();
   const [step, setStep] = useState(STEP.SUS);
   const [answers, setAnswers] = useState(Array(SUS_QUESTIONS.length).fill(null));
+  const [comment, setComment] = useState('');
   const [error, setError] = useState('');
 
   const allAnswered = answers.every((a) => a !== null);
@@ -86,7 +87,7 @@ export default function ResearchSUS() {
       const res = await apiFetch(`${BACKEND_URL}/api/research/sus`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id, answers }),
+        body: JSON.stringify({ session_id, answers, comment: comment.trim() }),
       });
       if (!res.ok) throw new Error('Could not save your responses');
       clearHandoffKeys();
@@ -151,6 +152,28 @@ export default function ResearchSUS() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-5">
+              <label htmlFor="sus-comment" className="block text-sm font-medium" style={{ color: T.textPrimary }}>
+                Do you have any comments or suggestions for GAIDA?
+              </label>
+              <p className="text-xs mt-1 mb-2" style={{ color: T.textSecondary }}>
+                Optional. Tell us what worked well or what you would improve.
+              </p>
+              <textarea
+                id="sus-comment"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                maxLength={1000}
+                rows={3}
+                placeholder="Share your feedback…"
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y focus:border-[#5E8FBD]"
+                style={{ background: T.card, border: `1px solid ${T.border}`, color: T.textPrimary }}
+              />
+              <p className="text-[10px] mt-1 text-right" style={{ color: T.textMuted }}>
+                {comment.length}/1000
+              </p>
             </div>
 
             {error && (
