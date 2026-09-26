@@ -1734,25 +1734,60 @@ export default function CounselorDashboard() {
   // tab (browsers throttle setInterval there but not live network streams).
   // Declared after the fetch* consts so the listeners can reference them
   // (react-hooks/immutability). The 2s poll below is the fallback.
+  //
+  // Auth here is a short-lived, single-use ticket (POST /events/ticket,
+  // normal Authorization header) rather than the long-lived counselor
+  // bearer token in the URL — a token in the querystring can sit in
+  // server/proxy access logs and browser history for as long as that
+  // token stays valid (hours); a ticket is worthless within ~30s.
+  // EventSource's built-in auto-reconnect can't fetch a fresh ticket on
+  // its own, so reconnection is handled manually below instead.
   useEffect(() => {
-    const token = localStorage.getItem('counselor_token');
-    if (!token) return;
     let es = null;
-    try {
-      es = new EventSource(`${BACKEND}/api/counselor/events?token=${encodeURIComponent(token)}`);
+    let retryTimer = null;
+    let cancelled = false;
+
+    const connect = async () => {
+      if (cancelled) return;
+      const token = localStorage.getItem('counselor_token');
+      if (!token) return;
+      let ticket;
+      try {
+        const res = await apiFetch(`${BACKEND}/api/counselor/events/ticket`, { method: 'POST' });
+        if (!res.ok) throw new Error('ticket request failed');
+        ({ ticket } = await res.json());
+      } catch {
+        // Backend unreachable / not a counselor anymore — the 2s poll
+        // fallback still covers updates; just retry the SSE connection.
+        retryTimer = setTimeout(connect, 5000);
+        return;
+      }
+      if (cancelled) return;
+
+      es = new EventSource(`${BACKEND}/api/counselor/events?ticket=${encodeURIComponent(ticket)}`);
       es.addEventListener('alerts', fetchAlerts);
       es.addEventListener('sessions', fetchSessions);
       es.addEventListener('welfare', fetchWelfare);
-      // EventSource auto-reconnects on drop; re-sync on every (re)connect.
       es.onopen = () => {
         fetchAlerts();
         fetchSessions();
         fetchWelfare();
       };
-    } catch {
-      es = null;
-    }
+      // A ticket is single-use, so once this connection drops (network
+      // blip, server restart, expired ticket) it can't just be retried —
+      // close it and fetch a fresh ticket for a new connection.
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (!cancelled) retryTimer = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+
     return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       if (es) es.close();
     };
   }, []);

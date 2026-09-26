@@ -105,13 +105,23 @@ class ParticipantCheckResponse(BaseModel):
 
 
 @router.post("/participant-check", response_model=ParticipantCheckResponse)
-def check_participant(payload: ParticipantCheckRequest):
+def check_participant(payload: ParticipantCheckRequest, request: Request):
     """
     Called right after the identification step, before deciding whether to
     show the demographics form. Anonymous participants only get a
     meaningful answer here if they entered a previous code — a brand-new
     anonymous participant has no code yet, so is always "not returning."
+
+    Rate limited per IP: this is an unauthenticated boolean "has this
+    student number/code been seen before" check, which — without a limit —
+    could be used to mass-enumerate which student numbers have used GAIDA
+    (a sensitive fact in a counseling context). 20/min is generous for a
+    real participant (hit once per identification attempt) but makes
+    scripted enumeration impractical.
     """
+    client_ip = request.client.host if request.client else "unknown"
+    check_rate_limit(f"research_check:{client_ip}", limit=20, window=60)
+
     if payload.anonymous and not payload.participant_code:
         return ParticipantCheckResponse(is_returning=False)
 
@@ -259,7 +269,12 @@ def withdraw_anonymous_code(payload: WithdrawRequest, request: Request):
     unknown code safely returns an empty "everything deleted" result.
     """
     client_ip = request.client.host if request.client else "unknown"
-    check_rate_limit(f"research_withdraw:{client_ip}")
+    # Stricter than the default 5/min: this endpoint hard-deletes data on a
+    # single guessable-length code with no authentication, so brute-forcing
+    # or mass-triggering it needs to be far more expensive than a login
+    # attempt. 3/hour/IP still comfortably covers a genuine participant
+    # withdrawing (once) while making enumeration impractical.
+    check_rate_limit(f"research_withdraw:{client_ip}", limit=3, window=3600)
 
     code = payload.participant_code.strip()
     participant_id = f"anon_{code}"

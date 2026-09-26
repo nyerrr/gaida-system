@@ -10,6 +10,7 @@ import json
 from typing import Optional
 
 import re
+import secrets
 import threading
 import time
 
@@ -1754,21 +1755,49 @@ async def _sse_watcher():
                 pass  # slow client — it re-syncs via onopen or the poll fallback
 
 
+# Short-lived, single-use tickets for the SSE handshake. EventSource can't
+# send an Authorization header, so it has to authenticate via the URL one way
+# or another — putting the long-lived counselor bearer token itself there
+# means it can end up in server/proxy access logs and browser history for as
+# long as that token remains valid (hours). A ticket is a random value that's
+# only ever valid for _SSE_TICKET_TTL_SECONDS and is deleted the moment it's
+# used, so a leaked URL is worthless almost immediately.
+_SSE_TICKETS: dict = {}
+_SSE_TICKET_TTL_SECONDS = 30
+
+
+def _purge_expired_tickets():
+    now = time.time()
+    for t in [t for t, exp in _SSE_TICKETS.items() if exp < now]:
+        del _SSE_TICKETS[t]
+
+
+@router.post("/events/ticket")
+def issue_sse_ticket(user: dict = Depends(require_role("counselor"))):
+    """Issue a one-time ticket for the /events SSE handshake. Called with the
+    normal Authorization header (this is an ordinary authenticated POST), so
+    the long-lived counselor token itself never has to appear in a URL."""
+    _purge_expired_tickets()
+    ticket = secrets.token_urlsafe(24)
+    _SSE_TICKETS[ticket] = time.time() + _SSE_TICKET_TTL_SECONDS
+    return {"ticket": ticket, "expires_in": _SSE_TICKET_TTL_SECONDS}
+
+
 @router.get("/events")
-async def counselor_events(token: str = Query(...)):
+async def counselor_events(ticket: str = Query(...)):
     """SSE stream for the counselor dashboard.
 
-    Authenticates via `?token=` because EventSource cannot set Authorization
-    headers (same pattern as the WebSocket handshake). Emits the named SSE
+    Authenticates via a short-lived single-use `?ticket=` (see
+    /events/ticket above) rather than the long-lived bearer token, since
+    EventSource cannot set Authorization headers. Emits the named SSE
     events `alerts`, `sessions`, and `welfare` whenever the corresponding data
     changes, plus periodic keepalive comments so proxies don't drop the idle
     connection.
     """
-    from app.utils.auth import validate_token
-
-    user = validate_token(token)
-    if not user or user.get("role") != "counselor":
-        raise HTTPException(status_code=401, detail="Invalid or expired session token")
+    _purge_expired_tickets()
+    expires_at = _SSE_TICKETS.pop(ticket, None)
+    if expires_at is None or expires_at < time.time():
+        raise HTTPException(status_code=401, detail="Invalid or expired ticket")
 
     global _SSE_WATCHER
     if _SSE_WATCHER is None or _SSE_WATCHER.done():

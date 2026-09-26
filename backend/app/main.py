@@ -31,7 +31,20 @@ from app.api.counselor import router as counselor_router
 from app.api.session import router as session_router
 from app.api.research import router as research_router
 
-app = FastAPI(title="GAIDA Backend")
+# Security: the interactive Swagger UI (/docs) and raw OpenAPI schema
+# (/openapi.json) are open by default in FastAPI, which leaks internal data
+# models, field names, and developer notes to anyone. Disabled unless
+# ENVIRONMENT is explicitly set to something other than "production" (e.g.
+# for local dev). Set ENVIRONMENT=production in the Replit deployment's
+# secrets to turn this on for the live backend.
+_IS_PROD = os.getenv("ENVIRONMENT", "production").lower() == "production"
+
+app = FastAPI(
+    title="GAIDA Backend",
+    docs_url=None if _IS_PROD else "/docs",
+    redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
+)
 
 
 # ----------------------------
