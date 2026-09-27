@@ -5,26 +5,35 @@
  *   - Service worker registration
  *   - Install prompt (Add to Home Screen)
  *   - Online/offline status
- *   - Offline message queue sync listener
+ *
+ * There is deliberately no offline message queue here. An earlier version of
+ * this hook listened for MESSAGE_QUEUED / QUEUED_MESSAGE_SENT messages from a
+ * hand-written service worker and replayed failed sends on reconnect, but that
+ * worker was never actually built: vite.config.js leaves `strategies` unset, so
+ * vite-plugin-pwa emits its own `generateSW` worker and src/sw.js was dead
+ * code. Every message it posted went nowhere, so `queuedCount` was permanently
+ * 0 and the queue UI could never render. The listeners are removed rather than
+ * re-enabled on purpose — see the note in vite.config.js. The worker itself is
+ * recoverable from git history (commit a0e1e9d) if the queue is ever wanted
+ * back as a tested feature.
  *
  * Usage:
- *   const { isOnline, isInstallable, installApp, queuedMessages } = usePWA();
+ *   const { isOnline, isInstallable, installApp } = usePWA();
  * ─────────────────────────────────────────────────────────────
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export function usePWA({ onQueuedMessageSent } = {}) {
-  const [isOnline, setIsOnline]           = useState(navigator.onLine);
+export function usePWA() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isInstallable, setIsInstallable] = useState(false);
   // Read the initial standalone-mode check lazily instead of setting state
   // inside the install effect — avoids a synchronous setState-in-effect
   // render cascade, and the first-paint value is identical.
-  const [isInstalled, setIsInstalled]     = useState(
+  const [isInstalled, setIsInstalled] = useState(
     () => window.matchMedia("(display-mode: standalone)").matches
   );
-  const [swReady, setSwReady]             = useState(false);
-  const [queuedMessages, setQueuedMessages] = useState([]);
+  const [swReady, setSwReady] = useState(false);
 
   const deferredPromptRef = useRef(null);
 
@@ -37,64 +46,11 @@ export function usePWA({ onQueuedMessageSent } = {}) {
       .then((registration) => {
         console.log("[GAIDA PWA] Service worker registered:", registration.scope);
         setSwReady(true);
-
-        // Trigger background sync when back online
-        window.addEventListener("online", () => {
-          // Background Sync (Chrome / Edge / Android)
-          if ("sync" in registration) {
-            registration.sync
-              .register("gaida-sync-messages")
-              .catch((err) => console.warn("[GAIDA PWA] Sync registration failed:", err));
-          }
-          // Fallback for browsers without Background Sync (iOS Safari):
-          // ask the service worker to flush the queue right away — and
-          // hand it the CURRENT auth token so the replay uses a fresh
-          // credential (the SW never persists it).
-          const token =
-            localStorage.getItem("session_token") ||
-            localStorage.getItem("counselor_token") ||
-            undefined;
-          navigator.serviceWorker.controller?.postMessage({
-            type: "FLUSH_QUEUE",
-            token,
-          });
-        });
       })
       .catch((err) => {
         console.error("[GAIDA PWA] Service worker registration failed:", err);
       });
   }, []);
-
-  // ── Listen for messages FROM service worker ─────────────────
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-
-    const handleMessage = (event) => {
-      const { type, payload } = event.data || {};
-
-      if (type === "MESSAGE_QUEUED") {
-        // A message was saved to the offline queue
-        setQueuedMessages((prev) => [...prev, payload]);
-      }
-
-      if (type === "QUEUED_MESSAGE_SENT") {
-        // A queued message was successfully sent after reconnecting.
-        // Compare by value (JSON) — the original and this payload are
-        // separate object instances, so reference equality never matches.
-        setQueuedMessages((prev) =>
-          prev.filter(
-            (m) => JSON.stringify(m) !== JSON.stringify(payload.original || {})
-          )
-        );
-        if (onQueuedMessageSent) {
-          onQueuedMessageSent(payload);
-        }
-      }
-    };
-
-    navigator.serviceWorker.addEventListener("message", handleMessage);
-    return () => navigator.serviceWorker.removeEventListener("message", handleMessage);
-  }, [onQueuedMessageSent]);
 
   // ── Online / Offline status ─────────────────────────────────
   useEffect(() => {
@@ -150,7 +106,5 @@ export function usePWA({ onQueuedMessageSent } = {}) {
     isInstalled,
     swReady,
     installApp,
-    queuedMessages,
-    queuedCount: queuedMessages.length,
   };
 }
