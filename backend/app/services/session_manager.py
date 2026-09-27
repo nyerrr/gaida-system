@@ -91,10 +91,17 @@ def load_session_from_db(session_id: str) -> Dict[str, Any] | None:
     # columns don't exist yet (legacy rows) → fall back to the alerts table.
     counselor_active = None
     assigned_counselor_id = None
+    # Deliberately two queries, not one. PostgREST rejects an entire select()
+    # if any single column is missing, so listing all six together meant a
+    # database without counselor_active silently blanked ended_at / resolved /
+    # resolved_at / resolved_by as well — every rehydrated session came back
+    # "active and unresolved", resurrecting ended sessions as live chats and
+    # dropping resolved cases out of the Resolved view. Read apart, a missing
+    # column can only degrade its own group.
     try:
         sess_rows = (
             supabase.table("sessions")
-            .select("ended_at, resolved, resolved_at, resolved_by, counselor_active, assigned_counselor_id")
+            .select("ended_at, resolved, resolved_at, resolved_by")
             .eq("session_token", session_id)
             .limit(1)
             .execute()
@@ -105,10 +112,23 @@ def load_session_from_db(session_id: str) -> Dict[str, Any] | None:
             resolved = bool(row0.get("resolved"))
             resolved_at = row0.get("resolved_at")
             resolved_by = row0.get("resolved_by")
-            counselor_active = row0.get("counselor_active")
-            assigned_counselor_id = row0.get("assigned_counselor_id")
     except Exception as e:
         print(f"Session load error (sessions row): {e}")
+
+    try:
+        take_rows = (
+            supabase.table("sessions")
+            .select("counselor_active, assigned_counselor_id")
+            .eq("session_token", session_id)
+            .limit(1)
+            .execute()
+        ).data
+        if take_rows:
+            row1 = take_rows[0]
+            counselor_active = row1.get("counselor_active")
+            assigned_counselor_id = row1.get("assigned_counselor_id")
+    except Exception as e:
+        print(f"Session load error (sessions takeover row): {e}")
 
     # Legacy rows (created before the takeover columns existed) have no
     # counselor_active value — restore it from counselor_alerts instead: a row
