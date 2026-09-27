@@ -567,19 +567,6 @@ export default function StudentDashboard() {
     };
   }, [sessionId]);
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.detail?.response?.response) {
-        setMessages(prev => [...prev, {
-          role: 'bot', text: e.detail.response.response,
-          timestamp: new Date(), synced: true,
-        }]);
-      }
-    };
-    window.addEventListener('gaida:queue-synced', handler);
-    return () => window.removeEventListener('gaida:queue-synced', handler);
-  }, []);
-
   const fireTyping = useCallback((isTyping) => {
     const sessionId = localStorage.getItem('session_id');
     if (!sessionId) return;

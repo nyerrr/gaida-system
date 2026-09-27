@@ -4,25 +4,27 @@
  * Shows:
  *   - "Add to Home Screen" install banner (when installable)
  *   - Offline status bar (when connection is lost)
- *   - Queued messages notice (when messages are pending sync)
  *
  * Usage:
  *   <PWABanner />   ← drop anywhere in your App layout
+ *
+ * There is no queued-message notice here any more. See the note in usePWA.js:
+ * the hand-written service worker that would have populated it was never built,
+ * so the counter it read was permanently 0 and the banner could not render.
  * ─────────────────────────────────────────────────────────────
  */
 
 import { useState } from "react";
 import { usePWA } from '../hooks/usePWA';
 
-export default function PWABanner({ onQueuedMessageSent }) {
+export default function PWABanner() {
   const {
     isOnline,
     isOffline,
     isInstallable,
     isInstalled,
     installApp,
-    queuedCount,
-  } = usePWA({ onQueuedMessageSent });
+  } = usePWA();
 
   const [installDismissed, setInstallDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -41,22 +43,7 @@ export default function PWABanner({ onQueuedMessageSent }) {
         <div style={{ ...styles.banner, ...styles.offlineBanner }}>
           <span style={styles.dot} />
           <span style={styles.bannerText}>
-            You're offline — past chats are available. Messages will send when you reconnect.
-          </span>
-          {queuedCount > 0 && (
-            <span style={styles.queueBadge}>
-              {queuedCount} queued
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* ── Back Online + Queue Flushing Notice ──────────────── */}
-      {isOnline && queuedCount > 0 && (
-        <div style={{ ...styles.banner, ...styles.syncBanner }}>
-          <span style={{ ...styles.dot, background: "#7c6af7" }} />
-          <span style={styles.bannerText}>
-            Sending {queuedCount} queued message{queuedCount > 1 ? "s" : ""}…
+            You're offline. GAIDA can't send or receive messages right now — please reconnect.
           </span>
         </div>
       )}
@@ -120,11 +107,6 @@ const styles = {
     borderBottom: "1px solid rgba(255,100,80,0.25)",
     color: "#f4a199",
   },
-  syncBanner: {
-    background: "rgba(20, 16, 45, 0.97)",
-    borderBottom: "1px solid rgba(124,106,247,0.3)",
-    color: "#c4bbff",
-  },
   installBanner: {
     background: "rgba(15, 12, 35, 0.97)",
     borderBottom: "1px solid rgba(124,106,247,0.25)",
@@ -142,15 +124,6 @@ const styles = {
   bannerText: {
     flex: 1,
     lineHeight: 1.4,
-  },
-  queueBadge: {
-    background: "rgba(244,161,153,0.15)",
-    border: "1px solid rgba(244,161,153,0.3)",
-    color: "#f4a199",
-    borderRadius: "999px",
-    padding: "2px 10px",
-    fontSize: "0.75rem",
-    whiteSpace: "nowrap",
   },
   installLeft: {
     display: "flex",

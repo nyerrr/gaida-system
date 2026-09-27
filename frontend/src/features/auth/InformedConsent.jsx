@@ -187,8 +187,8 @@ const handleAccept = async (e) => {
               <h3 className="font-semibold text-gray-900 mb-2">Questions or Concerns:</h3>
               <p>
                 If you have any questions about this consent form or GAIDA's data practices, please contact the 
-                University Guidance Office at guidance@ue.edu.ph or visit the Guidance Office at [Building Name, 
-                Room Number].
+                University Guidance Office at guidance@ue.edu.ph or visit the Guidance Office at 2219 C.M. Recto 
+                Avenue, Sampaloc, Manila.
               </p>
             </div>
           </div>
