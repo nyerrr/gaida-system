@@ -1,5 +1,8 @@
 # Gaida Backend
 
+> ⚠️ **Pending database migrations — not yet confirmed against production.**
+> See [`../HANDOFF.md`](../HANDOFF.md) §1: three steps, about five minutes.
+
 ## Audio Processing Libraries
 
 This backend now includes the following audio processing libraries:
