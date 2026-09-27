@@ -41,6 +41,35 @@ export function usePWA() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    // Dev is owned by vite-plugin-pwa, not by this hook, so this is skipped in
+    // dev. Two separate reasons, both verified:
+    //
+    // 1. Registering /sw.js here broke the dev worker. The browser keeps one
+    //    registration per scope, so this call *replaced* the plugin's. In dev
+    //    there is no /sw.js — Vite's SPA fallback answers that path with
+    //    index.html as text/html, which the browser refuses with a
+    //    SecurityError, leaving the scope registered but workerless. That threw
+    //    twice on every dev page load.
+    //
+    // 2. The plugin's own dev worker is registered at `dev-sw.js?dev-sw` (not
+    //    /sw.js), and the dev server does serve that as real JavaScript. But
+    //    the plugin only sends the registration when `injectRegister` is
+    //    truthy, and vite.config.js sets it to false to avoid a double
+    //    registration in production. So in dev no service worker registers at
+    //    all — skipping here removes the error without changing that.
+    //
+    // Consequence: there is no service worker on localhost, so offline and
+    // install behaviour can only be exercised against a real build. To enable
+    // the dev worker, `injectRegister` in vite.config.js has to be truthy in
+    // serve mode only, which needs the config exported as a function of
+    // `command`. Not done here because the dev worker is a stub — it is not
+    // worth the config restructuring for a no-op.
+    //
+    // Production is the opposite case and the reason this hook exists: there is
+    // no injected script, workbox emits a real dist/sw.js, and registering it
+    // here is what gets the worker installed and kept up to date.
+    if (import.meta.env.DEV) return;
+
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((registration) => {

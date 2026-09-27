@@ -51,6 +51,25 @@ async function refreshServiceWorker() {
   } catch { /* no worker registered, or update rejected — plain reload still helps */ }
 }
 
+// sessionStorage can throw outright — private windows, enterprise policy, or a
+// full quota all make these accessors raise. Every use below is wrapped so a
+// storage failure degrades the reload guard instead of replacing the chunk
+// error it exists to report.
+function readChunkReloadFlag() {
+  try { return sessionStorage.getItem(CHUNK_RELOAD_FLAG) } catch { return null }
+}
+
+// Returns false when the guard could not be armed. That matters: the guard is
+// the only thing stopping an endless reload, so a caller that cannot persist it
+// must not reload.
+function armChunkReloadFlag() {
+  try { sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1'); return true } catch { return false }
+}
+
+function clearChunkReloadFlag() {
+  try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG) } catch { /* storage disabled */ }
+}
+
 function lazyRoute(loader) {
   return lazy(async () => {
     try {
@@ -60,14 +79,17 @@ function lazyRoute(loader) {
       // deploy can self-heal the same way. This must happen here, on a
       // confirmed load, and not on mount: clearing it at mount time races the
       // very import that failed and turns the guard into an endless reload.
-      try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG) } catch { /* storage disabled */ }
+      clearChunkReloadFlag()
       return mod
     } catch (err) {
       // Already reloaded once: the reload didn't help, so this is a real load
       // failure (offline, blocked, genuinely broken chunk). Surface it instead
       // of spinning.
-      if (sessionStorage.getItem(CHUNK_RELOAD_FLAG)) throw err
-      sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1')
+      if (readChunkReloadFlag()) throw err
+      // Storage is unavailable, so a reload could not be recognised as a retry
+      // and would repeat forever. Surface the real error rather than trade a
+      // visible failure for a reload loop.
+      if (!armChunkReloadFlag()) throw err
       await refreshServiceWorker()
       window.location.reload()
       // Never settles: the reload replaces this page, and resolving would let

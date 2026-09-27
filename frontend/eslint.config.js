@@ -5,7 +5,11 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // dev-dist is vite-plugin-pwa's dev service-worker build output. It is
+  // gitignored, but `eslint .` still walked it once the dev server had run,
+  // which surfaced 32 phantom errors in generated worker code and buried any
+  // real one. Ignored alongside dist for the same reason.
+  globalIgnores(['dist', 'dev-dist']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
