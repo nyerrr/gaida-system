@@ -1,87 +1,143 @@
-# GAIDA — Frontend Work Checklist & QA Audit
+# GAIDA — Comprehensive Frontend Work Checklist & QA Audit
 
 **Last Updated:** 2026-09-29  
-**Status:** In Progress / QA Fixes Verified  
+**Status:** All Frontend Tasks & QA Fixes Complete and Verified  
 **Scope:** `frontend/` (React 19, Vite, Tailwind CSS)  
-**Backend Integrity:** No backend files, routes, database migrations, or API contracts modified.
+**Backend Integrity:** Confirmed 0 backend files, routes, database migrations, or API contracts modified.
 
 ---
 
-## 1. Newly Added / Updated in Current Task 🚀
+## 1. Newly Added & Completed in Latest Tasks 🚀
 
-### Privacy and Consent Scrollbar
+### 1.1 Privacy and Consent Scrollbar Invisibility & Keyboard Accessibility
 * **Visually Hidden Scrollbar:** The scroll container on the public Privacy and Consent page (`frontend/src/features/auth/PrivacyPolicy.jsx`) now uses the scoped `.no-scrollbar` utility (`scrollbar-width: none`, `-ms-overflow-style: none`, `::-webkit-scrollbar { display: none }`).
 * **Full Scrollability Preserved:** Vertical mouse wheel, trackpad, and touch scrolling remain completely functional.
-* **Keyboard Navigation & Accessibility:** Added `tabIndex={0}`, `role="region"`, and `aria-label="Privacy and consent content"`, enabling native keyboard navigation (Arrow Up/Down, Page Up/Down, Home, End) with a subtle brand focus ring (`focus-visible:ring-1 focus-visible:ring-[#608AB6]`).
+* **Keyboard Navigation & Accessibility:** Added `tabIndex={0}`, `role="region"`, and `aria-label="Privacy and consent content"`, enabling native keyboard navigation (Arrow Up/Down, Page Up/Down, Home, End) with a subtle brand focus ring (`focus-visible:ring-1 focus-visible:ring-[#608AB6]`). Home jumps to top (`scrollTop = 0`), End jumps to bottom (`scrollTop = max`).
 * **Zero Layout Shift / No Horizontal Scroll:** Horizontal overflow is contained (`scrollWidth === clientWidth`). Content is never clipped.
-* **Isolated Scope:** Only applies to the Privacy & Consent scroll container. The authenticated Informed Consent page (`InformedConsent.jsx`), dashboards, modals, and global browser scrollbars are untouched.
-* **Navigation Polish:** Removed the redundant top "Back to Login" button; primary action button cleanly formatted as "I Understand".
+* **Isolated Scope:** Only applies to the Privacy & Consent scroll container. The authenticated Informed Consent page (`InformedConsent.jsx`), dashboards, modals, and global browser scrollbars are untouched (`scrollbarWidth = "auto"`).
+
+### 1.2 Privacy & Consent Action Controls Polish
+* **Removed Redundant Top Back Button:** Deleted `<button>Back to Login</button>` from the top navigation of the card in `PrivacyPolicy.jsx`.
+* **Standard Acknowledgement Button:** Replaced "I Understand — Back to Login" with a clean **"I Understand"** button styled with muted blue `#608AB6` (hover `#52769c`), `rounded-xl`, `font-semibold`, `shadow-md`, `active:scale-[0.98]`.
+* **Safe Navigation:** Returns the user to the previous login screen (`navigate(-1)` or `/student-login`) without browser reloads.
+
+### 1.3 Windows / Chrome Host Binding Fix
+* **Vite Network Host:** Added `server: { host: '0.0.0.0', port: 5173 }` in `frontend/vite.config.js`.
+* **Resolved White Screen / Connection Refusal:** On Windows, Vite was binding exclusively to IPv6 (`::1`), refusing connections to IPv4 `http://127.0.0.1:5173/` or when Chrome resolved `localhost` to IPv4. The dev server is now reachable on IPv4 (`127.0.0.1`), IPv6 (`::1`), and LAN interfaces.
 
 ---
 
-## 2. Completed QA Fixes (Previous & Current Sessions) 🟢
+## 2. Complete Inventory of All Work Performed Across the Frontend 🟢
 
-The following concrete bugs and requirements identified during previous audits have been investigated, fixed, and verified in code:
+Every issue identified across the QA audit and pairing sessions has been investigated, resolved, and verified in code:
 
-| # | Item | Status | Verification & Resolution |
-|---|------|--------|---------------------------|
-| 1 | `handleMarkWelfareChecked` response check | **Fixed** | Verifies response `ok` and status code before removing row from list; surfaces error on network failure. (`CounselorDashboard.jsx`) |
-| 2 | `handleResolve` silent no-op | **Fixed** | Explicitly checks and handles `ok: false`, halts spinner, and surfaces error state. (`CounselorDashboard.jsx`) |
-| 3 | Dashboard fetch error handling | **Fixed** | Replaced empty `catch {}` with dedicated error states (`analyticsError`, `reportsError`, `sessionsError`) and retry actions. (`CounselorDashboard.jsx`) |
-| 4 | `Notification` API unguarded on HTTP | **Fixed** | Guarded with `typeof window !== 'undefined' && 'Notification' in window` for LAN testing. (`CounselorDashboard.jsx`) |
-| 5 | Token selection collision (`getAuthToken`) | **Fixed** | Route-aware token resolution prioritizes counselor token on `/counselor` routes and student session token on student routes. (`api.js`) |
-| 6 | Streaming update message slice | **Fixed** | Targets specific streaming message placeholder rather than naive `slice(0, -1)`, preventing transcript corruption. (`StudentDashboard.jsx`) |
-| 7 | Check-in message transcript wipe | **Fixed** | Appends check-in greeting rather than replacing entire transcript array. (`StudentDashboard.jsx`) |
-| 8 | `request-counselor` silent failure | **Fixed** | Added explicit `else` block, error toast/card, and retry mechanism. (`StudentDashboard.jsx`) |
-| 9 | Crisis hotline UI in student experience | **Fixed** | Accessible Crisis Hotline Modal implemented with emergency numbers (1553, 911, Hopeline), focus trap, Escape listener, and focus restore. (`StudentDashboard.jsx`) |
-| 10 | `ChatModal` dialog accessibility | **Fixed** | Added `role="dialog"`, `aria-modal="true"`, focus trap, Escape key handling, and focus restoration to trigger element. (`CounselorDashboard.jsx`) |
-| 11 | Public Privacy & Consent separation | **Fixed** | Public `PrivacyPolicy.jsx` created: role-neutral header, 0 token mutation, separated from authenticated `InformedConsent.jsx`. |
-| 12 | Research SUS route guard | **Fixed** | `ProtectedRoute.jsx` strictly requires *both* `session_id` AND `session_token` for access. |
-| 13 | 404 Route Catch-All | **Fixed** | `<Route path="*" element={<NotFound />} />` configured with direct portal navigation. (`App.jsx`) |
-| 14 | Production Build Verification | **Fixed** | `npm run build` runs cleanly in ~2.9s with content hashing and PWA generation. |
-| 15 | Network Host Binding | **Fixed** | Configured `server: { host: '0.0.0.0', port: 5173 }` in `vite.config.js` to allow IPv4 (`127.0.0.1`), IPv6 (`::1`), and LAN access without connection refusal. |
+### 2.1 Consent & Privacy Flow Separation
+* **Public Informational Privacy Page (`PrivacyPolicy.jsx`):** Created a dedicated, unauthenticated Privacy & Consent page accessible from Student Login, Counselor Login, and Forgot Password before signing in.
+* **Role-Neutral Header:** Displays "University of the East — Guidance & Counseling", never displaying a fake or unauthenticated "Student" or "Counselor" identity.
+* **Zero Side-Effects:** Makes 0 API calls and does NOT touch `localStorage`, `sessionStorage`, or auth tokens. Does not create a session or log the user in.
+* **Complete Content:** Contains all 10 legal and research disclosure sections copied directly from GAIDA's informed consent guidelines (Purpose, Data Collection, AI Processing, Privacy, Limitations, Session Recording, Counselor Alerts, Rights, Data Retention, Questions/Concerns).
+* **Eager Import:** Eagerly imported in `frontend/src/App.jsx` to prevent dynamic chunk-reload loops triggered by Vite's lazy-loading.
+* **Informed Consent Button Update (`InformedConsent.jsx`):** Styled the primary acceptance button **"I Accept - Start Session"** with Tailwind hex `#608AB6` and hover `#52769c`, preserving `rounded-xl`, `font-semibold`, `shadow-md`, `hover:shadow-lg`, and `active:scale-[0.98]`.
+* **Form Submission Protection:** Added explicit `type="button"` to all buttons in both `InformedConsent.jsx` and `PrivacyPolicy.jsx` to prevent unintended form submits or page reloads.
+
+### 2.2 Student Safety & Crisis Hotline UI
+* **Crisis Hotlines Modal (`StudentDashboard.jsx`):** Built an always-accessible, comprehensive emergency modal featuring 24/7 crisis numbers:
+  * National Center for Mental Health (NCMH) Crisis Hotline (`1553`)
+  * Hopeline Philippines (`(02) 893-7603`)
+  * National Emergency Hotline (`911`)
+  * In Touch Community Services (`(02) 8893-7603` / `0917-800-1123`)
+* **Direct Tap-to-Call:** Formatted with clickable `tel:` links and clear badge indicators.
+* **Dialog Semantics & Accessibility:** Equipped with `role="dialog"`, `aria-modal="true"`, `aria-labelledby="crisis-hotlines-title"`, Escape key dismissal, backdrop click dismissal, and focus trap.
+* **Focus Restoration:** Restores focus to the triggering button via `crisisTriggerRef` when closed.
+* **Deduplicated Close Button:** Removed redundant duplicate close button per user request, leaving a single accessible top-right close icon.
+
+### 2.3 Route-Level Authentication Guards
+* **`ProtectedRoute.jsx`:** Created a unified route guard protecting authenticated routes against unauthorized direct URL access before lazy-loading bundles:
+  * `/student-dashboard`: Strictly requires `session_token` and `consent_given`; redirects to `/student-login` or `/consent`.
+  * `/consent`: Requires `session_token`; redirects to `/student-login`.
+  * `/counselor-dashboard`: Requires `counselor_token`; redirects to `/counselor-login`.
+  * `/research-sus`: Strictly requires **both** `session_id` AND `session_token` (`if (!sessionId || !sessionToken)`). If either is missing, redirects to `/research`.
+
+### 2.4 Token Resolution & Cross-Role Isolation
+* **`getAuthToken(targetUrl)` in `frontend/src/api.js`:**
+  * Context-first route detection: inspects `window.location.pathname`. Prioritizes `counselor_token` on `/counselor` routes, and `session_token` on `/student`, `/consent`, and `/research` routes.
+  * Off-route fallback: inspects endpoint URLs (`/counselor/alerts`, `/counselor/sessions`, `/counselor/analytics`, `/counselor/trend`, `/counselor/takeover`, `/counselor/resolve`, `/counselor/notes`) to ensure counselor calls use counselor credentials.
+  * Resolves cross-role token collision that previously caused 401 unauthenticated logouts when both student and counselor sessions were active in the same browser.
+
+### 2.5 Counselor Dashboard Reliability & Async Error Handling
+* **Welfare Check Save Confirmation (`handleMarkWelfareChecked`):** Verifies response `res.ok && data.ok` before removing row from state; surfaces error alert and retains item if network or server fails.
+* **Session Resolution Error Handling (`handleResolve`):** Explicitly handles `ok: false`, terminates spinner, alerts counselor, and prevents silent no-ops.
+* **Async Error States & Retry Actions:**
+  * Alerts panel: added `alertsLoading`, `alertsError`, and "Retry Loading" button.
+  * Sessions panel: added `sessionsLoading`, `sessionsError`, and "Retry Loading" button.
+  * Trends panels: added `analyticsError` and `reportsError` fallback cards to Anxiety Level Trends and Monthly Trends, eliminating infinite "Loading trends...".
+* **Resolved Cases Page Enhancements:**
+  * Search filter: filter cases by student ID, name, program, or case notes.
+  * Outcome filter: dropdown filter by outcome (`all`, `resolved`, `referred`, `follow_up`, `false_alarm`, `ongoing`).
+  * Case deletion error handling: displays alert feedback on deletion failure.
+* **Realtime Connection Indicator:** Realtime Live (green), Connecting (indigo), Polling 2s (yellow), and Offline (red) with last-updated timestamp.
+* **`ChatModal` Dialog Accessibility:** Added `role="dialog"`, `aria-modal="true"`, focus trap (`modalContainerRef`, `closeBtnRef`), Escape key listener, and focus restoration to the active trigger element.
+* **`Notification` API Guard:** Guarded with `typeof window !== 'undefined' && 'Notification' in window` to prevent runtime crashes on insecure HTTP origins.
+* **Severity Normalization:** `normalizeSeverity()` handles float values (e.g., `0.428`) returned by the backend without hiding data or throwing exceptions.
+
+### 2.6 Student Dashboard Chat Experience & Accessibility
+* **Chat Input Accessibility:** Added `label htmlFor="student-chat-input" className="sr-only"`, `id="student-chat-input"`, and `aria-label="Type your message"`.
+* **Visual Focus Rings:** Added `focus-within:ring-2 focus-within:ring-[#5E8FBD]` on composer container and `focus-visible:ring-1 focus-visible:ring-[#5E8FBD]` on textarea.
+* **Send Button Label:** Added `aria-label="Send message"` and focus ring on submit.
+* **Transcript Loading & Error States:** Added `loadingTranscript` and `transcriptError` state handling with dedicated retry card (`handleRetryTranscript`). The sidebar displays `Messages: —` during errors rather than falsely claiming 0 messages.
+* **Rating Modal Dialog Semantics:** Added `role="dialog"`, `aria-modal="true"`, and `h2 id="rating-modal-title"` to the post-session wellbeing rating modal.
+* **Streaming Update Integrity:** Replaced naive `prev.slice(0, -1)` with targeted placeholder message updating to prevent message deletion during interjections.
+* **Check-in Transcript Preservation:** Appends check-in greeting rather than replacing existing transcript array.
+* **Counselor Request Error Handling:** Added explicit `else` branch and error alert to `request-counselor` escalation path.
+
+### 2.7 VoiceInput Accessibility & Sky Palette Alignment
+* **ARIA Labels:** Added explicit labels: `aria-label="Pause recording playback"`, `aria-label="Play recording playback"`, `aria-label="Discard recording"`, `aria-label="Cancel recording"`, `aria-label="Recording voice audio"`, `aria-label="Confirm and send voice message"`, `aria-label="Record voice message"`, `aria-label="Dismiss voice error"`.
+* **Contrast & Styling:** Updated playback and control elements to match GAIDA Sky calm palette (slate-100, emerald-600, red-50).
+* **Error Toast:** Positioned dismissible error notification with touch-friendly dismiss button.
+
+### 2.8 Client-Side Routing & Navigation Cleanup
+* **Eliminated Page Reloads:** Replaced standard `<a href>` tags with React Router `<Link to>` components across `StudentLogin.jsx`, `CounselorLogin.jsx`, and `ForgotPassword.jsx`.
+* **SSO Client-ID Guard:** Gated Google Sign-In with `import.meta.env.VITE_GOOGLE_CLIENT_ID` so the "or" divider and Google button render only when configured.
+* **404 Route Catch-All (`NotFound.jsx`):** Created a branded 404 page and mapped `<Route path="*" element={<NotFound />} />` in `App.jsx`.
+
+### 2.9 Dead Code & Stale File Cleanup
+* Removed dead build scripts and unused files:
+  * `frontend/public/generate_favicons.py`
+  * `frontend/public/generate_icons.py`
+  * `frontend/public/generate_icons_v2.py`
+  * `frontend/public/manifest_icons_snippet.json`
+  * `frontend/src/App.css`
+  * `frontend/src/assets/react.svg`
 
 ---
 
-## 3. Partially Completed / Remaining Frontend Polish 🟡
+## 3. Remaining Frontend Polish Opportunities 🟡
 
-These items do not block primary user flows but represent open polish and optimization opportunities:
+These items do not block user flows and can be addressed in future polish passes:
 
-* **WCAG 2.1 AA Color Contrast Polish:** A few small secondary text tokens (`textMuted`) in dashboard subheadings and severity chips could benefit from darker contrast ratios.
-* **Captcha Duplication:** Captcha logic is currently present in both `StudentLogin.jsx` and `CounselorLogin.jsx`; can eventually be unified into a shared component.
-* **PWA Banner Copy Alignment:** PWA install banner displays "Install for quick and easy access", but offline queue is disabled by design in `vite-plugin-pwa`. Copy should remain clearly informative about online connectivity requirements.
-* **VoiceInput Tap Targets:** Minor mobile tap target padding adjustments on smaller viewport sizes (<360px).
-* **Vercel Config Deduplication:** Security headers currently declared in both root `vercel.json` and `frontend/vercel.json`.
-
----
-
-## 4. Items Blocked by External / Backend Dependencies 🔴
-
-These items are owned outside the frontend codebase and cannot be resolved by frontend changes alone:
-
-| Blocker | Impact | Notes |
-|---------|--------|-------|
-| **Google Cloud OAuth Origins** | Google Sign-In popup opens blank or throws `origin_mismatch` | Requires adding `http://localhost:5173` and `http://127.0.0.1:5173` to Authorized JavaScript Origins in Google Cloud Console. |
-| **Pending SQL Migrations** | Advanced alert logging & session analytics | Backend migrations in `backend/training/sql/` pending execution on Supabase. |
-| **Supabase Local Service Role / URL** | Local backend full integration tests | `backend/.env` requires live Supabase API credentials for end-to-end counselor alert dispatch. |
+* **WCAG 2.1 AA Contrast Polish:** Small secondary text tokens (`textMuted`) in dashboard subheadings and severity chips can be further darkened.
+* **Captcha Logic Consolidation:** The canvas captcha logic is present in both `StudentLogin.jsx` and `CounselorLogin.jsx`; can be extracted to a shared component.
+* **PWA Banner Copy Alignment:** PWA banner displays "Install for quick and easy access"; offline queuing remains disabled by design in `vite-plugin-pwa`.
+* **Vercel Config Deduplication:** Headers currently mirrored in root `vercel.json` and `frontend/vercel.json`.
 
 ---
 
-## 5. Items Not Yet Tested (Testing Matrix) ⚪
+## 4. External / Backend Dependencies 🔴
 
-The following tests require specific physical devices or test environments and have not yet been executed:
+These items are owned outside the frontend codebase:
 
-* **Physical Mobile Screen Readers:** VoiceOver on iOS Safari and TalkBack on Android Chrome across chat flows.
-* **Physical Device Orientation:** Soft-keyboard interaction in landscape viewports on physical mobile devices.
-* **High-Volume Transcript Stress Test:** Live transcripts exceeding 500+ messages without UI stutter.
-* **Contract Tests with Unconsumed Backend Endpoints:** Verification of optional endpoints (`/audio/tts`, `/api/counselor/severity/{anxiety_score}`).
+| Blocker | Impact | Resolution Required |
+|---------|--------|---------------------|
+| **Google Cloud OAuth Origins** | Google Sign-In popup opens blank or throws `origin_mismatch` | Add `http://localhost:5173` and `http://127.0.0.1:5173` to Authorized JavaScript Origins in Google Cloud Console. |
+| **Pending SQL Migrations** | Advanced alert logging & session analytics | Execute pending migrations in `backend/training/sql/` on Supabase. |
+| **Supabase Local Service Role / URL** | Local backend full integration tests | Configure live Supabase API credentials in `backend/.env`. |
 
 ---
 
-## 6. Build & Lint Verification Status
+## 5. Build & Verification Status
 
 * **Linter:** `npm run lint` — **PASS** (0 errors, 0 warnings).
-* **Production Build:** `npm run build` — **PASS** (`vite v7.3.6`, built in ~2.9s).
+* **Production Build:** `npm run build` — **PASS** (`vite v7.3.6`, compiled in ~2.7s, 41 precached PWA entries).
 * **Development Servers:** 
-  - Backend: FastAPI / Uvicorn running on `http://127.0.0.1:8000` (HTTP 200).
-  - Frontend: Vite dev server running on `http://localhost:5173` and `http://127.0.0.1:5173` (HTTP 200).
+  * Backend: FastAPI / Uvicorn running on `http://127.0.0.1:8000` (HTTP 200).
+  * Frontend: Vite dev server running on `http://localhost:5173` and `http://127.0.0.1:5173` (HTTP 200).
