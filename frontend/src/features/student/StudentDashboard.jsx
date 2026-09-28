@@ -420,21 +420,61 @@ export default function StudentDashboard() {
   const [streamingStarted,    setStreamingStarted]    = useState(false);
   const [showCrisisHotlines,  setShowCrisisHotlines]  = useState(false);
   const [playingTTSIndex,     setPlayingTTSIndex]     = useState(null);
+  const [loadingTranscript,   setLoadingTranscript]   = useState(false);
+  const [transcriptError,     setTranscriptError]     = useState(false);
 
   const crisisTriggerRef = useRef(null);
   const crisisModalRef = useRef(null);
   const crisisCloseBtnRef = useRef(null);
 
-  const openCrisisHotlines = useCallback(() => {
-    crisisTriggerRef.current = document.activeElement;
+  const openCrisisHotlines = useCallback((e) => {
+    crisisTriggerRef.current = e?.currentTarget || document.activeElement;
     setShowCrisisHotlines(true);
   }, []);
 
   const closeCrisisHotlines = useCallback(() => {
     setShowCrisisHotlines(false);
-    setTimeout(() => {
-      crisisTriggerRef.current?.focus?.();
-    }, 0);
+    requestAnimationFrame(() => {
+      if (crisisTriggerRef.current && typeof crisisTriggerRef.current.focus === 'function') {
+        crisisTriggerRef.current.focus();
+      }
+    });
+  }, []);
+
+  const loadTranscript = useCallback(async (sid) => {
+    if (!sid) return false;
+    setLoadingTranscript(true);
+    setTranscriptError(false);
+    try {
+      const res = await apiFetch(`${BACKEND}/api/counselor/chat/${sid}`);
+      if (!res.ok) {
+        throw new Error(`Transcript fetch failed with status ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.messages && data.messages.length > 0) {
+        const rehydrated = data.messages.map(m => ({
+          role: m.sender === 'user' ? 'user' : m.sender === 'counselor' ? 'counselor' : m.sender === 'system' ? 'system' : 'bot',
+          text: m.text,
+          timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+        }));
+        setMessages(rehydrated);
+        lastCounselorCount.current = data.messages.filter(m => m.sender === 'counselor').length;
+        const normSev = normalizeSeverity(data.severity);
+        if (normSev) setSeverity(normSev);
+        if (data.counselor_active) {
+          setCounselorActive(true);
+          wasCounselorActive.current = true;
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Failed to restore chat transcript:', e);
+      setTranscriptError(true);
+      return false;
+    } finally {
+      setLoadingTranscript(false);
+    }
   }, []);
 
   // Mirror of localStorage['session_id'] as React state so the realtime
@@ -526,30 +566,7 @@ export default function StudentDashboard() {
     const initSession = async () => {
       let hasMessages = false;
       if (sid) {
-        try {
-          const res = await apiFetch(`${BACKEND}/api/counselor/chat/${sid}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.messages && data.messages.length > 0) {
-              hasMessages = true;
-              const rehydrated = data.messages.map(m => ({
-                role: m.sender === 'user' ? 'user' : m.sender === 'counselor' ? 'counselor' : m.sender === 'system' ? 'system' : 'bot',
-                text: m.text,
-                timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
-              }));
-              setMessages(rehydrated);
-              lastCounselorCount.current = data.messages.filter(m => m.sender === 'counselor').length;
-              const normSev = normalizeSeverity(data.severity);
-              if (normSev) setSeverity(normSev);
-              if (data.counselor_active) {
-                setCounselorActive(true);
-                wasCounselorActive.current = true;
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Failed to restore chat transcript:', e);
-        }
+        hasMessages = await loadTranscript(sid);
       }
 
       // Check-in is only offered on clean start when there are no messages in the current session
@@ -576,7 +593,7 @@ export default function StudentDashboard() {
     initSession();
 
     return () => clearInterval(timerRef.current);
-  }, [navigate]);
+  }, [navigate, loadTranscript]);
 
   useEffect(() => {
     const notifyLeave = () => {
@@ -987,13 +1004,18 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!showCrisisHotlines) return;
 
-    const timer = setTimeout(() => {
-      crisisCloseBtnRef.current?.focus?.();
-    }, 50);
+    const focusTimer = requestAnimationFrame(() => {
+      if (crisisCloseBtnRef.current) {
+        crisisCloseBtnRef.current.focus();
+      } else if (crisisModalRef.current) {
+        crisisModalRef.current.focus();
+      }
+    });
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         closeCrisisHotlines();
         return;
       }
@@ -1008,7 +1030,7 @@ export default function StudentDashboard() {
         const last = focusable[focusable.length - 1];
 
         if (e.shiftKey) {
-          if (document.activeElement === first) {
+          if (document.activeElement === first || document.activeElement === modal) {
             e.preventDefault();
             last.focus();
           }
@@ -1023,7 +1045,7 @@ export default function StudentDashboard() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      clearTimeout(timer);
+      cancelAnimationFrame(focusTimer);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [showCrisisHotlines, closeCrisisHotlines]);
@@ -1140,15 +1162,7 @@ export default function StudentDashboard() {
               <p className="text-xs" style={{ color: theme.textMuted }}>Guidance System</p>
             </div>
           </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 -mr-2 touch-manipulation rounded-full transition-colors duration-200"
-            style={{ color: theme.textMuted }}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+ 
         </div>
 
         {/* Scrollable middle area: on short/mobile viewports this region scrolls
@@ -1161,7 +1175,10 @@ export default function StudentDashboard() {
             className="rounded-2xl p-4 space-y-2.5"
             style={{ background: theme.card, border: `1px solid ${theme.border}` }}
           >
-            {[['Duration', formatTime(sessionTime)], ['Messages', messages.length]].map(([label, value]) => (
+            {[
+              ['Duration', formatTime(sessionTime)],
+              ['Messages', transcriptError ? '—' : loadingTranscript ? '...' : messages.length]
+            ].map(([label, value]) => (
               <div key={label} className="flex justify-between items-center">
                 <span className="text-sm" style={{ color: theme.textSecondary }}>{label}</span>
                 <span className="text-sm font-semibold" style={{ color: theme.textPrimary }}>{value}</span>
@@ -1308,7 +1325,7 @@ export default function StudentDashboard() {
         {/* Crisis Hotlines & End Session */}
         <div className="p-5 flex-shrink-0 space-y-2.5" style={{ borderTop: `1px solid ${theme.border}`, paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
           <button
-            onClick={openCrisisHotlines}
+            onClick={(e) => openCrisisHotlines(e)}
             className="w-full py-2.5 px-4 text-xs font-semibold rounded-full transition-all duration-200 touch-manipulation flex items-center justify-center gap-1.5"
             style={{ background: '#FFF5F2', border: '1px solid #F5D5CB', color: '#B0472F' }}
           >
@@ -1356,7 +1373,7 @@ export default function StudentDashboard() {
           </span>
 
           <button
-            onClick={openCrisisHotlines}
+            onClick={(e) => openCrisisHotlines(e)}
             className="ml-auto px-2.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 active:scale-95 touch-manipulation"
             style={{ background: '#FBEDEA', border: '1px solid #F0D2CA', color: '#B0472F' }}
             title="Crisis & Emergency Hotlines"
@@ -1390,8 +1407,45 @@ export default function StudentDashboard() {
           className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-4"
           style={{ background: theme.bg }}
         >
+          {/* Loading Transcript state */}
+          {loadingTranscript && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center py-12">
+              <div
+                className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mb-3"
+                style={{ borderColor: theme.border, borderTopColor: theme.accent }}
+              />
+              <p className="text-sm font-medium" style={{ color: theme.textSecondary }}>
+                Loading conversation history...
+              </p>
+            </div>
+          )}
+
+          {/* Transcript Fetch Error state */}
+          {transcriptError && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4 py-12">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#FDE8E8', color: '#E02424' }}>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold mb-1" style={{ color: theme.textPrimary }}>
+                Unable to load conversation history
+              </p>
+              <p className="text-sm max-w-sm mb-4" style={{ color: theme.textSecondary }}>
+                We could not retrieve your previous messages. Please check your connection and try again.
+              </p>
+              <button
+                onClick={() => loadTranscript(localStorage.getItem('session_id'))}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-all duration-200 active:scale-95 text-white focus:outline-none focus:ring-2 focus:ring-offset-2"
+                style={{ background: theme.accent }}
+              >
+                Retry Loading
+              </button>
+            </div>
+          )}
+
           {/* Empty state & Mobile Quick Starts */}
-          {messages.length === 0 && !voiceStatus && (
+          {messages.length === 0 && !voiceStatus && !loadingTranscript && !transcriptError && (
             <div className="flex flex-col items-center justify-center h-full text-center px-2 py-8">
               <GaidaMark size={64} accent={theme.accent} breathing />
               <p className="text-base font-semibold mt-5 mb-1" style={{ color: theme.textPrimary }}>Start the conversation.</p>
@@ -1497,8 +1551,8 @@ export default function StudentDashboard() {
           }}
         >
           <div
-            className="flex items-end gap-2 sm:gap-3 rounded-2xl px-3 py-2 sm:p-2"
-            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            className="flex items-end gap-2 sm:gap-3 rounded-2xl px-3 py-2 sm:p-2 border transition-all focus-within:ring-2 focus-within:ring-[#5E8FBD] focus-within:border-transparent"
+            style={{ background: theme.card, borderColor: theme.border }}
           >
             <label htmlFor="student-chat-input" className="sr-only">Type your message</label>
             <textarea
@@ -1512,7 +1566,7 @@ export default function StudentDashboard() {
               placeholder="Type your message..."
               rows={1}
               // IMPORTANT: Using text-base (16px) specifically on mobile prevents iOS Safari auto-zoom
-              className="flex-1 resize-none py-2 text-base sm:text-[15px] leading-relaxed focus:outline-none"
+              className="flex-1 resize-none py-2 text-base sm:text-[15px] leading-relaxed focus:outline-none focus-visible:ring-1 focus-visible:ring-[#5E8FBD] rounded-lg px-1.5"
               style={{ minHeight: '40px', maxHeight: '120px', background: 'transparent', color: theme.textPrimary }}
             />
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 pb-1">
@@ -1524,7 +1578,8 @@ export default function StudentDashboard() {
               <button
                 onClick={() => sendMessage()}
                 disabled={sending || !input.trim()}
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 flex-shrink-0 touch-manipulation"
+                aria-label="Send message"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 flex-shrink-0 touch-manipulation focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 style={
                   input.trim()
                     ? { background: theme.accent, color: '#FFFFFF' }
@@ -1692,16 +1747,6 @@ export default function StudentDashboard() {
                   </a>
                 </div>
               ))}
-            </div>
-
-            <div className="pt-2 border-t flex justify-end" style={{ borderColor: theme.border }}>
-              <button
-                onClick={closeCrisisHotlines}
-                className="px-5 py-2 text-sm font-medium rounded-full transition-colors duration-200 touch-manipulation focus:outline-none focus:ring-2 focus:ring-gray-400"
-                style={{ background: theme.sidebar, color: theme.textSecondary, border: `1px solid ${theme.border}` }}
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>
