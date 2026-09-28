@@ -51,7 +51,7 @@ export default defineConfig({
         globIgnores: ['**/recharts-*.js'],
       },
       devOptions: {
-        enabled: true,
+        enabled: false,
       },
     }),
   ],
