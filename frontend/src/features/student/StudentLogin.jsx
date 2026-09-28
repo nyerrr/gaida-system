@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
 
@@ -250,12 +250,12 @@ export default function StudentLogin() {
               >
                 Password
               </label>
-              <a
-                href="/forgot-password?role=student"
+              <Link
+                to="/forgot-password?role=student"
                 className="text-red-600 hover:text-red-700 text-[10px] font-medium transition-colors"
               >
                 Forgot Password?
-              </a>
+              </Link>
             </div>
             <div className="relative">
               <input
@@ -402,43 +402,39 @@ export default function StudentLogin() {
         </form>
 
         {/* Google SSO */}
-        <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200"></div>
-          </div>
-          <div className="relative flex justify-center">
-            <span className="px-2 bg-white text-gray-400 text-[10px] font-medium uppercase tracking-wider">
-              or
-            </span>
-          </div>
-        </div>
+        {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+          <>
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="px-2 bg-white text-gray-400 text-[10px] font-medium uppercase tracking-wider">
+                  or
+                </span>
+              </div>
+            </div>
 
-        <GoogleSignIn
-          clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}
-          onCredential={handleGoogleCredential}
-          text="continue_with"
-        />
+            <GoogleSignIn
+              clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}
+              onCredential={handleGoogleCredential}
+              text="continue_with"
+            />
+          </>
+        )}
 
-        <div className="mt-4 text-center space-y-2">
-          <p className="text-gray-600 text-xs">
-            New here?{' '}
-            <a
-              href="#"
-              className="text-red-600 hover:text-red-700 font-semibold transition-colors"
-            >
-              Create an account
-            </a>
+        <div className="mt-5 text-center space-y-2">
+          <p className="text-gray-500 text-xs">
+            Use your University of the East credentials.
           </p>
-          <div className="flex justify-center gap-4 text-[10px] text-gray-400">
-            <a href="#" className="hover:text-gray-600 transition-colors">
-              Help
-            </a>
-            <a href="#" className="hover:text-gray-600 transition-colors">
-              Privacy Policy
-            </a>
-            <a href="#" className="hover:text-gray-600 transition-colors">
-              Terms
-            </a>
+          <div className="flex justify-center gap-4 text-xs text-gray-500">
+            <Link to="/counselor-login" className="hover:text-red-700 transition-colors font-medium">
+              Counselor Portal
+            </Link>
+            <span>·</span>
+            <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">
+              Privacy & Consent
+            </Link>
           </div>
         </div>
       </div>

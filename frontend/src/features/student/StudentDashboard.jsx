@@ -100,10 +100,63 @@ const SEVERITY_CONFIG = {
   Normal:   { fill: '#A9B3B8', text: '#6E7A80', chip: '#E9EDEE', width: '6%'   },
 };
 
+const VALID_SEVERITIES = ['Crisis', 'High', 'Moderate', 'Low', 'Normal'];
+
+function normalizeSeverity(val) {
+  if (!val || typeof val !== 'string') return null;
+  const match = VALID_SEVERITIES.find(s => s.toLowerCase() === val.trim().toLowerCase());
+  return match || null;
+}
+
 const QUICK_START_PROMPTS = [
   { icon: 'school',      text: "I'm stressed about my exams" },
   { icon: 'message-2',   text: "I just want to talk to someone" },
   { icon: 'cloud-rain',  text: "Things have been hard lately" },
+];
+
+const CRISIS_HOTLINES = [
+  {
+    name: 'National Center for Mental Health (NCMH) Crisis Hotline',
+    number: '1553',
+    tel: '1553',
+    desc: 'Toll-free nationwide, 24/7 mental health crisis support',
+    badge: '24/7 Free',
+  },
+  {
+    name: 'HOPELINE Philippines',
+    number: '(02) 8804-4673 / 0917-558-4673',
+    tel: '09175584673',
+    desc: 'Toll-free for Globe/TM subscribers, 24/7 suicide prevention',
+    badge: '24/7',
+  },
+  {
+    name: 'In Touch Community Services: Crisis Line',
+    number: '(02) 8893-7603 / 0917-800-1123',
+    tel: '09178001123',
+    desc: 'Free, confidential crisis counseling & emotional support',
+    badge: '24/7',
+  },
+  {
+    name: 'Philippine National Emergency Hotline',
+    number: '911',
+    tel: '911',
+    desc: 'For immediate life-threatening physical danger and emergencies',
+    badge: 'Emergency',
+  },
+  {
+    name: 'UE Guidance and Counseling Office (Manila)',
+    number: '(02) 8735-5471 loc. 462 / 366',
+    tel: '0287355471',
+    desc: 'University counselors on campus (Mon-Fri 8:00 AM - 5:00 PM)',
+    badge: 'UE Campus',
+  },
+  {
+    name: 'UE Guidance and Counseling Office (Caloocan)',
+    number: '(02) 8367-4572 loc. 175',
+    tel: '0283674572',
+    desc: 'Caloocan campus guidance office (Mon-Fri 8:00 AM - 5:00 PM)',
+    badge: 'UE Campus',
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -211,7 +264,7 @@ function Avatar({ role, accent, breathing = false }) {
   );
 }
 
-function MessageBubble({ message, theme, onFeedback, feedback }) {
+function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlayingTTS }) {
   const { role, text, isVoice, acoustic, timestamp } = message;
 
   const bubbleStyle =
@@ -238,10 +291,14 @@ function MessageBubble({ message, theme, onFeedback, feedback }) {
         ) : (
           <ReactMarkdown
             components={{
-              p:      ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-              strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-              ul:     ({ children }) => <ul className="list-disc list-inside mt-2 space-y-1">{children}</ul>,
-              li:     ({ children }) => <li className="text-[15px] sm:text-sm">{children}</li>,
+              p:          ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+              strong:     ({ children }) => <strong className="font-bold">{children}</strong>,
+              em:         ({ children }) => <em className="italic">{children}</em>,
+              ul:         ({ children }) => <ul className="list-disc list-inside mt-2 space-y-1">{children}</ul>,
+              ol:         ({ children }) => <ol className="list-decimal list-inside mt-2 space-y-1">{children}</ol>,
+              li:         ({ children }) => <li className="text-[15px] sm:text-sm">{children}</li>,
+              blockquote: ({ children }) => <blockquote className="border-l-2 pl-3 my-2 italic opacity-85" style={{ borderColor: theme.accent }}>{children}</blockquote>,
+              code:       ({ children }) => <code className="px-1.5 py-0.5 rounded text-xs font-mono" style={{ background: theme.sidebar }}>{children}</code>,
               h1: () => null,
               h2: () => null,
               h3: () => null,
@@ -252,11 +309,36 @@ function MessageBubble({ message, theme, onFeedback, feedback }) {
         )}
       </div>
 
-      {timestamp && (
-        <span className="text-[11px] px-1" style={{ color: theme.textMuted }}>
-          {formatMsgTime(timestamp)}
-        </span>
-      )}
+      <div className="flex items-center gap-2 px-1">
+        {timestamp && (
+          <span className="text-[11px]" style={{ color: theme.textMuted }}>
+            {formatMsgTime(timestamp)}
+          </span>
+        )}
+
+        {role === 'bot' && onPlayTTS && (
+          <button
+            onClick={onPlayTTS}
+            className="text-[11px] px-2 py-0.5 rounded-full border transition-colors duration-200 touch-manipulation flex items-center gap-1"
+            style={{
+              background: isPlayingTTS ? theme.accentDark : 'transparent',
+              color: isPlayingTTS ? '#FFFFFF' : theme.textSecondary,
+              border: `1px solid ${theme.border}`,
+            }}
+            title={isPlayingTTS ? "Stop voice audio" : "Listen to GAIDA's reply"}
+            aria-label={isPlayingTTS ? "Stop reading reply aloud" : "Read reply aloud"}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {isPlayingTTS ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              )}
+            </svg>
+            <span className="text-[10px] hidden sm:inline">{isPlayingTTS ? "Playing" : "Listen"}</span>
+          </button>
+        )}
+      </div>
 
       {role === 'bot' && acoustic && (
         <div className="flex flex-wrap items-center gap-2 px-1 mt-0.5">
@@ -336,6 +418,65 @@ export default function StudentDashboard() {
   const [requestingCounselor, setRequestingCounselor] = useState(false);
   const [counselorRequested,  setCounselorRequested]  = useState(false);
   const [streamingStarted,    setStreamingStarted]    = useState(false);
+  const [showCrisisHotlines,  setShowCrisisHotlines]  = useState(false);
+  const [playingTTSIndex,     setPlayingTTSIndex]     = useState(null);
+  const [loadingTranscript,   setLoadingTranscript]   = useState(false);
+  const [transcriptError,     setTranscriptError]     = useState(false);
+
+  const crisisTriggerRef = useRef(null);
+  const crisisModalRef = useRef(null);
+  const crisisCloseBtnRef = useRef(null);
+
+  const openCrisisHotlines = useCallback((e) => {
+    crisisTriggerRef.current = e?.currentTarget || document.activeElement;
+    setShowCrisisHotlines(true);
+  }, []);
+
+  const closeCrisisHotlines = useCallback(() => {
+    setShowCrisisHotlines(false);
+    requestAnimationFrame(() => {
+      if (crisisTriggerRef.current && typeof crisisTriggerRef.current.focus === 'function') {
+        crisisTriggerRef.current.focus();
+      }
+    });
+  }, []);
+
+  const loadTranscript = useCallback(async (sid) => {
+    if (!sid) return false;
+    setLoadingTranscript(true);
+    setTranscriptError(false);
+    try {
+      const res = await apiFetch(`${BACKEND}/api/counselor/chat/${sid}`);
+      if (!res.ok) {
+        throw new Error(`Transcript fetch failed with status ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.messages && data.messages.length > 0) {
+        const rehydrated = data.messages.map(m => ({
+          role: m.sender === 'user' ? 'user' : m.sender === 'counselor' ? 'counselor' : m.sender === 'system' ? 'system' : 'bot',
+          text: m.text,
+          timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+        }));
+        setMessages(rehydrated);
+        lastCounselorCount.current = data.messages.filter(m => m.sender === 'counselor').length;
+        const normSev = normalizeSeverity(data.severity);
+        if (normSev) setSeverity(normSev);
+        if (data.counselor_active) {
+          setCounselorActive(true);
+          wasCounselorActive.current = true;
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Failed to restore chat transcript:', e);
+      setTranscriptError(true);
+      return false;
+    } finally {
+      setLoadingTranscript(false);
+    }
+  }, []);
+
   // Mirror of localStorage['session_id'] as React state so the realtime
   // WebSocket (re)connects the moment a session is created/restored.
   const [sessionId,          setSessionId]          = useState(() => localStorage.getItem('session_id'));
@@ -360,6 +501,8 @@ export default function StudentDashboard() {
   const typingTimeout      = useRef(null);
   const typingActiveRef    = useRef(false);
   const wasCounselorActive = useRef(false);
+  const audioRef           = useRef(null);
+  const audioUrlRef        = useRef(null);
 
   // ── Counselor-chat helpers ───────────────────────────────────
   // Shared by BOTH the 3s poll and the realtime WebSocket so the two paths
@@ -397,7 +540,8 @@ export default function StudentDashboard() {
     setCounselorActive(active);
   };
 
-  const severityConfig = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.Normal;
+  const validSeverity = normalizeSeverity(severity) || 'Normal';
+  const severityConfig = SEVERITY_CONFIG[validSeverity];
 
   // ── Wellbeing rating options ──────────────────────────────────
   const WELLBEING_OPTIONS = [
@@ -407,35 +551,49 @@ export default function StudentDashboard() {
     { value: 4, emoji: '😊', label: 'Much better' },
   ];
 
-  // ── Auth + session reset on mount ────────────────────────────
+  // ── Auth + session rehydration on mount ────────────────────────────
   useEffect(() => {
     const token   = localStorage.getItem('session_token');
     const studentId = localStorage.getItem('student_id');
-    if (studentId) {
-      apiFetch(`${BACKEND}/api/counselor/student/checkin/${studentId}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.needs_checkin) {
-            setMessages([{
-              role: 'bot',
-              text: data.peak_severity === 'Crisis'
-                ? "Kumusta ka na? Last time we talked, you were going through something really heavy. How have you been feeling since then?"
-                : "Hey, kumusta? It's been a few days since we last talked - just checking in. How are you feeling today?",
-              timestamp: new Date(),
-              isCheckin: true,
-            }]);
-          }
-        })
-        .catch(() => {});
-    }
+    const sid = localStorage.getItem('session_id');
     const consent = localStorage.getItem('consent_given');
     if (!token)   { navigate('/student-login'); return; }
     if (!consent) { navigate('/consent');       return; }
 
     setSidebarOpen(window.innerWidth >= 1024);
     timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
+
+    const initSession = async () => {
+      let hasMessages = false;
+      if (sid) {
+        hasMessages = await loadTranscript(sid);
+      }
+
+      // Check-in is only offered on clean start when there are no messages in the current session
+      if (!hasMessages && studentId) {
+        try {
+          const r = await apiFetch(`${BACKEND}/api/counselor/student/checkin/${studentId}`);
+          if (r.ok) {
+            const data = await r.json();
+            if (data.needs_checkin) {
+              setMessages([{
+                role: 'bot',
+                text: data.peak_severity === 'Crisis'
+                  ? "Kumusta ka na? Last time we talked, you were going through something really heavy. How have you been feeling since then?"
+                  : "Hey, kumusta? It's been a few days since we last talked - just checking in. How are you feeling today?",
+                timestamp: new Date(),
+                isCheckin: true,
+              }]);
+            }
+          }
+        } catch { /* ignore check-in errors */ }
+      }
+    };
+
+    initSession();
+
     return () => clearInterval(timerRef.current);
-  }, [navigate]);
+  }, [navigate, loadTranscript]);
 
   useEffect(() => {
     const notifyLeave = () => {
@@ -608,6 +766,7 @@ export default function StudentDashboard() {
 
     const sessionId = localStorage.getItem('session_id');
     const token     = localStorage.getItem('session_token');
+    let botMsg = null;
 
     try {
       const res = await apiFetch(`${BACKEND}/virtual-agent/stream`, {
@@ -631,7 +790,6 @@ export default function StudentDashboard() {
         return;
       }
 
-      let botMsg = null;
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -667,7 +825,8 @@ export default function StudentDashboard() {
             localStorage.setItem('session_id', result.session_id);
             setSessionId(result.session_id);
           }
-          if (result.severity)         setSeverity(result.severity);
+          const normSev = normalizeSeverity(result.severity);
+          if (normSev) setSeverity(normSev);
           if (result.counselor_active) setCounselorActive(true);
 
           if (!result.counselor_active && (!botMsg || !botMsg.text) && result.response) {
@@ -688,9 +847,17 @@ export default function StudentDashboard() {
 
       if (buffer.trim()) processLine(buffer);
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: 'bot', text: `Connection error: ${err.message}`, timestamp: new Date(),
-      }]);
+      if (botMsg && botMsg.text) {
+        setMessages(prev => [...prev, {
+          role: 'system',
+          text: `Connection interrupted: ${err.message || 'Stream closed'}.`,
+          timestamp: new Date(),
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'bot', text: `Connection error: ${err.message}`, timestamp: new Date(),
+        }]);
+      }
     } finally {
       setSending(false);
       // Only auto-focus input on non-touch devices to avoid keyboard pop-ups
@@ -740,20 +907,148 @@ export default function StudentDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      const data = await res.json();
-      if (data.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
         setCounselorRequested(true);
         setMessages(prev => [...prev, {
           role: 'system',
           text: 'A counselor has been notified and will join shortly.',
         }]);
+      } else {
+        const errMsg = data.error || data.detail || 'Could not notify counselor at this time.';
+        setMessages(prev => [...prev, {
+          role: 'system',
+          text: `Counselor request failed: ${errMsg}`,
+        }]);
       }
     } catch (e) {
       console.error('Request counselor error:', e);
+      setMessages(prev => [...prev, {
+        role: 'system',
+        text: 'Network error requesting counselor. Please check your connection or try again.',
+      }]);
     } finally {
       setRequestingCounselor(false);
     }
   };
+
+  const stopTTS = useCallback(() => {
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      } catch { /* ignore pause error */ }
+      audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      try {
+        URL.revokeObjectURL(audioUrlRef.current);
+      } catch { /* ignore revoke error */ }
+      audioUrlRef.current = null;
+    }
+    setPlayingTTSIndex(null);
+  }, []);
+
+  const handlePlayTTS = async (index, text) => {
+    if (playingTTSIndex === index) {
+      stopTTS();
+      return;
+    }
+    stopTTS();
+    setPlayingTTSIndex(index);
+
+    try {
+      const plainText = text
+        .replace(/[#*`_~>[\]()]/g, '')
+        .replace(/\n+/g, ' ')
+        .trim();
+
+      if (!plainText) {
+        setPlayingTTSIndex(null);
+        return;
+      }
+
+      const res = await apiFetch(`${BACKEND}/api/voice/tts?text=${encodeURIComponent(plainText)}`);
+      if (!res.ok) {
+        throw new Error('TTS service unavailable');
+      }
+
+      const blob = await res.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      audioUrlRef.current = audioUrl;
+
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        stopTTS();
+      };
+      audio.onerror = () => {
+        console.error('Audio playback error');
+        stopTTS();
+      };
+
+      await audio.play();
+    } catch (err) {
+      console.error('TTS playback error:', err);
+      stopTTS();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopTTS();
+    };
+  }, [stopTTS]);
+
+  useEffect(() => {
+    if (!showCrisisHotlines) return;
+
+    const focusTimer = requestAnimationFrame(() => {
+      if (crisisCloseBtnRef.current) {
+        crisisCloseBtnRef.current.focus();
+      } else if (crisisModalRef.current) {
+        crisisModalRef.current.focus();
+      }
+    });
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCrisisHotlines();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const modal = crisisModalRef.current;
+        if (!modal) return;
+        const focusable = modal.querySelectorAll(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first || document.activeElement === modal) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      cancelAnimationFrame(focusTimer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showCrisisHotlines, closeCrisisHotlines]);
 
   const rateMessage = useCallback((index, value) => {
     if (messageRatings[index]) return;
@@ -867,15 +1162,7 @@ export default function StudentDashboard() {
               <p className="text-xs" style={{ color: theme.textMuted }}>Guidance System</p>
             </div>
           </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 -mr-2 touch-manipulation rounded-full transition-colors duration-200"
-            style={{ color: theme.textMuted }}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+ 
         </div>
 
         {/* Scrollable middle area: on short/mobile viewports this region scrolls
@@ -888,7 +1175,10 @@ export default function StudentDashboard() {
             className="rounded-2xl p-4 space-y-2.5"
             style={{ background: theme.card, border: `1px solid ${theme.border}` }}
           >
-            {[['Duration', formatTime(sessionTime)], ['Messages', messages.length]].map(([label, value]) => (
+            {[
+              ['Duration', formatTime(sessionTime)],
+              ['Messages', transcriptError ? '—' : loadingTranscript ? '...' : messages.length]
+            ].map(([label, value]) => (
               <div key={label} className="flex justify-between items-center">
                 <span className="text-sm" style={{ color: theme.textSecondary }}>{label}</span>
                 <span className="text-sm font-semibold" style={{ color: theme.textPrimary }}>{value}</span>
@@ -910,7 +1200,7 @@ export default function StudentDashboard() {
                 className="text-xs font-semibold px-2.5 py-1 rounded-full"
                 style={{ color: severityConfig.text, background: severityConfig.chip }}
               >
-                {severity}
+                {validSeverity}
               </span>
             </div>
             <div className="w-full rounded-full h-2" style={{ background: theme.border }}>
@@ -1032,8 +1322,18 @@ export default function StudentDashboard() {
         </div>
         </div>
 
-        {/* End Session */}
-        <div className="p-5 flex-shrink-0" style={{ borderTop: `1px solid ${theme.border}`, paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
+        {/* Crisis Hotlines & End Session */}
+        <div className="p-5 flex-shrink-0 space-y-2.5" style={{ borderTop: `1px solid ${theme.border}`, paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
+          <button
+            onClick={(e) => openCrisisHotlines(e)}
+            className="w-full py-2.5 px-4 text-xs font-semibold rounded-full transition-all duration-200 touch-manipulation flex items-center justify-center gap-1.5"
+            style={{ background: '#FFF5F2', border: '1px solid #F5D5CB', color: '#B0472F' }}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            <span>Emergency Hotlines</span>
+          </button>
           <button
             onClick={endSession}
             className="w-full py-3 px-4 text-sm font-semibold rounded-full transition-all duration-200 touch-manipulation"
@@ -1049,7 +1349,7 @@ export default function StudentDashboard() {
 
         {/* Topbar */}
         <div
-          className="h-14 sm:h-16 flex items-center px-3 sm:px-6 gap-3 flex-shrink-0 z-10"
+          className="h-14 sm:h-16 flex items-center px-3 sm:px-6 gap-2.5 sm:gap-3 flex-shrink-0 z-10"
           style={{
             background: theme.sidebar,
             borderBottom: `1px solid ${theme.border}`,
@@ -1072,8 +1372,21 @@ export default function StudentDashboard() {
             Virtual Counselor
           </span>
 
+          <button
+            onClick={(e) => openCrisisHotlines(e)}
+            className="ml-auto px-2.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 active:scale-95 touch-manipulation"
+            style={{ background: '#FBEDEA', border: '1px solid #F0D2CA', color: '#B0472F' }}
+            title="Crisis & Emergency Hotlines"
+            aria-label="View crisis hotlines and emergency contacts"
+          >
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            <span className="hidden xs:inline sm:inline">Hotlines</span>
+          </button>
+
           <div
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold"
             style={{ background: severityConfig.chip, color: severityConfig.text }}
           >
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: severityConfig.fill }} />
@@ -1094,8 +1407,45 @@ export default function StudentDashboard() {
           className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-4"
           style={{ background: theme.bg }}
         >
+          {/* Loading Transcript state */}
+          {loadingTranscript && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center py-12">
+              <div
+                className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mb-3"
+                style={{ borderColor: theme.border, borderTopColor: theme.accent }}
+              />
+              <p className="text-sm font-medium" style={{ color: theme.textSecondary }}>
+                Loading conversation history...
+              </p>
+            </div>
+          )}
+
+          {/* Transcript Fetch Error state */}
+          {transcriptError && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4 py-12">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#FDE8E8', color: '#E02424' }}>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold mb-1" style={{ color: theme.textPrimary }}>
+                Unable to load conversation history
+              </p>
+              <p className="text-sm max-w-sm mb-4" style={{ color: theme.textSecondary }}>
+                We could not retrieve your previous messages. Please check your connection and try again.
+              </p>
+              <button
+                onClick={() => loadTranscript(localStorage.getItem('session_id'))}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-all duration-200 active:scale-95 text-white focus:outline-none focus:ring-2 focus:ring-offset-2"
+                style={{ background: theme.accent }}
+              >
+                Retry Loading
+              </button>
+            </div>
+          )}
+
           {/* Empty state & Mobile Quick Starts */}
-          {messages.length === 0 && !voiceStatus && (
+          {messages.length === 0 && !voiceStatus && !loadingTranscript && !transcriptError && (
             <div className="flex flex-col items-center justify-center h-full text-center px-2 py-8">
               <GaidaMark size={64} accent={theme.accent} breathing />
               <p className="text-base font-semibold mt-5 mb-1" style={{ color: theme.textPrimary }}>Start the conversation.</p>
@@ -1144,6 +1494,8 @@ export default function StudentDashboard() {
                   theme={theme}
                   onFeedback={m.role === 'bot' ? (v) => rateMessage(i, v) : undefined}
                   feedback={messageRatings[i]}
+                  onPlayTTS={m.role === 'bot' ? () => handlePlayTTS(i, m.text) : undefined}
+                  isPlayingTTS={playingTTSIndex === i}
                 />
               </div>
             );
@@ -1199,10 +1551,14 @@ export default function StudentDashboard() {
           }}
         >
           <div
-            className="flex items-end gap-2 sm:gap-3 rounded-2xl px-3 py-2 sm:p-2"
-            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            className="flex items-end gap-2 sm:gap-3 rounded-2xl px-3 py-2 sm:p-2 border transition-all focus-within:ring-2 focus-within:ring-[#5E8FBD] focus-within:border-transparent"
+            style={{ background: theme.card, borderColor: theme.border }}
           >
+            <label htmlFor="student-chat-input" className="sr-only">Type your message</label>
             <textarea
+              id="student-chat-input"
+              name="student-chat-input"
+              aria-label="Type your message"
               ref={inputRef}
               value={input}
               onChange={handleInputChange}
@@ -1210,7 +1566,7 @@ export default function StudentDashboard() {
               placeholder="Type your message..."
               rows={1}
               // IMPORTANT: Using text-base (16px) specifically on mobile prevents iOS Safari auto-zoom
-              className="flex-1 resize-none py-2 text-base sm:text-[15px] leading-relaxed focus:outline-none"
+              className="flex-1 resize-none py-2 text-base sm:text-[15px] leading-relaxed focus:outline-none focus-visible:ring-1 focus-visible:ring-[#5E8FBD] rounded-lg px-1.5"
               style={{ minHeight: '40px', maxHeight: '120px', background: 'transparent', color: theme.textPrimary }}
             />
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 pb-1">
@@ -1222,7 +1578,8 @@ export default function StudentDashboard() {
               <button
                 onClick={() => sendMessage()}
                 disabled={sending || !input.trim()}
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 flex-shrink-0 touch-manipulation"
+                aria-label="Send message"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200 flex-shrink-0 touch-manipulation focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 style={
                   input.trim()
                     ? { background: theme.accent, color: '#FFFFFF' }
@@ -1251,6 +1608,9 @@ export default function StudentDashboard() {
       {/* ── Post-Session Wellbeing Rating Modal ───────────────── */}
       {showRating && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rating-modal-title"
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 transition-opacity duration-300"
           style={{ background: 'rgba(40,50,55,0.45)' }}
         >
@@ -1261,7 +1621,7 @@ export default function StudentDashboard() {
             {ratingSubmitted ? (
               <div className="flex flex-col items-center gap-3 py-4">
                 <GaidaMark size={48} accent={theme.accent} breathing />
-                <p className="text-base font-semibold text-center" style={{ color: theme.textPrimary }}>
+                <p id="rating-modal-title" className="text-base font-semibold text-center" style={{ color: theme.textPrimary }}>
                   Thank you for sharing.
                 </p>
                 <p className="text-sm text-center" style={{ color: theme.textSecondary }}>
@@ -1271,9 +1631,9 @@ export default function StudentDashboard() {
             ) : (
               <>
                 <div className="text-center w-full">
-                  <p className="text-base font-semibold mb-2" style={{ color: theme.textPrimary }}>
+                  <h2 id="rating-modal-title" className="text-base font-semibold mb-2" style={{ color: theme.textPrimary }}>
                     Before you go
-                  </p>
+                  </h2>
                   <p className="text-sm leading-relaxed" style={{ color: theme.textSecondary }}>
                     How are you feeling right now compared to when we started?
                   </p>
@@ -1309,6 +1669,85 @@ export default function StudentDashboard() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Crisis Hotlines Modal ─────────────────────────────── */}
+      {showCrisisHotlines && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="crisis-hotlines-title"
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 transition-opacity duration-300"
+          style={{ background: 'rgba(40,50,55,0.45)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeCrisisHotlines(); }}
+        >
+          <div
+            ref={crisisModalRef}
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl p-6 sm:p-7 flex flex-col gap-5 shadow-2xl max-h-[88vh] overflow-y-auto no-scrollbar outline-none"
+            style={{
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="crisis-hotlines-title" className="text-lg font-bold" style={{ color: '#B0472F' }}>
+                  Emergency & Crisis Hotlines
+                </h2>
+                <p className="text-xs mt-1" style={{ color: theme.textSecondary }}>
+                  Free, confidential support is available 24/7. Tap a number to call directly.
+                </p>
+              </div>
+              <button
+                ref={crisisCloseBtnRef}
+                onClick={closeCrisisHotlines}
+                className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full touch-manipulation transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-red-400"
+                aria-label="Close crisis hotlines modal"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {CRISIS_HOTLINES.map((hotline, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 sm:p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                  style={{ background: theme.sidebar, border: `1px solid ${theme.border}` }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#FBEDEA', color: '#B0472F' }}>
+                        {hotline.badge}
+                      </span>
+                      <h3 className="text-sm font-semibold truncate" style={{ color: theme.textPrimary }}>
+                        {hotline.name}
+                      </h3>
+                    </div>
+                    <p className="text-xs leading-relaxed" style={{ color: theme.textMuted }}>
+                      {hotline.desc}
+                    </p>
+                  </div>
+                  <a
+                    href={`tel:${hotline.tel}`}
+                    className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all duration-200 active:scale-95 touch-manipulation flex-shrink-0"
+                    style={{ background: '#B0472F', color: '#FFFFFF' }}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    <span>{hotline.number}</span>
+                  </a>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

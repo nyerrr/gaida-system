@@ -4,6 +4,8 @@ import { lazy, Suspense } from 'react'
 import PortalSelection from './features/auth/PortalSelection'
 import PWABanner from './components/PWABanner'
 import ErrorBoundary from './components/ErrorBoundary'
+import ProtectedRoute from './components/ProtectedRoute'
+import PrivacyPolicy from './features/auth/PrivacyPolicy'
 
 // Every other screen is loaded on demand. CounselorDashboard alone pulls in
 // recharts, which is the single largest dependency in the app — eagerly
@@ -108,6 +110,7 @@ const ForgotPassword = lazyRoute(() => import('./features/auth/ForgotPassword'))
 const ResearchFlow = lazyRoute(() => import('./features/research/ResearchFlow'))
 const ResearchSUS = lazyRoute(() => import('./features/research/ResearchSUS'))
 const Withdraw = lazyRoute(() => import('./features/research/Withdraw'))
+const NotFound = lazyRoute(() => import('./features/auth/NotFound'))
 
 function App() {
   return (
@@ -126,12 +129,15 @@ function App() {
             <Route path="/student-login"       element={<StudentLogin />} />
             <Route path="/counselor-login"     element={<CounselorLogin />} />
             <Route path="/forgot-password"     element={<ForgotPassword />} />
-            <Route path="/consent"             element={<InformedConsent />} />
-            <Route path="/student-dashboard"   element={<StudentDashboard />} />
-            <Route path="/counselor-dashboard" element={<CounselorDashboard />} />
+            <Route path="/consent"             element={<ProtectedRoute type="consent"><InformedConsent /></ProtectedRoute>} />
+            <Route path="/informed-consent"    element={<PrivacyPolicy />} />
+            <Route path="/privacy"             element={<PrivacyPolicy />} />
+            <Route path="/student-dashboard"   element={<ProtectedRoute type="student"><StudentDashboard /></ProtectedRoute>} />
+            <Route path="/counselor-dashboard" element={<ProtectedRoute type="counselor"><CounselorDashboard /></ProtectedRoute>} />
             <Route path="/research"            element={<ResearchFlow />} />
-            <Route path="/research-sus"        element={<ResearchSUS />} />
+            <Route path="/research-sus"        element={<ProtectedRoute type="research_sus"><ResearchSUS /></ProtectedRoute>} />
             <Route path="/research/withdraw"   element={<Withdraw />} />
+            <Route path="*"                    element={<NotFound />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>

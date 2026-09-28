@@ -1,46 +1,23 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearAuth } from '../../api';
-import { BACKEND_URL } from '../../config';
 
-export default function InformedConsent() {
+/**
+ * Public Privacy & Consent Information page.
+ * Contains the complete informed consent and privacy disclosure text from GAIDA,
+ * formatted for unauthenticated, public review before login.
+ *
+ * Role-neutral: Does NOT assume student or counselor identity.
+ * Has a back button and return button that navigate back without page reloads.
+ * Makes 0 API calls and does NOT mutate tokens or localStorage.
+ */
+export default function PrivacyPolicy() {
   const navigate = useNavigate();
-  const [isChecked, setIsChecked] = useState(false);
 
-const handleAccept = async (e) => {
-  e.preventDefault();
-  if (!isChecked) return;
-
-  try {
-    // Get session_id from localStorage (set during login)
-    const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
-
-    const response = await fetch(`${BACKEND_URL}/api/auth/consent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        consent_given: true,
-      }),
-    });
-
-    if (!response.ok) throw new Error('Failed to record consent');
-
-    localStorage.setItem('consent_given', 'true');
-    localStorage.setItem('session_id', sessionId);
-    navigate('/student-dashboard');
-
-  } catch (error) {
-    console.error('Consent error:', error);
-    alert('Failed to record consent. Please try again.');
-  }
-};
-
-  const handleDecline = () => {
-    // No consent = no session: fully log the user out (clears auth state,
-    // the SW data cache, and any queued offline messages).
-    clearAuth();
-    navigate('/');
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/student-login');
+    }
   };
 
   return (
@@ -65,37 +42,26 @@ const handleAccept = async (e) => {
 
       {/* Main Content */}
       <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-6 sm:p-8 w-full max-w-2xl">
-        {/* Top Back Navigation */}
-        <div className="mb-4">
-          <button
-            type="button"
-            onClick={() => navigate('/student-login')}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-red-700 transition-colors focus:outline-none"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span>Back to Login</span>
-          </button>
-        </div>
-
         {/* Header */}
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Informed Consent</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Privacy & Consent</h1>
             <p className="text-xs text-gray-500 mt-1">Please review the guidelines below before beginning your session</p>
           </div>
-          {localStorage.getItem('student_id') && (
-            <div className="text-right flex-shrink-0">
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
-                {localStorage.getItem('student_id')}
-              </span>
-            </div>
-          )}
+          <div className="text-right flex-shrink-0">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+              University of the East — Guidance & Counseling
+            </span>
+          </div>
         </div>
 
-        {/* Consent Content - Scrollable */}
-        <div className="bg-gray-50 rounded-lg p-6 mb-6 max-h-96 overflow-y-auto border border-gray-200">
+        {/* Consent Content - Scrollable (scrollbar visually hidden, keyboard/mouse scrollable) */}
+        <div
+          className="bg-gray-50 rounded-lg p-6 mb-6 max-h-96 overflow-y-auto no-scrollbar border border-gray-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#608AB6]"
+          tabIndex={0}
+          role="region"
+          aria-label="Privacy and consent content"
+        >
           <div className="space-y-4 text-sm text-gray-700">
             {/* Purpose */}
             <div>
@@ -215,48 +181,20 @@ const handleAccept = async (e) => {
           </div>
         </div>
 
-        {/* Consent Checkbox */}
-        <div className="mb-6">
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={isChecked}
-              onChange={(e) => setIsChecked(e.target.checked)}
-              className="mt-1 w-5 h-5 text-red-700 border-gray-300 rounded focus:ring-red-600 cursor-pointer"
-            />
-            <span className="text-sm text-gray-700 select-none">
-              I have read and understood the terms above. I consent to participate in this session 
-              and agree to the collection, use, and storage of my data as described.
-            </span>
-          </label>
-        </div>
-
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
-            onClick={handleAccept}
-            disabled={!isChecked}
-            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all duration-200 ${
-              isChecked
-                ? 'text-white shadow-md hover:shadow-lg active:scale-[0.98] bg-[#608AB6] hover:bg-[#52769c]'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
+            onClick={handleBack}
+            className="flex-1 py-3 px-6 rounded-xl font-semibold transition-all duration-200 text-white shadow-md hover:shadow-lg active:scale-[0.98] bg-[#608AB6] hover:bg-[#52769c] focus:outline-none focus:ring-2 focus:ring-[#52769c]"
           >
-            I Accept - Start Session
-          </button>
-          <button
-            type="button"
-            onClick={handleDecline}
-            className="flex-1 py-3 px-6 rounded-xl font-semibold border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 active:scale-[0.98]"
-          >
-            Decline & Logout
+            I Understand
           </button>
         </div>
 
         {/* Footer Note */}
         <p className="text-xs text-gray-500 text-center mt-4">
-          By clicking "I Accept", you acknowledge that you have read and agree to the terms outlined above.
+          This is an informational document. Participating in counseling sessions requires explicit informed consent after signing in.
         </p>
       </div>
     </div>

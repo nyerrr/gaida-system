@@ -204,7 +204,7 @@ function EmptyState({ icon, title, sub }) {
 }
 
 // ── Overview Page ─────────────────────────────────────────────────────────────
-function OverviewPage({ alerts, sessions }) {
+function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
   const [analytics, setAnalytics] = useState(null);
   const [analyticsError, setAnalyticsError] = useState('');
 
@@ -213,12 +213,16 @@ function OverviewPage({ alerts, sessions }) {
       .then(r => r.json())
       .then(data => {
         if (data && data.error) {
-          setAnalyticsError(String(data.error));
+          console.error('Analytics overview error from backend:', data.error);
+          setAnalyticsError('Unable to load analytics right now. Please try again later.');
         } else {
           setAnalytics(data);
         }
       })
-      .catch(() => setAnalyticsError('Analytics are unavailable right now.'));
+      .catch((err) => {
+        console.error('Analytics overview fetch failed:', err);
+        setAnalyticsError('Unable to load analytics right now. Please try again later.');
+      });
   }, []);
 
   const pending = alerts.filter(a => a.status === 'pending').length;
@@ -280,13 +284,15 @@ function OverviewPage({ alerts, sessions }) {
       </div>
       {analyticsError && (
         <div className="mb-5 p-3 rounded-xl text-xs" style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}>
-          Could not load analytics: {analyticsError}
+          {analyticsError}
         </div>
       )}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
         <Card className="p-5">
           <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Anxiety Level Trends</h3>
-          {!analytics ? (
+          {analyticsError ? (
+            <p className="text-xs text-center py-8" style={{ color: P.amber }}>{analyticsError}</p>
+          ) : !analytics ? (
             <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>Loading trends...</p>
           ) : !hasTrendData ? (
             <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>No trend data yet — appears once students have sessions</p>
@@ -359,7 +365,11 @@ function OverviewPage({ alerts, sessions }) {
         </Card>
         <Card className="p-5">
           <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Recent Alerts</h3>
-          {alerts.length === 0 ? (
+          {alertsLoading && alerts.length === 0 ? (
+            <p className="text-xs text-center py-6" style={{ color: P.textMuted }}>Loading alerts...</p>
+          ) : alertsError && alerts.length === 0 ? (
+            <p className="text-xs text-center py-6 text-red-500">Unable to load alerts right now</p>
+          ) : alerts.length === 0 ? (
             <p className="text-xs text-center py-6" style={{ color: P.textMuted }}>No alerts yet</p>
           ) : (
             <div className="space-y-3">
@@ -552,7 +562,9 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
   );
 }
 
-function AlertsPage({ alerts, onViewChat, onUpdateStatus, onAcknowledge }) {
+function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewChat, onUpdateStatus, onAcknowledge }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('all');
   // Tick every 30 seconds so escalation badges update without a poll.
   const [, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -560,44 +572,115 @@ function AlertsPage({ alerts, onViewChat, onUpdateStatus, onAcknowledge }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Three honest states instead of "everything that isn't pending is
-  // resolved": pending (needs attention), escalated (a counselor took over
-  // the conversation) and reviewed/resolved.
-  const pending   = alerts.filter(a => a.status === 'pending');
-  const escalated = alerts.filter(a => a.status === 'escalated');
-  const resolved  = alerts.filter(a => a.status !== 'pending' && a.status !== 'escalated');
+  const filtered = alerts.filter(a => {
+    const term = searchTerm.toLowerCase().trim();
+    const matchTerm = !term ||
+      (a.student_id && a.student_id.toLowerCase().includes(term)) ||
+      (a.student_name && a.student_name.toLowerCase().includes(term)) ||
+      (a.initial_message && a.initial_message.toLowerCase().includes(term)) ||
+      (a.trigger_reason && a.trigger_reason.toLowerCase().includes(term));
+    const matchSev = severityFilter === 'all' || a.severity?.toLowerCase() === severityFilter.toLowerCase();
+    return matchTerm && matchSev;
+  });
+
+  // Three honest states: pending (needs attention), escalated (counselor active) and reviewed/resolved.
+  const pending   = filtered.filter(a => a.status === 'pending');
+  const escalated = filtered.filter(a => a.status === 'escalated');
+  const resolved  = filtered.filter(a => a.status !== 'pending' && a.status !== 'escalated');
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Alerts</h1>
-        <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>High and Crisis level sessions requiring attention</p>
-      </div>
-      {pending.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full" style={{ background: P.red }} />
-            <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>Pending ({pending.length})</h3>
-          </div>
-          {pending.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
-        </div>
-      )}
-      {escalated.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full" style={{ background: P.accent }} />
-            <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>In Progress — Counselor Engaged ({escalated.length})</h3>
-          </div>
-          {escalated.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
-        </div>
-      )}
-      {resolved.length > 0 && (
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: P.textMuted }}>Reviewed / Resolved ({resolved.length})</h3>
-          {resolved.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
+          <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Alerts</h1>
+          <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>High and Crisis level sessions requiring attention</p>
         </div>
+
+        {/* Search & Filter Bar */}
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="alerts-search-input" className="sr-only">Search alerts</label>
+          <input
+            id="alerts-search-input"
+            name="alerts-search-input"
+            aria-label="Search alerts"
+            type="text"
+            placeholder="Search alerts..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-3 py-1.5 text-xs rounded-lg border focus:outline-none w-44 sm:w-56"
+            style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
+          />
+          <label htmlFor="alerts-severity-filter" className="sr-only">Filter alerts by severity</label>
+          <select
+            id="alerts-severity-filter"
+            name="alerts-severity-filter"
+            aria-label="Filter alerts by severity"
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value)}
+            className="px-2.5 py-1.5 text-xs rounded-lg border focus:outline-none"
+            style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
+          >
+            <option value="all">All Severities</option>
+            <option value="crisis">Crisis only</option>
+            <option value="high">High only</option>
+            <option value="moderate">Moderate only</option>
+            <option value="low">Low only</option>
+            <option value="normal">Normal only</option>
+          </select>
+        </div>
+      </div>
+
+      {alertsLoading && alerts.length === 0 ? (
+        <div className="py-20 text-center">
+          <div className="inline-block w-6 h-6 border-2 border-gray-300 border-t-red-600 rounded-full animate-spin mb-3" />
+          <p className="text-xs" style={{ color: P.textMuted }}>Loading alerts...</p>
+        </div>
+      ) : alertsError && alerts.length === 0 ? (
+        <div className="p-6 rounded-2xl text-center border my-6" style={{ background: P.amberSoft, borderColor: P.amber }}>
+          <p className="text-sm font-semibold mb-1" style={{ color: '#7A5A28' }}>Unable to load alerts right now</p>
+          <p className="text-xs mb-4" style={{ color: '#7A5A28' }}>The alerts service encountered a problem. It will automatically retry, or you can retry now.</p>
+          {onRetryAlerts && (
+            <button
+              onClick={onRetryAlerts}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: P.accent }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          {pending.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full" style={{ background: P.red }} />
+                <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>Pending ({pending.length})</h3>
+              </div>
+              {pending.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
+            </div>
+          )}
+          {escalated.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full" style={{ background: P.accent }} />
+                <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>In Progress — Counselor Engaged ({escalated.length})</h3>
+              </div>
+              {escalated.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
+            </div>
+          )}
+          {resolved.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold mb-3" style={{ color: P.textMuted }}>Reviewed / Resolved ({resolved.length})</h3>
+              {resolved.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
+            </div>
+          )}
+          {alerts.length === 0 && <EmptyState icon="✓" title="No alerts yet" sub="High and Crisis sessions will appear here" />}
+          {alerts.length > 0 && filtered.length === 0 && (
+            <EmptyState icon="🔍" title="No matching alerts" sub="Try changing your search or filter criteria" />
+          )}
+        </>
       )}
-      {alerts.length === 0 && <EmptyState icon="✓" title="No alerts" sub="High and Crisis sessions will appear here" />}
     </div>
   );
 }
@@ -651,14 +734,29 @@ function WelfarePage({ welfare, onViewChat, onMarkChecked }) {
 }
 
 // ── Active Sessions Page ──────────────────────────────────────────────────────
-function SessionsPage({ sessions, onViewChat, lastUpdated }) {
+function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySessions, onViewChat, lastUpdated }) {
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Active Sessions</h1>
         <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Severity levels visible - chat content only shown for flagged sessions</p>
       </div>
-      {sessions.length === 0 ? (
+      {sessionsLoading && sessions.length === 0 ? (
+        <p className="text-xs text-center py-20" style={{ color: P.textMuted }}>Loading active sessions...</p>
+      ) : sessionsError && sessions.length === 0 ? (
+        <div className="text-center py-20" style={{ color: P.textSecondary }}>
+          <p className="text-sm font-medium">{sessionsError}</p>
+          {onRetrySessions && (
+            <button
+              onClick={onRetrySessions}
+              className="mt-3 text-xs px-3 py-1.5 rounded-lg text-white font-medium"
+              style={{ background: P.accent }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      ) : sessions.length === 0 ? (
         <EmptyState icon="◉" title="No active sessions" sub="Sessions appear here when students are chatting" />
       ) : (
         <Card className="overflow-hidden">
@@ -727,6 +825,9 @@ function ChatModal({ sessionId, onClose }) {
   const scrollRef = useRef(null);       // chat tab scroll container
   const stickToBottomRef = useRef(true); // stays true unless counselor scrolls up
   const typingTimeoutRef = useRef(null);
+  const modalContainerRef = useRef(null);
+  const closeBtnRef = useRef(null);
+  const previousActiveElementRef = useRef(null);
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
@@ -907,6 +1008,54 @@ function ChatModal({ sessionId, onClose }) {
     if (!stickToBottomRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, studentTyping, activeTab]);
+
+  useEffect(() => {
+    previousActiveElementRef.current = document.activeElement;
+    const focusTimer = requestAnimationFrame(() => {
+      closeBtnRef.current?.focus?.();
+    });
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const modal = modalContainerRef.current;
+        if (!modal) return;
+        const focusable = modal.querySelectorAll(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first || document.activeElement === modal) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      cancelAnimationFrame(focusTimer);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
+        requestAnimationFrame(() => {
+          previousActiveElementRef.current.focus();
+        });
+      }
+    };
+  }, [onClose]);
 
   // Append a message pushed over the realtime WebSocket, deduped against the
   // transcript the poll returns (matched by sender + timestamp + text, all
@@ -1090,16 +1239,22 @@ const typingThrottleRef = useRef(null);
       const res = await apiFetch(`${BACKEND}/api/counselor/sessions/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
+        body: JSON.stringify({
+          session_id: sessionId,
+          resolved_by: getCounselorId() || undefined,
+        }),
       });
-      const data = await res.json();
-      if (data.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
         setResolved(true);
         setTimeout(() => onClose(), 1500);
-      } else if (!res.ok) {
-        alert(data.detail || 'Could not resolve this session — it may need to be acknowledged first (Alerts tab).');
+      } else {
+        alert(data.detail || data.error || 'Could not resolve this session — it may need to be acknowledged first (Alerts tab).');
       }
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      console.error('Resolve session error:', e);
+      alert('Network error resolving session. Please check your connection.');
+    } finally {
       setResolving(false);
     }
   };
@@ -1114,7 +1269,16 @@ const typingThrottleRef = useRef(null);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(34,48,58,0.55)' }}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chat-modal-title"
+      ref={modalContainerRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 outline-none"
+      style={{ background: 'rgba(34,48,58,0.55)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-xl" style={{ background: P.surface }}>
 
         {/* Header */}
@@ -1122,7 +1286,7 @@ const typingThrottleRef = useRef(null);
           <div>
             {studentProfile ? (
               <>
-                <p className="text-sm font-bold" style={{ color: P.textPrimary }}>{studentProfile.name}</p>
+                <p id="chat-modal-title" className="text-sm font-bold" style={{ color: P.textPrimary }}>{studentProfile.name}</p>
                 <p className="text-xs" style={{ color: P.textSecondary }}>
                   {studentProfile.student_id}
                   {studentProfile.program && ` · ${studentProfile.program}`}
@@ -1131,7 +1295,7 @@ const typingThrottleRef = useRef(null);
               </>
             ) : (
               <>
-                <h3 className="text-sm font-bold" style={{ color: P.textPrimary }}>Live Session</h3>
+                <h3 id="chat-modal-title" className="text-sm font-bold" style={{ color: P.textPrimary }}>Live Session</h3>
                 <p className="text-xs" style={{ color: P.textSecondary }}>{sessionId.slice(0, 24)}...</p>
               </>
             )}
@@ -1170,8 +1334,10 @@ const typingThrottleRef = useRef(null);
             <div className="w-2 h-2 rounded-full" style={{ background: P.green }} />
             <span className="text-xs mr-2" style={{ color: P.textMuted }}>Live</span>
             <button
+              ref={closeBtnRef}
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-bold transition-colors duration-200"
+              aria-label="Close session details"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-bold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ border: `1px solid ${P.border}`, color: P.textSecondary }}
             >
               ✕
@@ -1375,13 +1541,16 @@ const typingThrottleRef = useRef(null);
 
             {/* Notes textarea */}
             <div className="mb-4">
-              <p className="text-xs font-semibold mb-2" style={{ color: P.textPrimary }}>Notes</p>
+              <label htmlFor="counselor-session-notes" className="block text-xs font-semibold mb-2" style={{ color: P.textPrimary }}>Notes</label>
               <textarea
+                id="counselor-session-notes"
+                name="counselor-session-notes"
+                aria-label="Counselor session notes"
                 value={noteText}
                 onChange={e => setNoteText(e.target.value)}
                 placeholder="Document what happened, what was said, and any follow-up actions..."
                 rows={5}
-                className="w-full text-xs px-3 py-2 rounded-xl focus:outline-none resize-none leading-relaxed"
+                className="w-full text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5E8FBD] resize-none leading-relaxed"
                 style={{ border: `1px solid ${P.border}`, color: P.textPrimary }}
               />
             </div>
@@ -1435,18 +1604,23 @@ const typingThrottleRef = useRef(null);
               </div>
             )}
             <div className="flex gap-2 pb-3">
+              <label htmlFor="counselor-takeover-message" className="sr-only">Message to student</label>
               <input
+                id="counselor-takeover-message"
+                name="counselor-takeover-message"
+                aria-label="Message to student"
                 value={takeoverMsg}
                 onChange={handleInputChange}
                 onKeyDown={e => e.key === 'Enter' && sendTakeover()}
                 placeholder="Type a message to the student..."
-                className="flex-1 text-xs px-3 py-2 rounded-lg focus:outline-none"
+                className="flex-1 text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 style={{ border: `1px solid ${P.border}`, color: P.textPrimary }}
               />
               <button
                 onClick={() => sendTakeover()}
                 disabled={sending || !takeoverMsg.trim()}
-                className="px-4 py-2 text-white text-xs rounded-lg disabled:opacity-50 font-medium transition-colors duration-200"
+                aria-label="Send message to student"
+                className="px-4 py-2 text-white text-xs rounded-lg disabled:opacity-50 font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 style={{ background: P.accent }}
               >
                 {sending ? '...' : 'Send'}
@@ -1515,12 +1689,16 @@ function ReportsPage() {
       .then(r => r.json())
       .then(data => {
         if (data && data.error) {
-          setReportsError(String(data.error));
+          console.error('Reports analytics error from backend:', data.error);
+          setReportsError('Unable to load reports right now. Please try again later.');
         } else {
           setReports(data);
         }
       })
-      .catch(() => setReportsError('Reports are unavailable right now.'));
+      .catch((err) => {
+        console.error('Reports fetch error:', err);
+        setReportsError('Unable to load reports right now. Please try again later.');
+      });
   }, []);
 
   const trendData = reports?.monthly_reports || [];
@@ -1534,12 +1712,14 @@ function ReportsPage() {
       </div>
       {reportsError && (
         <div className="mb-5 p-3 rounded-xl text-xs" style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}>
-          Could not load reports: {reportsError}
+          {reportsError}
         </div>
       )}
       <Card className="p-5 mb-5">
         <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Monthly Trends</h3>
-        {!reports ? (
+        {reportsError ? (
+          <p className="text-xs text-center py-8" style={{ color: P.amber }}>{reportsError}</p>
+        ) : !reports ? (
           <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>Loading trends...</p>
         ) : !hasTrendData ? (
           <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>No report data yet — appears once students have sessions</p>
@@ -1558,7 +1738,9 @@ function ReportsPage() {
       </Card>
       <Card className="p-5">
         <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Severity Breakdown by Month</h3>
-        {!reports ? (
+        {reportsError ? (
+          <p className="text-xs text-center py-8" style={{ color: P.amber }}>{reportsError}</p>
+        ) : !reports ? (
           <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>Loading breakdown...</p>
         ) : !hasTrendData ? (
           <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>No breakdown data yet — appears once students have sessions</p>
@@ -1614,11 +1796,16 @@ export default function CounselorDashboard() {
   }, [navigate]);
   const [activePage, setActivePage] = useState('overview');
   const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState(null);
   const [welfare, setWelfare] = useState([]);
   const [chatSessionId, setChatSessionId] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
   const alertsRef = useRef(alerts);
   // Mirror latest alerts for the 5-minute reminder check (must happen in an
@@ -1637,8 +1824,15 @@ export default function CounselorDashboard() {
   const fetchAlerts = async () => {
     try {
       const res = await apiFetch(`${BACKEND}/api/counselor/alerts`);
+      if (!res.ok) {
+        setAlertsError('Unable to load alerts. Retrying...');
+        setAlertsLoading(false);
+        return;
+      }
       const data = await res.json();
       if (data.alerts) {
+        setAlertsError(null);
+        setAlertsLoading(false);
         // Detect NEW pending alerts by ID (count-based logic missed a replaced
         // alert with the same count, and re-beeped every poll because the
         // effect ran on every 2s fetch).
@@ -1657,7 +1851,11 @@ export default function CounselorDashboard() {
         prevPendingIdsRef.current = new Set(pendingNowIds);
         setAlerts(data.alerts);
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('Fetch alerts error:', err);
+      setAlertsError('Network error loading alerts. Retrying...');
+      setAlertsLoading(false);
+    }
   };
 
   // Every 5 minutes, re-remind with a sound while any pending alert is still
@@ -1677,12 +1875,22 @@ export default function CounselorDashboard() {
   }, []);
 
   const fetchSessions = async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
     try {
       const res = await apiFetch(`${BACKEND}/api/counselor/sessions/active`);
+      if (!res.ok) {
+        setSessionsError('Unable to load active sessions. Please try again.');
+        return;
+      }
       const data = await res.json();
       if (data.sessions) setSessions(data.sessions);
       setLastUpdated(new Date());
-    } catch { /* ignore */ }
+    } catch {
+      setSessionsError('Network error loading active sessions. Please check your connection.');
+    } finally {
+      setSessionsLoading(false);
+    }
   };
 
   const handleUpdateStatus = async (sessionId, status) => {
@@ -1701,7 +1909,10 @@ export default function CounselorDashboard() {
         return;
       }
       fetchAlerts();
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Update alert status error:', e);
+      alert('Network error updating alert status. Please check your connection.');
+    }
   };
 
   const handleAcknowledge = async (sessionId) => {
@@ -1717,12 +1928,16 @@ export default function CounselorDashboard() {
         return;
       }
       fetchAlerts();
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Acknowledge alert error:', e);
+      alert('Network error acknowledging alert. Please check your connection.');
+    }
   };
 
   const fetchWelfare = async () => {
     try {
       const res = await apiFetch(`${BACKEND}/api/counselor/sessions/welfare`);
+      if (!res.ok) return;
       const data = await res.json();
       if (data.sessions) setWelfare(data.sessions);
     } catch { /* ignore */ }
@@ -1757,6 +1972,7 @@ export default function CounselorDashboard() {
         if (!res.ok) throw new Error('ticket request failed');
         ({ ticket } = await res.json());
       } catch {
+        setConnectionStatus('polling');
         // Backend unreachable / not a counselor anymore — the 2s poll
         // fallback still covers updates; just retry the SSE connection.
         retryTimer = setTimeout(connect, 5000);
@@ -1769,6 +1985,7 @@ export default function CounselorDashboard() {
       es.addEventListener('sessions', fetchSessions);
       es.addEventListener('welfare', fetchWelfare);
       es.onopen = () => {
+        setConnectionStatus('live');
         fetchAlerts();
         fetchSessions();
         fetchWelfare();
@@ -1777,6 +1994,7 @@ export default function CounselorDashboard() {
       // blip, server restart, expired ticket) it can't just be retried —
       // close it and fetch a fresh ticket for a new connection.
       es.onerror = () => {
+        setConnectionStatus('polling');
         es?.close();
         es = null;
         if (!cancelled) retryTimer = setTimeout(connect, 3000);
@@ -1818,13 +2036,21 @@ export default function CounselorDashboard() {
 
   const handleMarkWelfareChecked = async (sessionId) => {
     try {
-      await apiFetch(`${BACKEND}/api/counselor/sessions/welfare-checked`, {
+      const res = await apiFetch(`${BACKEND}/api/counselor/sessions/welfare-checked`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      setWelfare(prev => prev.filter(w => w.session_id !== sessionId));
-    } catch { /* ignore */ }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setWelfare(prev => prev.filter(w => w.session_id !== sessionId));
+      } else {
+        alert(data.detail || data.error || 'Failed to mark welfare check. Please try again.');
+      }
+    } catch (err) {
+      console.error('Welfare check error:', err);
+      alert('Network error marking welfare check. Please check your connection.');
+    }
   };
 
   const pendingCount = alerts.filter(a => a.status === 'pending').length;
@@ -1945,25 +2171,110 @@ export default function CounselorDashboard() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden lg:ml-16">
         {/* Mobile top bar */}
-        <div className="flex lg:hidden items-center gap-3 px-3 h-14 flex-shrink-0 z-10" style={{ background: P.navy, color: '#FFF' }}>
-          <button
-            onClick={() => { setExpanded(false); setMobileNavOpen(true); }}
-            className="p-2 -ml-1 rounded-lg hover:bg-white/10 transition-colors touch-manipulation"
-            aria-label="Open menu"
+        <div className="flex lg:hidden items-center justify-between px-3 h-14 flex-shrink-0 z-10" style={{ background: P.navy, color: '#FFF' }}>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setExpanded(false); setMobileNavOpen(true); }}
+              className="p-2 -ml-1 rounded-lg hover:bg-white/10 transition-colors touch-manipulation"
+              aria-label="Open menu"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <span className="text-white font-semibold text-sm tracking-wide">GAIDA</span>
+          </div>
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+            style={{
+              background:
+                connectionStatus === 'live' ? 'rgba(76,175,80,0.2)' :
+                connectionStatus === 'connecting' ? 'rgba(99,102,241,0.2)' :
+                connectionStatus === 'polling' ? 'rgba(255,193,7,0.2)' : 'rgba(239,83,80,0.2)',
+              color:
+                connectionStatus === 'live' ? '#81C784' :
+                connectionStatus === 'connecting' ? '#A5B4FC' :
+                connectionStatus === 'polling' ? '#FCD34D' : '#EF5350',
+            }}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <span className="text-white font-semibold text-sm tracking-wide">GAIDA</span>
-          <span className="text-white/60 text-xs flex-1 text-right pr-1">Counselor Dashboard</span>
+            <div
+              className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'live' || connectionStatus === 'connecting' ? 'animate-pulse' : ''}`}
+              style={{
+                background:
+                  connectionStatus === 'live' ? '#81C784' :
+                  connectionStatus === 'connecting' ? '#A5B4FC' :
+                  connectionStatus === 'polling' ? '#FCD34D' : '#EF5350',
+              }}
+            />
+            <span className="capitalize">
+              {connectionStatus === 'live' ? 'Live' :
+               connectionStatus === 'connecting' ? 'Connecting' :
+               connectionStatus === 'polling' ? 'Polling' : 'Offline'}
+            </span>
+          </div>
+        </div>
+
+        {/* Desktop top bar with realtime status */}
+        <div
+          className="hidden lg:flex items-center justify-between px-6 py-2.5 border-b flex-shrink-0"
+          style={{ background: P.surface, borderColor: P.border }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: P.textMuted }}>
+              Counselor Workspace
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium"
+              style={{
+                background:
+                  connectionStatus === 'live' ? P.greenSoft :
+                  connectionStatus === 'connecting' ? '#EEF2FF' :
+                  connectionStatus === 'polling' ? P.amberSoft : P.redSoft,
+                color:
+                  connectionStatus === 'live' ? P.greenDark :
+                  connectionStatus === 'connecting' ? '#4338CA' :
+                  connectionStatus === 'polling' ? '#7A5A28' : P.red,
+              }}
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${connectionStatus === 'live' || connectionStatus === 'connecting' ? 'animate-pulse' : ''}`}
+                style={{
+                  background:
+                    connectionStatus === 'live' ? P.green :
+                    connectionStatus === 'connecting' ? '#6366F1' :
+                    connectionStatus === 'polling' ? '#B8860B' : P.red,
+                }}
+              />
+              <span className="capitalize">
+                {connectionStatus === 'live' ? 'Realtime Live' :
+                 connectionStatus === 'connecting' ? 'Connecting...' :
+                 connectionStatus === 'polling' ? 'Polling (2s)' : 'Offline'}
+              </span>
+            </div>
+            {lastUpdated && (
+              <span className="text-[11px]" style={{ color: P.textMuted }}>
+                Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+          </div>
         </div>
         <main className="flex-1 overflow-y-auto">
           <div className="w-full max-w-6xl mx-auto p-4 sm:p-6">
-            {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} />}
-            {activePage === 'alerts'    && <AlertsPage alerts={alerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} />}
+            {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} />}
+            {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} />}
             {activePage === 'welfare'   && <WelfarePage welfare={welfare} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} />}
-            {activePage === 'sessions' && <SessionsPage sessions={sessions} onViewChat={setChatSessionId} lastUpdated={lastUpdated} />}
+            {activePage === 'sessions' && (
+              <SessionsPage
+                sessions={sessions}
+                sessionsLoading={sessionsLoading}
+                sessionsError={sessionsError}
+                onRetrySessions={fetchSessions}
+                onViewChat={setChatSessionId}
+                lastUpdated={lastUpdated}
+              />
+            )}
             {activePage === 'detection' && <DetectionPage />}
             {activePage === 'reports'   && <ReportsPage />}
             {activePage === 'resolved'  && <ResolvedCasesPage />}
@@ -1984,6 +2295,8 @@ function ResolvedCasesPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [casesError, setCasesError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState('all');
 
   const handleDelete = async (sessionId, e) => {
     e.stopPropagation();
@@ -1995,12 +2308,15 @@ function ResolvedCasesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      const data = await res.json();
-      if (data.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
         setCases(prev => prev.filter(c => c.session_id !== sessionId));
+      } else {
+        alert(data.detail || data.error || 'Failed to remove case from the list.');
       }
     } catch (err) {
       console.error('Delete failed:', err);
+      alert('Network error removing case. Please check your connection.');
     }
   };
 
@@ -2025,20 +2341,70 @@ function ResolvedCasesPage() {
       .then(r => r.json())
       .then(data => {
         if (data && data.error) {
-          setCasesError(String(data.error));
+          console.error('Resolved cases backend error:', data.error);
+          setCasesError('Unable to load resolved cases right now. Please try again later.');
         } else if (data.sessions) {
           setCases(data.sessions);
         }
       })
-      .catch(() => setCasesError('Resolved cases are unavailable right now.'))
+      .catch((err) => {
+        console.error('Resolved cases fetch error:', err);
+        setCasesError('Unable to load resolved cases right now. Please try again later.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
+  const filteredCases = cases.filter(c => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchQuery = !q ||
+      (c.student_id && c.student_id.toLowerCase().includes(q)) ||
+      (c.profile?.name && c.profile.name.toLowerCase().includes(q)) ||
+      (c.profile?.program && c.profile.program.toLowerCase().includes(q)) ||
+      (c.note?.note && c.note.note.toLowerCase().includes(q));
+    const matchOutcome = outcomeFilter === 'all' || (c.note?.outcome === outcomeFilter);
+    return matchQuery && matchOutcome;
+  });
+
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Resolved Cases</h1>
-        <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Closed sessions with case notes and transcripts</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Resolved Cases</h1>
+          <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Closed sessions with case notes and transcripts</p>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="resolved-search-input" className="sr-only">Search cases or notes</label>
+          <input
+            id="resolved-search-input"
+            name="resolved-search-input"
+            aria-label="Search cases or notes"
+            type="text"
+            placeholder="Search cases or notes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-3 py-1.5 text-xs rounded-lg border focus:outline-none w-44 sm:w-56"
+            style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
+          />
+          <label htmlFor="resolved-outcome-filter" className="sr-only">Filter cases by outcome</label>
+          <select
+            id="resolved-outcome-filter"
+            name="resolved-outcome-filter"
+            aria-label="Filter cases by outcome"
+            value={outcomeFilter}
+            onChange={(e) => setOutcomeFilter(e.target.value)}
+            className="px-2.5 py-1.5 text-xs rounded-lg border focus:outline-none"
+            style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
+          >
+            <option value="all">All Outcomes</option>
+            <option value="resolved">Resolved</option>
+            <option value="referred">Referred</option>
+            <option value="follow_up">Follow-up</option>
+            <option value="false_alarm">False alarm</option>
+            <option value="ongoing">Ongoing</option>
+          </select>
+        </div>
       </div>
 
       {loading ? (
@@ -2046,13 +2412,15 @@ function ResolvedCasesPage() {
       ) : casesError ? (
         <div className="text-center py-20" style={{ color: P.textSecondary }}>
           <p className="text-sm font-medium">Could not load resolved cases.</p>
-          <p className="text-xs mt-1">{casesError}</p>
+          <p className="text-xs mt-1 text-red-500">Please try again later.</p>
         </div>
       ) : cases.length === 0 ? (
         <EmptyState icon="✓" title="No resolved cases yet" sub="Sessions marked as resolved will appear here" />
+      ) : filteredCases.length === 0 ? (
+        <EmptyState icon="🔍" title="No matching cases" sub="Try changing your search or outcome filter" />
       ) : (
         <div className="space-y-3">
-          {cases.map((c, i) => {
+          {filteredCases.map((c, i) => {
             const sc = severityColor(c.severity);
             const isOpen = expanded === i;
             const oc = OUTCOME_COLORS[c.note?.outcome];

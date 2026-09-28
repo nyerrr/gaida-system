@@ -12,8 +12,34 @@ import { BACKEND_URL } from './config'
 //   apiFetch('/api/counselor/alerts')                       // token from localStorage
 //   apiFetch(`${BACKEND}/virtual-agent/stream`, { ... })    // absolute URL ok
 //   apiFetch('/api/research/gad7', {...}, explicitToken)    // caller-supplied token
-export function getAuthToken() {
-  return localStorage.getItem('session_token') || localStorage.getItem('counselor_token') || null
+export function getAuthToken(targetUrl = null) {
+  // Route-first token resolution: determine context from the active authenticated path
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    if (path.startsWith('/counselor')) {
+      return localStorage.getItem('counselor_token') || null;
+    }
+    if (path.startsWith('/student') || path.startsWith('/consent') || path.startsWith('/research')) {
+      return localStorage.getItem('session_token') || null;
+    }
+  }
+
+  // Fallback for off-route calls: check if targetUrl targets counselor-only management
+  const isCounselorAdminEndpoint = typeof targetUrl === 'string' && (
+    targetUrl.includes('/counselor/alerts') ||
+    targetUrl.includes('/counselor/sessions') ||
+    targetUrl.includes('/counselor/analytics') ||
+    targetUrl.includes('/counselor/trend') ||
+    targetUrl.includes('/counselor/takeover') ||
+    targetUrl.includes('/counselor/resolve') ||
+    targetUrl.includes('/counselor/notes')
+  );
+
+  if (isCounselorAdminEndpoint) {
+    return localStorage.getItem('counselor_token') || localStorage.getItem('session_token') || null;
+  }
+
+  return localStorage.getItem('session_token') || localStorage.getItem('counselor_token') || null;
 }
 
 // Purge anything sensitive this browser may be holding, so nothing outlives the
@@ -58,7 +84,7 @@ export async function apiFetch(input, options = {}, tokenOverride = null) {
   const url = isAbsolute ? input : `${BACKEND_URL}${input}`
 
   const headers = new Headers(options.headers || {})
-  const token = tokenOverride || getAuthToken()
+  const token = tokenOverride || getAuthToken(url)
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`)
   }

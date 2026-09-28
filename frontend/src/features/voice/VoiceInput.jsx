@@ -21,6 +21,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
   const streamRef = useRef(null);
   const audioRef = useRef(null);  // audio element for playback
   const sentRef = useRef(false);  // whether a transcript was already sent for this recording
+  const maxRecordTimerRef = useRef(null);
 
   const pushStatus = (text) => onStatusChange?.(text);
 
@@ -29,12 +30,14 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
   // closure would capture the initial null and never revoke anything.
   useEffect(() => {
     return () => {
+      clearTimeout(maxRecordTimerRef.current);
       stopAll();
       if (audioURL) URL.revokeObjectURL(audioURL);
     };
   }, [audioURL]);
 
   const stopAll = () => {
+    clearTimeout(maxRecordTimerRef.current);
     try { recognitionRef.current?.stop(); } catch (e) { void e; }
     if (mediaRecorderRef.current?.state !== "inactive") {
       try { mediaRecorderRef.current?.stop(); } catch (e) { void e; }
@@ -47,6 +50,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
 
   // ── Cancel — discard everything including playback ────────────────────────
   const handleCancel = () => {
+    clearTimeout(maxRecordTimerRef.current);
     chunksRef.current = [];
     stopAll();
     setRecording(false);
@@ -64,6 +68,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
 
   // ── Confirm — send immediately, process audio in the background ──────────
   const handleConfirm = () => {
+    clearTimeout(maxRecordTimerRef.current);
     try { recognitionRef.current?.stop(); } catch (e) { void e; }
 
     const text = finalTranscriptRef.current.trim() || liveTranscript.trim();
@@ -87,6 +92,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
 
   // ── Start recording ───────────────────────────────────────────────────────
   const handleStart = async () => {
+    clearTimeout(maxRecordTimerRef.current);
     setError(null);
     setLiveTranscript("");
     finalTranscriptRef.current = "";
@@ -133,6 +139,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
       };
 
       mediaRecorder.onstop = async () => {
+        clearTimeout(maxRecordTimerRef.current);
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
 
@@ -149,7 +156,14 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
       };
 
       mediaRecorder.start();
+      // Guard against runaway background recordings: stop and submit automatically after 60s
+      maxRecordTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") {
+          handleConfirm();
+        }
+      }, 60000);
     } catch {
+      clearTimeout(maxRecordTimerRef.current);
       setError("Recording failed. Try again.");
       stream.getTracks().forEach(t => t.stop());
       return;
@@ -268,23 +282,22 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
 
       {/* Playback bar — shown after recording when not recording */}
       {audioURL && !recording && !loading && (
-        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-10
-          flex items-center gap-2 bg-gray-800 border border-gray-600
-          px-3 py-1.5 rounded-xl shadow-lg whitespace-nowrap">
+        <div className="absolute bottom-full mb-2 right-0 z-20
+          flex items-center gap-2 bg-white border border-slate-200
+          px-3 py-1.5 rounded-xl shadow-lg whitespace-nowrap text-slate-700">
           {/* Play/pause button */}
           <button
             onClick={togglePlayback}
-            className="w-6 h-6 rounded-full bg-emerald-700 hover:bg-emerald-600 flex items-center justify-center flex-shrink-0 transition-colors"
+            className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center flex-shrink-0 transition-colors"
             title={playing ? "Pause" : "Play recording"}
+            aria-label={playing ? "Pause recording playback" : "Play recording playback"}
           >
             {playing ? (
-              // Pause icon
               <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
               </svg>
             ) : (
-              // Play icon
-              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             )}
@@ -296,14 +309,14 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
               <div
                 key={i}
                 className={`w-0.5 rounded-full transition-all duration-150 ${
-                  playing ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'
+                  playing ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
                 }`}
                 style={{ height: `${h * 2}px` }}
               />
             ))}
           </div>
 
-          <span className="text-xs text-gray-400">Voice recorded</span>
+          <span className="text-xs text-slate-500 font-medium">Voice recorded</span>
 
           {/* Discard button */}
           <button
@@ -313,10 +326,11 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
               setAudioURL(null);
               setPlaying(false);
             }}
-            className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-red-400 transition-colors ml-1"
+            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors ml-1 rounded-full touch-manipulation"
             title="Discard recording"
+            aria-label="Discard recording"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -328,22 +342,24 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
           <button
             onClick={handleCancel}
             title="Cancel recording"
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-all duration-200 flex-shrink-0"
+            aria-label="Cancel recording"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-red-50 hover:bg-red-100 border border-red-200 transition-all duration-200 flex-shrink-0 touch-manipulation"
           >
-            <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
           {liveTranscript && (
-            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-600 text-gray-300 text-xs px-3 py-1.5 rounded-xl whitespace-nowrap max-w-[200px] truncate z-10">
+            <div className="absolute bottom-full mb-2 right-0 bg-white border border-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-xl shadow-lg whitespace-nowrap max-w-[220px] truncate z-20 font-medium">
               {liveTranscript}
             </div>
           )}
 
           <button
             disabled
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-red-600 animate-pulse flex-shrink-0"
+            aria-label="Recording voice audio"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-red-500 animate-pulse flex-shrink-0 text-white shadow-sm"
           >
             <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0020 11h-2a6 6 0 01-12 0H4a8.001 8.001 0 007 7.93z" />
@@ -353,7 +369,8 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
           <button
             onClick={handleConfirm}
             title="Done — analyze voice and send"
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-emerald-700 hover:bg-emerald-600 transition-all duration-200 flex-shrink-0"
+            aria-label="Confirm and send voice message"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-200 flex-shrink-0 touch-manipulation shadow-sm"
           >
             <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -364,13 +381,14 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
         <button
           onClick={handleStart}
           disabled={loading}
-          title="Start recording"
-          className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-all duration-200 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Start voice recording"
+          aria-label="Record voice message"
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-all duration-200 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         >
           {loading ? (
-            <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
+            <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-slate-700 rounded-full animate-spin" />
           ) : (
-            <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0020 11h-2a6 6 0 01-12 0H4a8.001 8.001 0 007 7.93z" />
             </svg>
           )}
@@ -378,9 +396,15 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
       )}
 
       {error && (
-        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 border border-red-700 text-red-400 text-xs px-2 py-1 rounded-lg whitespace-nowrap z-10">
-          {error}
-          <button onClick={() => setError(null)} className="ml-2 text-red-600 hover:text-red-400">✕</button>
+        <div className="absolute bottom-full mb-2 right-0 bg-red-50 border border-red-200 text-red-700 text-xs px-2.5 py-1.5 rounded-xl shadow-md whitespace-nowrap z-20 flex items-center gap-1.5">
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            aria-label="Dismiss voice error"
+            className="ml-1 text-red-500 hover:text-red-700 font-bold p-0.5 touch-manipulation"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>

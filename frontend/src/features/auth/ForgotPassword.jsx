@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { BACKEND_URL } from '../../config';
 
 export default function ForgotPassword() {
@@ -142,10 +142,12 @@ export default function ForgotPassword() {
         )}
 
         <div className="mt-5 text-center">
-          <div className="flex justify-center gap-4 text-xs text-gray-400">
-            <a href="#" className="hover:text-gray-600 transition-colors">Help</a>
-            <a href="#" className="hover:text-gray-600 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-gray-600 transition-colors">Terms</a>
+          <div className="flex justify-center gap-4 text-xs text-gray-500">
+            <Link to="/student-login" className="hover:text-red-700 transition-colors font-medium">Student Portal</Link>
+            <span>·</span>
+            <Link to="/counselor-login" className="hover:text-red-700 transition-colors font-medium">Counselor Portal</Link>
+            <span>·</span>
+            <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">Privacy & Consent</Link>
           </div>
         </div>
       </div>

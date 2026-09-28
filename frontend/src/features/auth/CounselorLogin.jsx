@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
 
@@ -210,7 +210,7 @@ export default function CounselorLogin() {
           <div>
             <div className="flex justify-between mb-1.5">
               <label htmlFor="password" className="block text-gray-700 text-sm font-medium">Password</label>
-              <a href="/forgot-password?role=counselor" className="text-red-600 hover:text-red-700 text-xs transition-colors">Forgot Password?</a>
+              <Link to="/forgot-password?role=counselor" className="text-red-600 hover:text-red-700 text-xs transition-colors">Forgot Password?</Link>
             </div>
             <input
               type="password"
@@ -280,26 +280,30 @@ export default function CounselorLogin() {
         </form>
 
         {/* Google SSO */}
-        <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200"></div>
-          </div>
-          <div className="relative flex justify-center">
-            <span className="px-3 bg-white text-gray-400 text-xs">or</span>
-          </div>
-        </div>
+        {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+          <>
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="px-3 bg-white text-gray-400 text-xs">or</span>
+              </div>
+            </div>
 
-        <GoogleSignIn
-          clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}
-          onCredential={handleGoogleCredential}
-          text="signin_with"
-        />
+            <GoogleSignIn
+              clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}
+              onCredential={handleGoogleCredential}
+              text="signin_with"
+            />
+          </>
+        )}
 
         <div className="mt-5 text-center">
-          <div className="flex justify-center gap-4 text-xs text-gray-400">
-            <a href="#" className="hover:text-gray-600 transition-colors">Help</a>
-            <a href="#" className="hover:text-gray-600 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-gray-600 transition-colors">Terms</a>
+          <div className="flex justify-center gap-4 text-xs text-gray-500">
+            <Link to="/student-login" className="hover:text-red-700 transition-colors font-medium">Student Portal</Link>
+            <span>·</span>
+            <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">Privacy & Consent</Link>
           </div>
         </div>
       </div>

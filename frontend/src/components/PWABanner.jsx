@@ -55,7 +55,7 @@ export default function PWABanner() {
             <span style={styles.installIcon}>💙</span>
             <div>
               <div style={styles.installTitle}>Add GAIDA to your home screen</div>
-              <div style={styles.installSub}>Chat anytime, even offline</div>
+              <div style={styles.installSub}>Install for quick and easy access</div>
             </div>
           </div>
           <div style={styles.installActions}>
