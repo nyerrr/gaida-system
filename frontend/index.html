@@ -13,7 +13,14 @@
 
     <!-- ─── PWA ──────────────────────────────────────────── -->
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#7c6af7" />
+    <!--
+      Matches the "Sky" palette's page background in StudentDashboard.jsx /
+      ResearchFlow.jsx / ResearchSUS.jsx. This was #7c6af7 (lavender), which
+      matched neither the app nor its own icons — the installed PWA showed a
+      purple status bar over a cool-blue app. Keep in sync with
+      public/manifest.json, which declares the same pair.
+    -->
+    <meta name="theme-color" content="#F7FAF9" />
 
     <!-- iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
