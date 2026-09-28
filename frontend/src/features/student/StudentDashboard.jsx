@@ -1551,7 +1551,7 @@ export default function StudentDashboard() {
           }}
         >
           <div
-            className="flex items-end gap-2 sm:gap-3 rounded-2xl px-3 py-2 sm:p-2 border transition-all focus-within:ring-2 focus-within:ring-[#5E8FBD] focus-within:border-transparent"
+            className="flex items-end gap-2 sm:gap-3 rounded-2xl px-3 py-2 sm:p-2 border transition-all"
             style={{ background: theme.card, borderColor: theme.border }}
           >
             <label htmlFor="student-chat-input" className="sr-only">Type your message</label>
