@@ -49,6 +49,13 @@ backend/logs/
 consents.json
 interactions.json
 
+# Research exports - real participant data. research_export_for_review.csv
+# carries student_id for every identified session, plus GAD-7 scores and
+# verbatim chat text. Review artifacts, never source. Unanchored patterns so
+# they match at any depth (the export takes an --out path).
+research_export_for_review.csv
+*_for_review.csv
+
 # PWA dev build output
 frontend/dev-dist/
 
