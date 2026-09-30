@@ -5,7 +5,6 @@ import PortalSelection from './features/auth/PortalSelection'
 import PWABanner from './components/PWABanner'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
-import PrivacyPolicy from './features/auth/PrivacyPolicy'
 
 // Every other screen is loaded on demand. CounselorDashboard alone pulls in
 // recharts, which is the single largest dependency in the app — eagerly
@@ -104,6 +103,11 @@ function lazyRoute(loader) {
 const StudentLogin = lazyRoute(() => import('./features/student/StudentLogin'))
 const CounselorLogin = lazyRoute(() => import('./features/auth/CounselorLogin'))
 const InformedConsent = lazyRoute(() => import('./features/auth/InformedConsent'))
+// PrivacyPolicy is lazy like every other route rather than eager because client-side
+// filters (ad/privacy extensions) sometimes block the word "privacy" in a module URL.
+// Eager, a single blocked fetch killed the whole app at boot; lazy, only the two
+// privacy routes are affected and the rest of GAIDA still loads.
+const PrivacyPolicy = lazyRoute(() => import('./features/auth/PrivacyPolicy'))
 const StudentDashboard = lazyRoute(() => import('./features/student/StudentDashboard'))
 const CounselorDashboard = lazyRoute(() => import('./features/counselor/CounselorDashboard'))
 const ForgotPassword = lazyRoute(() => import('./features/auth/ForgotPassword'))
