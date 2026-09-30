@@ -19,7 +19,7 @@ also works as an installable app that can run with no internet.
 |---|---|
 | AI chat | A fine-tuned OpenAI model (based on GPT-3.5 turbo, `ft:gpt-3.5-turbo-0125`) replies warmly and copies whatever language the student used. |
 | Text anxiety detection | Every message is sorted into a mood — neutral, stress, sadness, anxiety, anger, loneliness, academic, suicidal — using rules plus 3 small ML models that vote. |
-| Voice anxiety detection | A recording is checked for signs of stress in the voice itself (pitch, jitter/shimmer, pauses, speaking speed, energy) and also typed out with Whisper. The two results are then combined with the text analysis. |
+| Voice anxiety detection | A recording is checked for signs of stress in the voice itself (pitch, jitter/shimmer, pauses, speaking speed, energy) and also typed out by OpenAI's hosted speech-to-text (`gpt-4o-mini-transcribe`). The two results are then combined with the text analysis. |
 | Vent mode | A "just listen" mode — GAIDA doesn't try to fix or redirect. Real crisis warnings still break through for safety. |
 | Crisis handling | If a student seems to be in crisis, GAIDA shares hotlines (1553, (02) 893-7603, 911) and automatically notifies a human counselor. |
 | **Crisis de-escalation hold (new)** | Once anxiety reaches High or Crisis, GAIDA no longer quietly drops back down on the next calm message. It holds at that level and asks "Are you safe right now?" until the student *explicitly* confirms they're safe (e.g. "safe na ako", "I'm safe"). This prevents the system from "forgetting" a crisis state mid-conversation. |
@@ -49,7 +49,7 @@ also works as an installable app that can run with no internet.
 3. **Storage and outside services.**
    - **Supabase** (a hosted database) permanently stores sessions, chat history, consent
      records, alerts, notes, ratings, research data, and voice-analysis logs.
-   - **OpenAI** powers the chat replies (a fine-tuned model) and voice-to-text (Whisper).
+   - **OpenAI** powers the chat replies (a fine-tuned model) and voice-to-text (`gpt-4o-mini-transcribe`).
    - **gTTS (Google)** can turn text replies into spoken audio.
 
 > ⚠️ **Good to know:** a lot of *live* information — who is currently chatting, login
@@ -65,7 +65,7 @@ also works as an installable app that can run with no internet.
 **Backend (Python)**
 - FastAPI + Uvicorn — the web server
 - scikit-learn — the 3 small ML models that guess the mood of a message
-- OpenAI — chat replies (fine-tuned `ft:gpt-3.5-turbo-0125`) and voice transcription (Whisper "medium")
+- OpenAI — chat replies (fine-tuned `ft:gpt-3.5-turbo-0125`) and voice transcription (`gpt-4o-mini-transcribe`)
 - librosa + numpy (+ OpenSmile) — pull stress signals out of raw audio (pitch, jitter/shimmer,
   pauses, speaking rate, energy)
 - gTTS — text-to-speech
@@ -152,8 +152,8 @@ This is the heart of the system and runs on every single message, in this order:
 1. **Recording → stress analysis.** The audio is checked for pitch, a shaky voice
    (jitter/shimmer), pauses, speaking rate, and energy via librosa/OpenSmile, and the
    result is logged as acoustic features.
-2. **Recording → text.** The same audio is transcribed with OpenAI's Whisper model
-   ("medium"). (The browser also shows a quick live transcript using its built-in speech
+2. **Recording → text.** The same audio is sent to OpenAI's hosted speech-to-text API
+   (`gpt-4o-mini-transcribe`). (The browser also shows a quick live transcript using its built-in speech
    recognition while you talk.)
 3. **Result.** An estimated stress level from voice alone that later merges with the
    text-based detection (step 8 above). Backend endpoints: `POST /audio/speech-to-text`,
@@ -260,8 +260,8 @@ look up.)
 **Cost / models**
 - The fine-tuned chat model is on the `gpt-3.5-turbo-0125` lineage, which OpenAI is
   retiring; it will eventually need to be re-trained on a newer model.
-- The voice-transcription model (Whisper "medium") is fairly heavy, so the first voice
-  message after a restart is slow.
+- Transcription is a hosted OpenAI API call (`gpt-4o-mini-transcribe`), so there's no local
+  model warm-up; voice-detection accuracy is what still needs the labeled-clip validation.
 - Voice-based detection accuracy is being quantified via the new acoustic-validation
   harness but still needs labeled recordings to produce final numbers.
 

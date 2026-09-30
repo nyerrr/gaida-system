@@ -29,7 +29,7 @@ It is **not** a clinical system: it is a referral-and-support layer backed by ru
 │ PWA, offline-ready │◀────────────────│  uvicorn on :8000            │
 └────────────────────┘                 │                              │
         │                              │  + ML classifier (sklearn)   │
-        │                              │  + Whisper ASR + librosa     │
+        │                              │  + hosted STT (gpt-4o-mini-transcribe) + librosa     │
         │                              │  + gTTS voice output         │
         │   (opt-in research mode)     │  + in-memory token+session   │
         ▼                              │  + in-memory rate limiter    │
@@ -40,7 +40,7 @@ It is **not** a clinical system: it is a referral-and-support layer backed by ru
                                        │ tables: sessions, messages,  │
     LLM replies ──── OpenAI GPT        │ interactions, consents,      │
     voice TTS ────── gTTS (offline)    │ alert_logs, research data,   │
-    ASR ──────────── Whisper "medium"  │ ratings, notes, feedback,    │
+    ASR ──────────── hosted STT (gpt-4o-mini-transcribe)  │ ratings, notes, feedback,    │
                                         │ acoustic_logs, ...           │
                                         └──────────────────────────────┘
 ```
@@ -67,7 +67,7 @@ It is **not** a clinical system: it is a referral-and-support layer backed by ru
 | Backend | Python | 3.12 |
 | | API | FastAPI + uvicorn |
 | | ML | scikit-learn pipeline (pretrained emotion/severity classifiers) |
-| | ASR | OpenAI Whisper (`medium`) |
+| | ASR | OpenAI hosted speech-to-text (`gpt-4o-mini-transcribe`, `OPENAI_STT_MODEL`) |
 | | Audio features | librosa (energy, RMS, pitch, mfcc, tempo...) |
 | | TTS | gTTS |
 | | LLM | OpenAI Chat Completions, fine-tuned `ft:gpt-3.5-turbo-0125:personal::DqH2I32e` (hardcoded in `gpt_agent.py`) |
@@ -94,6 +94,7 @@ gaida-system/
 │   │   │   └── research.py         # /api/research/* incl. withdraw [NEW] — no guard
 │   │   ├── services/
 │   │   │   ├── intent_router.py    # intent pipeline + crisis clearance [NEW]
+│   │   │   ├── text_segmenter.py   # per-segment sentiment + distress flags [NEW]
 │   │   │   ├── virtual_agent.py    # reply drafting (LLM + fallback)
 │   │   │   ├── session_manager.py  # session CRUD + welfare check [NEW]
 │   │   │   ├── acoustic_service.py # librosa feature extraction
@@ -238,6 +239,10 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
    - ML classifier (`ml_classifier`) predicts emotion + severity with a confidence score.
    - Confidence is **running-averaged** across the session and mapped to a 5-level severity band:
      `≥0.99 Crisis · ≥0.75 High · ≥0.60 Moderate · ≥0.45 Low · else Normal`.
+   - Segment-level record (`text_segmenter.py`): the message is split into sentence segments; each
+     segment gets a lexicon **sentiment** score and **distress-word flags** (anxiety/stress/sadness/
+     crisis cues). Analysis-only — it never changes intent, severity, or alerting — and is stored per
+     turn in `interactions.analysis.segments` for reviewer/panel inspection.
 4. **Special handling — crisis / suicidal ideation:**
    - Emits counselor alert (`counselor_alerts`), marks session high-risk.
    - Reply includes immediate safety guidance + hotlines (national hotline **1553**, In Touch Community Services **(02) 8-926-8040**, **911**).
@@ -245,7 +250,7 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
 5. **Acoustic fusion (voice mode)** — if the message came through the voice pipeline, `acoustic_service` features are fused into the severity/imminence estimate.
 6. **Counselor active?** — if a `COUNSELOR01`-side takeover is active for the session, GAIDA replies `counselor_active: true` and hands off to the human.
 7. **Reply drafting** — fine-tuned LLM `ft:gpt-3.5-turbo-0125:personal::DqH2I32e` (OpenAI Chat Completions) with the session transcript + intent as context, guided by `finetune.jsonl`-style examples (warm, brief, PhilEnglish, validation-first, never diagnostic). On failure (missing key/network) it falls back to a deterministic scripted reply.
-8. **Record** — message, intent result, and interaction row persisted to Supabase.
+8. **Record** — message, intent result (including the per-segment breakdown in `analysis.segments`), GAIDA's reply, and the interaction row persisted to Supabase.
 
 ### 8.1 Endpoints
 - `POST /virtual-agent` — one-shot JSON reply.
@@ -260,7 +265,8 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
    recording (stationary spectral gating via `noisereduce`, noise profile from the quiet lead-in)
    and RMS-normalizes it to a fixed loudness; then librosa extracts acoustic features (energy, RMS,
    pitch, MFCC, speech rate, pause ratio, jitter/shimmer) which are mapped to an acoustic severity +
-   logged to `acoustic_logs`; then Whisper (`medium`) transcribes to text. The acoustic reading is
+   logged to `acoustic_logs`; then OpenAI's hosted speech-to-text API (`OPENAI_STT_MODEL`,
+   default `gpt-4o-mini-transcribe`) transcribes to text. The acoustic reading is
    parked on the session (`meta.pending_acoustic`) for fusion.
 3. **Fusion** — acoustic features refine the text-derived severity estimate (e.g., high energy + crying cues raise imminence).
 4. **TTS** — `GET /audio/tts?text=…` returns MP3 via gTTS. **Not auto-spoken in the live chat yet** — the endpoint is ready (and the recording UI only replays the student's own audio).
@@ -270,7 +276,7 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
 - `sample_labeled_acoustic.csv` — template with clips named `emotion_severity_intensity_idx.ext` and columns `clip_path | true_emotion | true_severity | notes`.
 - `README.md` — how to record the ~5–10 clips per emotion set with a phone, label them, and produce the accuracy table for the paper/appendix.
 
-**Status:** harness ready; clips still need to be gathered by the team. Known risk: Whisper `medium` may run out of memory on Replit free under load — switch to `"base"` in `voice.py` if you see OOMs.
+**Status:** harness ready; clips still need to be gathered by the team. Note: transcription uses OpenAI's hosted STT API (`gpt-4o-mini-transcribe`), so there is no local ASR model and no model-loading memory pressure on the host.
 
 ---
 
@@ -359,7 +365,7 @@ Backend-protected now — every `/api/counselor/*` route requires a bearer token
 ### Backend — Replit (now Git-connected, auto-deploy)
 - `.replit` (repo root, committed in `5ec7bbd`): modules `nodejs-20`, `python-3.12`, `web`; `[deployment]` → `run = ["sh","-c","cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000"]`, `deploymentTarget = "cloudrun"`.
 - **Flow:** any push to `main` auto-deploys. (Manual "pull + Republish" is no longer needed.)
-- Runtime const: 2 vCPU / 4 GiB; Whisper `medium` + sklearn models pre-warm on startup via the `@app.on_event("startup")` hook.
+- Runtime const: 2 vCPU / 4 GiB; sklearn models pre-warm on startup via the `@app.on_event("startup")` hook.
 - Health: `GET /` must return `{"status":"ok"}`; an old deployment at the same URL continues serving until the new one is healthy.
 
 ### Frontend — Vercel
@@ -381,7 +387,7 @@ Backend-protected now — every `/api/counselor/*` route requires a bearer token
 ## 16. Known Limitations (be ready to say these out loud)
 
 1. `ACTIVE_TOKENS` and session state are in-memory → resets on deploy/restart (tokens die, ongoing sessions drop). Single-instance assumption. **Mitigated for safety:** pending counselor alerts are rehydrated from `counselor_alerts` on startup and welfare checks have a DB fallback, so a crisis case is never invisible to the counselor after a restart.
-2. Voice accuracy is unproven until the labeled clips are run through `evaluate_acoustic.py`; Whisper `medium` is heavy for free-tier runtime.
+2. Voice accuracy is unproven until the labeled clips are run through `evaluate_acoustic.py`; transcription is a hosted API call (`gpt-4o-mini-transcribe`), so the acoustic feature extraction itself is the unvalidated part.
 3. Login is hardcoded test credentials (plus Google for real @ue.edu.ph users) — no self-service registration yet (intended: counselor creates accounts).
 4. GAD-7 is research-flow-only, not a regular-session screening step.
 5. No DB-level encryption at rest; retention automation is policy (6 months) + the manual-withdraw API, not yet a scheduled job.

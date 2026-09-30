@@ -39,8 +39,8 @@ flows through it, and where the interesting/risky parts are.
 | Feature | Description |
 |---|---|
 | **AI chat support** | Students talk to a fine-tuned GPT model that responds warmly and empathetically, matching the student's language (English/Tagalog/Taglish). |
-| **Anxiety detection (text)** | Every message is classified into an intent (`neutral`, `stress`, `sadness`, `anxiety`, `anger`, `loneliness`, `academic`, `suicidal`) using a **rule engine + 3 machine-learning models**. |
-| **Anxiety detection (voice)** | Voice recordings are analyzed for **acoustic stress markers** (pitch variance, jitter, shimmer, pauses, speech rate) and transcribed to text with Whisper. Acoustic findings are fused with text findings. |
+| **Anxiety detection (text)** | Every message is classified into an intent (`neutral`, `stress`, `sadness`, `anxiety`, `anger`, `loneliness`, `academic`, `suicidal`) using a **rule engine + 3 machine-learning models**. Each message is also split into sentence **segments**; every segment is scored for sentiment (lexicon) and flagged for distress cues, and the per-segment breakdown is stored in the interaction log (`text_segmenter.py` — analysis only, never changes intent/severity/alerting). |
+| **Anxiety detection (voice)** | Voice recordings are analyzed for **acoustic stress markers** (pitch variance, jitter, shimmer, pauses, speech rate) and transcribed to text by a hosted speech-to-text API (`gpt-4o-mini-transcribe`, `OPENAI_STT_MODEL`). Acoustic findings are fused with text findings. |
 | **Vent mode** | A "just listen, no advice" mode where GAIDA holds space without redirecting or fixing. Crisis detection still overrides it for safety. |
 | **Crisis handling** | If the student is in crisis, GAIDA shares hotlines and **automatically alerts a human counselor**. |
 | **Counselor takeover** | A counselor can take over a live session. The AI stops responding and the human takes the wheel; control can be handed back to GAIDA. |
@@ -87,7 +87,7 @@ flows through it, and where the interesting/risky parts are.
 ┌──────────────────┐   ┌─────────────────────────────────────────┐
 │    SUPABASE      │   │         EXTERNAL SERVICES               │
 │  (PostgreSQL)    │   │  OpenAI GPT (fine-tuned gpt-3.5-turbo)  │
-│                  │   │  OpenAI Whisper (speech-to-text, medium)│
+│                  │   │  OpenAI STT (gpt-4o-mini-transcribe)│
 │  sessions        │   │  gTTS (text-to-speech, Google)          │
 │  interactions    │   │  ffmpeg (audio→WAV conversion)          │
 │  consents        │   │                                         │
@@ -131,7 +131,7 @@ consent). This works for a single server instance but means everything resets on
 ### Services / infra
 - **Supabase** (hosted Postgres) — storage.
 - **Replit** — hosts the backend via `.replit` (Deployments from Git; pushing to `main` auto-deploys). `render.yaml` is a legacy leftover from the Render era and is **not used**.
-- **OpenAI API** — GPT model + Whisper transcription.
+- **OpenAI API** — fine-tuned GPT-3.5 replies + hosted speech-to-text (`gpt-4o-mini-transcribe`, `OPENAI_STT_MODEL`).
 - **gTTS (Google Translate TTS)** — spoken replies.
 
 ---
@@ -196,9 +196,8 @@ gaida-system/
         ├── main.jsx              # React root
         ├── App.jsx               # router + PWABanner
         ├── config.js             # BACKEND_URL (VITE_BACKEND_URL || localhost:8000)
-        ├── sw.js                 # service worker (cache + offline queue)
         ├── index.css
-        ├── hooks/usePWA.js       # PWA hook (install, online/offline, queue sync)
+        ├── hooks/usePWA.js       # PWA hook (install, online/offline) — no offline queue
         ├── components/PWABanner.jsx
         └── features/
             ├── auth/             # PortalSelection, CounselorLogin, InformedConsent,
@@ -535,8 +534,8 @@ Called by `VoiceInput.jsx` with an audio blob (webm/ogg) + optional `session_id`
    - Logs the full feature set to the `acoustic_logs` Supabase table.
 2. **Stash in session**: stores `pending_acoustic` on the session's `meta`, so the *next* text
    message gets fused with the acoustic verdict (see §7 step 6).
-3. **Whisper transcription** — lazily loads the `medium` model (takes a while on first call), saves
-   bytes to a temp `.webm` file, transcribes.
+3. **Transcription** — calls OpenAI's hosted speech-to-text API (`OPENAI_STT_MODEL`, default
+   `gpt-4o-mini-transcribe`) with the raw uploaded bytes; no local ASR model is loaded.
 4. Returns `{transcript, session_id, acoustic: {...}}`. The transcript is dropped into the chat
    input box for the student to review/send.
 
@@ -627,11 +626,13 @@ Key behaviors:
 - **Voice input**: `VoiceInput` component records via `MediaRecorder`, shows a live transcript from
   the browser's Web Speech API (`lang="fil-PH"`), then sends the blob to
   `/audio/speech-to-text` and drops the transcript into the input box.
-- **Themes**: 4 color themes (purple/navy/charcoal/forest) stored in `localStorage`.
+- **Themes**: 4 color themes (Sky/blue, Sage/green, Lavender/purple, Sand/gold) stored in `localStorage`.
 - **End session**: wellbeing rating modal (1–4) → `POST /api/counselor/session/rate`, then
   `POST /api/session/<id>/end`, clear localStorage, navigate to login.
-- **Offline sync**: listens for the `gaida:queue-synced` event (dispatched by `App.jsx` when the
-  service worker flushes the offline queue) and appends the real bot reply.
+- **Offline behavior**: `usePWA.js` tracks connection state and `PWABanner` shows a notice when
+  offline ("GAIDA can't send or receive messages right now — please reconnect"). There is
+  deliberately **no offline message queue and no offline transcript cache** (see `usePWA.js` /
+  `vite.config.js` notes).
 
 ### 10.3 Counselor dashboard (`CounselorDashboard.jsx`, ~1400 lines)
 
@@ -773,7 +774,7 @@ deploymentTarget = "cloudrun"
 
 | Variable | Used by |
 |---|---|
-| `OPENAI_API_KEY` | `gpt_agent.py` (chat) + `voice.py` (Whisper) |
+| `OPENAI_API_KEY` | `gpt_agent.py` (chat) + `voice.py` (hosted STT `gpt-4o-mini-transcribe`) |
 | `SUPABASE_URL`, `SUPABASE_KEY` | `database/database.py` |
 | `GOOGLE_CLIENT_ID` | `api/auth.py` (Google @ue.edu.ph sign-in) |
 | `VITE_BACKEND_URL` (frontend build) | `frontend/src/config.js` — defaults to `http://localhost:8000` |
@@ -838,8 +839,9 @@ The counselor login (frontend) uses its own hard-coded copy: `counselor01` / `co
 **Model / cost**
 - The GPT model `ft:gpt-3.5-turbo-0125:personal::DqH2I32e` is a **deprecated model lineage** —
   OpenAI has been sunsetting `gpt-3.5-turbo` fine-tunes. Plan to re-tune on `gpt-4o-mini` or newer.
-- Whisper `medium` is heavy; it's lazy-loaded, but the first voice request is slow (and may struggle
-  on Replit's free 4 GiB runtime under load — switching to `"base"` in `voice.py` is the workaround).
+- Transcription calls OpenAI's hosted speech-to-text API (`OPENAI_STT_MODEL`, default
+  `gpt-4o-mini-transcribe`) — no local ASR model is loaded, so there is no model warm-up or
+  on-host memory cost for transcription.
 - Acoustic features include a **hard-coded CapCut ffmpeg path**
   (`acoustic_features.py:18`) as a fallback for a specific Windows machine — fine locally, ignored on
   hosts that have a system ffmpeg (Replit does; `voice.py` also auto-uses the `imageio-ffmpeg` binary
