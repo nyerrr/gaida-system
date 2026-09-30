@@ -27,7 +27,7 @@ also works as an installable app that can run with no internet.
 | Counseler takeover | A counselor can jump into a live chat. GAIDA goes quiet, the human takes over, and control can be handed back to GAIDA later. |
 | Counselor dashboard | Live alerts, active chats, transcripts, typing indicators, case notes, PDF exports, analytics, a resolved-case archive, and now a welfare-check list. |
 | Consent | Students must agree to a consent screen before any of their chat data is saved. |
-| Offline mode | Installable app; past chats can be viewed offline, and messages sent offline are queued and resent once the connection returns. |
+| Offline mode | Installable app; the app opens when there is no internet and shows a "please reconnect" banner. Past chats are **not** cached offline and offline messages are **not** queued — GAIDA needs a connection to chat. |
 | Post-chat check-in | After a session, students rate how they feel (1–4), which counselors can review. |
 | **Per-message feedback (new)** | Under every GAIDA reply there are "Helpful / Not helpful" buttons; ratings are stored so the team can see which replies work. |
 | **Research participation (new)** | An optional, separate research flow: students enter an anonymous code given by the researcher, take a GAD-7 questionnaire, and can later **delete all their research data by code**. |
@@ -197,14 +197,14 @@ look up.)
 
 ## Offline support
 
-- The app caches its core pages so it still opens without internet.
-- Recent chats and alerts are cached so students/counselors can view them offline.
-- Messages sent while offline are queued on the device and automatically resent when the
-  connection returns, with a visible "sending queued messages" notice.
-- One catch: if a login token expires while offline, queued messages will fail to resend
-  until the person logs in again.
-- Developer note: offline caching/queueing is turned off when the app runs on localhost —
-  it engages when the app is served from a real web location.
+- The app caches its core pages (the app shell) so it still opens without internet.
+- Chat transcripts and alerts are **not** cached for offline viewing, and there is
+  **no offline message queue** — while offline, sending is blocked and a banner tells
+  the student to reconnect. This is a deliberate trade-off (see the note in
+  `frontend/src/hooks/usePWA.js`): the earlier queue silently posted messages that never
+  arrived, so pretending to queue them was judged worse than clearly being offline.
+- Developer note: there is no service worker on localhost at all — offline behavior only
+  engages when the app is served from a real web location.
 
 ---
 

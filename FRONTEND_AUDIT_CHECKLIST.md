@@ -206,7 +206,7 @@ See §0 items #1, #2, #3, #5, #6, #7, #8. Each fix is small; the aggregate is wh
 
 ### 4.6 Documentation drift 🟡
 Docs currently assert behaviour that does not exist. Anyone reading them will build the wrong thing.
-- `GAIDA_OVERVIEW.md:30`, `:200-205` — claims an **offline message queue** and **offline chat caching**. Both removed; not in the codebase.
+- `GAIDA_OVERVIEW.md:30`, `:200-205` — used to claim an **offline message queue** and **offline chat caching**. Both removed; not in the codebase. ✅ **Corrected** — `GAIDA_SYSTEM.md` + `GAIDA_OVERVIEW.md` now state plainly that there is no offline queue and no offline transcript cache.
 - `GAIDA_OVERVIEW.md:192` — claims an always-visible hotline & crisis panel. Does not exist (§3.1).
 - `GAIDA_OVERVIEW.md:278` — claims the frontend "still polls instead of WebSocket". WebSocket **is** implemented; both mechanisms run.
 - `HANDOFF.md` §D — lists `theme-color` as open. Already fixed.

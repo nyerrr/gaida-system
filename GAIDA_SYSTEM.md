@@ -46,8 +46,9 @@ flows through it, and where the interesting/risky parts are.
 | **Counselor takeover** | A counselor can take over a live session. The AI stops responding and the human takes the wheel; control can be handed back to GAIDA. |
 | **Counselor dashboard** | Live alerts, active sessions, chat transcripts, typing indicators, case notes, PDF export, analytics, and resolved-case archive. |
 | **Informed consent** | Students must accept an informed-consent form before their data is recorded/persisted. |
-| **Offline PWA** | Installable app; past chats are readable offline and messages sent offline are queued and replayed when back online. |
+| **Offline PWA** | Installable app-shell that still opens without internet; an online/offline banner tells the student to reconnect. Chat transcripts are **not** cached offline and there is **no offline message queue** (deliberate — see `frontend/src/hooks/usePWA.js`). |
 | **Post-session rating** | Students rate how they feel after the session (1–4), stored for counselor review. |
+| **Student record & demographics** | A minimal student record (ID, name, program, year level) accompanies sessions and is shown to counselors during review. Demographics (year level, program, gender, region) are captured **once** during research registration and reused for returning participants. Age is **not** collected and there is **no cross-session risk profiling** — data minimization is deliberate. |
 
 ---
 
@@ -60,7 +61,7 @@ flows through it, and where the interesting/risky parts are.
 │  React 19 + Vite + Tailwind  →  single-page app                 │
 │  Routes:  /  /student-login  /counselor-login  /forgot-password  │
 │           /consent  /student-dashboard  /counselor-dashboard     │
-│  PWA service worker (sw.js)  →  offline cache + message queue    │
+│  PWA service worker (sw.js)  →  app-shell cache only             │
 └──────────────┬──────────────────────────────┬───────────────────┘
                │  HTTP (JSON)                 │  HTTP (JSON)
                ▼                              ▼
