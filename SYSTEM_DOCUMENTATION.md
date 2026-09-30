@@ -256,7 +256,12 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
 ## 9. Voice Pipeline
 
 1. **Record** (browser `MediaRecorder` → webm/opus; `VoiceInput.jsx` uses the browser Web Speech API for a live `fil-PH` preview while recording).
-2. **Upload `POST /audio/speech-to-text`** → librosa extracts acoustic features (energy, RMS, pitch, MFCC, speech rate, pause ratio, jitter/shimmer) which are mapped to an acoustic severity + logged to `acoustic_logs`; then Whisper (`medium`) transcribes to text. The acoustic reading is parked on the session (`meta.pending_acoustic`) for fusion.
+2. **Upload `POST /audio/speech-to-text`** → **voice cleaning** (`voice_cleaning.py`) denoises the
+   recording (stationary spectral gating via `noisereduce`, noise profile from the quiet lead-in)
+   and RMS-normalizes it to a fixed loudness; then librosa extracts acoustic features (energy, RMS,
+   pitch, MFCC, speech rate, pause ratio, jitter/shimmer) which are mapped to an acoustic severity +
+   logged to `acoustic_logs`; then Whisper (`medium`) transcribes to text. The acoustic reading is
+   parked on the session (`meta.pending_acoustic`) for fusion.
 3. **Fusion** — acoustic features refine the text-derived severity estimate (e.g., high energy + crying cues raise imminence).
 4. **TTS** — `GET /audio/tts?text=…` returns MP3 via gTTS. **Not auto-spoken in the live chat yet** — the endpoint is ready (and the recording UI only replays the student's own audio).
 

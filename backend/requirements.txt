@@ -8,6 +8,7 @@ httpx
 scikit-learn
 openai-whisper
 librosa
+noisereduce>=3.0.3,<4
 opensmile
 supabase
 gtts

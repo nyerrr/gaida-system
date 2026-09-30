@@ -112,6 +112,7 @@ consent). This works for a single server instance but means everything resets on
 - **scikit-learn** — 3 ML intent classifiers (Logistic Regression, Random Forest, Neural Network) trained on `anxiety_training.jsonl`, loaded from pickled pipelines.
 - **openai-whisper** — `medium` model, lazy-loaded on the first voice request, converts speech → text.
 - **librosa + numpy** — acoustic feature extraction (pitch, jitter, shimmer, pauses, energy, MFCCs).
+- **noisereduce** — voice cleaning: background-noise removal (stationary spectral gating) before feature extraction; recordings are also RMS-normalized to a fixed loudness (see `app/analytics/voice_cleaning.py`).
 - **openai** — calls the fine-tuned chat model.
 - **gtts** — Google text-to-speech (returns MP3 bytes).
 - **supabase** — Postgres client for all persistence.
@@ -517,6 +518,11 @@ Routes in `backend/app/api/voice.py`.
 Called by `VoiceInput.jsx` with an audio blob (webm/ogg) + optional `session_id`.
 
 1. **Acoustic feature extraction** (non-fatal — continues on failure):
+   - **Voice cleaning** (`voice_cleaning.py`): the raw audio is denoised
+     (stationary spectral gating, `noisereduce` — noise profile taken from the
+     recording's quiet lead-in when present) and RMS-normalized to a fixed
+     loudness so features are comparable across mics/volumes. Disable with
+     `GAIDA_VOICE_CLEANING=0` to restore the raw pipeline.
    - `extract_features()` in `acoustic_features.py` converts to WAV (ffmpeg — system PATH first,
      then a hard-coded CapCut ffmpeg fallback), then computes with librosa:
      - pitch mean/std (`pyin`), RMS energy, pause ratio, speech rate (onsets/sec), duration,

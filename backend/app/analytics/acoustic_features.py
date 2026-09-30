@@ -5,6 +5,12 @@ import tempfile
 import os
 import subprocess
 
+from app.analytics.voice_cleaning import (
+    clean_voice,
+    silence_threshold as voice_silence_threshold,
+    emotion_energy_thresholds,
+)
+
 def _convert_to_wav(audio_bytes: bytes) -> bytes:
     """
     Convert any audio format (webm, ogg, mp3, etc.) to WAV using ffmpeg.
@@ -76,6 +82,9 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
         if len(y) == 0:
             return _empty_features()
 
+        # ── Voice cleaning: background-noise removal + loudness normalization
+        y = clean_voice(y, sr)
+
         features = {}
 
         # ── Pitch (F0) ──────────────────────────────────────────────────────
@@ -95,7 +104,9 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
         features['energy_std']  = float(np.std(rms))
 
         # ── Pause Detection ─────────────────────────────────────────────────
-        silence_threshold = 0.01
+        # Silence cutoff is relative to the (normalized) reference RMS, and
+        # adapts to the denoised noise floor (see voice_cleaning).
+        silence_threshold = voice_silence_threshold(np.asarray(rms))
         silent_frames = np.sum(rms < silence_threshold)
         features['pause_ratio'] = float(silent_frames / len(rms)) if len(rms) > 0 else 0.0
 
@@ -210,6 +221,10 @@ def _detect_emotion(f: dict) -> str:
 
     scores = {'anxious': 0.0, 'sad': 0.0, 'angry': 0.0, 'calm': 0.0}
 
+    # Energy cutoffs are relative to the (normalized) reference RMS, so with
+    # cleaning off they equal the legacy absolutes (0.02 / 0.08) unchanged.
+    energy_cutoffs = emotion_energy_thresholds()
+
     if pitch_std > 30:       scores['anxious'] += 0.3
     if speech_rate > 5:      scores['anxious'] += 0.25
     if jitter > 0.02:        scores['anxious'] += 0.25
@@ -218,9 +233,9 @@ def _detect_emotion(f: dict) -> str:
     if pitch_mean < 150:     scores['sad'] += 0.3
     if speech_rate < 2:      scores['sad'] += 0.3
     if pause_ratio > 0.5:    scores['sad'] += 0.25
-    if energy_mean < 0.02:   scores['sad'] += 0.15
+    if energy_mean < energy_cutoffs['sad']: scores['sad'] += 0.15
 
-    if energy_mean > 0.08:   scores['angry'] += 0.3
+    if energy_mean > energy_cutoffs['angry']: scores['angry'] += 0.3
     if pitch_mean > 250:     scores['angry'] += 0.25
     if speech_rate > 6:      scores['angry'] += 0.25
     if pause_ratio < 0.1:    scores['angry'] += 0.20
