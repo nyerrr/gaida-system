@@ -12,7 +12,7 @@ Preprocessing: lower, collapse repeats, expand contractions, drop 134 stopwords
 Model                      Test Acc   Macro-F1  Suicidal Recall
 --------------------------------------------------------------
 Logistic Regression          69.94%     64.12%           96.30%
-Random Forest                63.80%     55.84%           88.89%
+Random Forest                63.80%     55.85%           88.89%
 Neural Network               71.78%     67.62%           96.30%
 
 ==============================================================================
