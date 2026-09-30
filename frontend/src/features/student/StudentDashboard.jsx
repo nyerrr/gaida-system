@@ -264,8 +264,10 @@ function Avatar({ role, accent, breathing = false }) {
   );
 }
 
-function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlayingTTS }) {
+function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlayingTTS, onFeedbackComment }) {
   const { role, text, isVoice, acoustic, timestamp } = message;
+  const [commentText, setCommentText] = useState('');
+  const [commentSent, setCommentSent] = useState(false);
 
   const bubbleStyle =
     role === 'user'
@@ -392,6 +394,60 @@ function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlay
           ))}
         </div>
       )}
+
+      {role === 'bot' && feedback && onFeedbackComment && (
+        <form
+          className="flex items-center gap-1.5 px-1 pt-1.5 w-full max-w-[320px]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const val = commentText.trim();
+            if (val && !commentSent) {
+              onFeedbackComment(val);
+              setCommentSent(true);
+            }
+          }}
+        >
+          <input
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder="Add a comment (optional)"
+            aria-label="Add a comment about this reply"
+            disabled={commentSent}
+            className="flex-1 min-w-0 text-[12px] px-3 py-1.5 rounded-full border bg-transparent focus:outline-none disabled:opacity-50"
+            style={{ color: theme.textPrimary, border: `1px solid ${theme.border}` }}
+          />
+          <button
+            type="submit"
+            disabled={commentSent || !commentText.trim()}
+            className="text-[12px] px-3 py-1.5 rounded-full border font-medium transition-colors duration-200 disabled:opacity-40 touch-manipulation"
+            style={{
+              background: commentSent ? theme.accentDark : 'transparent',
+              color: commentSent ? '#FFFFFF' : theme.textSecondary,
+              border: `1px solid ${theme.border}`,
+            }}
+          >
+            {commentSent ? '\u2713 Sent' : 'Add'}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, theme, accentBadge }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs" style={{ color: theme.textSecondary }}>{label}</span>
+      <span
+        className="text-xs font-semibold px-2.5 py-1 rounded-full"
+        style={
+          accentBadge
+            ? { color: '#FFFFFF', background: theme.accent }
+            : { color: theme.textPrimary, background: theme.sidebar, border: `1px solid ${theme.border}` }
+        }
+      >
+        {value}
+      </span>
     </div>
   );
 }
@@ -414,6 +470,9 @@ export default function StudentDashboard() {
   const [counselorTyping,   setCounselorTyping]   = useState(false);
   const [counselorActive,   setCounselorActive]   = useState(false);
   const [ventMode,          setVentMode]          = useState(false);
+  const [lowBandwidth,      setLowBandwidth]      = useState(false);
+  const [showSummary,       setShowSummary]       = useState(false);
+  const [sessionSummary,    setSessionSummary]    = useState(null);
   const [showSettings,      setShowSettings]      = useState(false);
   const [requestingCounselor, setRequestingCounselor] = useState(false);
   const [counselorRequested,  setCounselorRequested]  = useState(false);
@@ -503,6 +562,7 @@ export default function StudentDashboard() {
   const wasCounselorActive = useRef(false);
   const audioRef           = useRef(null);
   const audioUrlRef        = useRef(null);
+  const ventUsedRef        = useRef(false);
 
   // ── Counselor-chat helpers ───────────────────────────────────
   // Shared by BOTH the 3s poll and the realtime WebSocket so the two paths
@@ -1050,6 +1110,29 @@ export default function StudentDashboard() {
     };
   }, [showCrisisHotlines, closeCrisisHotlines]);
 
+  // Adaptive quality mode (Ch3 risk mitigation): on slow/offline connections the
+  // voice path is disabled so the session falls back to text-only interaction.
+  useEffect(() => {
+    const update = () => {
+      const conn = typeof navigator !== 'undefined' ? navigator.connection : undefined;
+      const eff = conn?.effectiveType;
+      setLowBandwidth(
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        eff === 'slow-2g' || eff === '2g' || !!conn?.saveData
+      );
+    };
+    update();
+    const conn = typeof navigator !== 'undefined' ? navigator.connection : undefined;
+    conn?.addEventListener?.('change', update);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      conn?.removeEventListener?.('change', update);
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+
   const rateMessage = useCallback((index, value) => {
     if (messageRatings[index]) return;
     const m = messages[index];
@@ -1067,9 +1150,59 @@ export default function StudentDashboard() {
     }).catch(() => {});
   }, [messageRatings, messages]);
 
+  // Optional open-text comment attached to a rated message (Ch3 feedback instrument).
+  const commentOnMessage = useCallback((index, comment) => {
+    const m = messages[index];
+    if (!m || !comment) return;
+    const sessionId = localStorage.getItem('session_id');
+    const rating = messageRatings[index] === 'up' ? 'helpful' : 'not_helpful';
+    apiFetch(`${BACKEND}/api/session/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message_index: index,
+        message_text: m?.text || '',
+        rating,
+        comment,
+      }),
+    }).catch(() => {});
+  }, [messageRatings, messages]);
+
+  // Ch3 Figure 5 — the student receives a summary of the interaction (assessed
+  // anxiety level + what happened) before the post-session rating. Built from the
+  // server's authoritative peak severity; falls back to local state if offline.
+  const buildSessionSummary = async () => {
+    const sessionId = localStorage.getItem('session_id');
+    let summaryPeak = severity;
+    if (sessionId) {
+      try {
+        const res = await apiFetch(`${BACKEND}/api/session/${sessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const meta = data.meta || {};
+          summaryPeak = normalizeSeverity(meta.peak_severity) || severity;
+        }
+      } catch (e) {
+        console.error('Failed to build session summary:', e);
+      }
+    }
+    const userTurns = messages.filter(m => m.role === 'user').length;
+    setSessionSummary({
+      totalMessages: messages.length,
+      userTurns,
+      voiceMessages: messages.filter(m => m.acoustic).length,
+      peak: summaryPeak,
+      crisisTouched: ['High', 'Crisis'].includes(summaryPeak),
+      counselorInvolved: wasCounselorActive.current || counselorActive,
+      ventUsed: ventUsedRef.current,
+    });
+    setShowSummary(true);
+  };
+
   const endSession = () => {
     if (messages.length > 0) {
-      setShowRating(true);
+      buildSessionSummary();
     } else {
       confirmEndSession();
     }
@@ -1230,7 +1363,7 @@ export default function StudentDashboard() {
               Talk
             </button>
             <button
-              onClick={() => setVentMode(true)}
+              onClick={() => { ventUsedRef.current = true; setVentMode(true); }}
               className="flex-1 py-2.5 text-sm font-semibold rounded-full transition-all duration-200 touch-manipulation"
               style={{
                 background: ventMode ? theme.accent : 'transparent',
@@ -1494,6 +1627,7 @@ export default function StudentDashboard() {
                   theme={theme}
                   onFeedback={m.role === 'bot' ? (v) => rateMessage(i, v) : undefined}
                   feedback={messageRatings[i]}
+                  onFeedbackComment={m.role === 'bot' && messageRatings[i] ? (text) => commentOnMessage(i, text) : undefined}
                   onPlayTTS={m.role === 'bot' ? () => handlePlayTTS(i, m.text) : undefined}
                   isPlayingTTS={playingTTSIndex === i}
                 />
@@ -1574,6 +1708,7 @@ export default function StudentDashboard() {
                 sessionId={localStorage.getItem('session_id')}
                 onTranscript={(text) => { setInput(text); sendMessage(text); }}
                 onStatusChange={setVoiceStatus}
+                disabled={lowBandwidth}
               />
               <button
                 onClick={() => sendMessage()}
@@ -1669,6 +1804,67 @@ export default function StudentDashboard() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Session Summary Modal ─────────────────────────────── */}
+      {showSummary && sessionSummary && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="summary-modal-title"
+          className="fixed inset-0 z-[105] flex items-center justify-center p-4 transition-opacity duration-300"
+          style={{ background: 'rgba(40,50,55,0.45)' }}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl p-6 flex flex-col gap-5 shadow-xl"
+            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+          >
+            <div className="text-center">
+              <GaidaMark size={40} accent={theme.accent} />
+              <h2 id="summary-modal-title" className="text-base font-bold mt-3" style={{ color: theme.textPrimary }}>
+                Session Summary
+              </h2>
+              <p className="text-xs mt-1" style={{ color: theme.textSecondary }}>
+                Here's a quick look at how your conversation went.
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              <SummaryRow label="Messages exchanged" value={String(sessionSummary.totalMessages)} theme={theme} />
+              <SummaryRow label="Your messages" value={String(sessionSummary.userTurns)} theme={theme} />
+              {sessionSummary.voiceMessages > 0 && (
+                <SummaryRow label="Voice messages" value={String(sessionSummary.voiceMessages)} theme={theme} />
+              )}
+              <SummaryRow label="Highest anxiety level detected" value={sessionSummary.peak} theme={theme} accentBadge />
+              {sessionSummary.crisisTouched && (
+                <p className="text-xs leading-relaxed rounded-xl px-3 py-2" style={{ background: '#FBEDEA', color: '#B0472F' }}>
+                  GAIDA shared emergency hotlines during this session.
+                </p>
+              )}
+              {sessionSummary.counselorInvolved && (
+                <p className="text-xs leading-relaxed rounded-xl px-3 py-2" style={{ background: '#E9F2FA', color: '#2E4A5E' }}>
+                  A guidance counselor joined your conversation.
+                </p>
+              )}
+              {sessionSummary.ventUsed && (
+                <p className="text-xs leading-relaxed rounded-xl px-3 py-2" style={{ background: theme.sidebar, color: theme.textSecondary }}>
+                  You used Vent mode, which lets you share freely without GAIDA offering suggestions.
+                </p>
+              )}
+              <p className="text-[11px] leading-relaxed" style={{ color: theme.textMuted }}>
+                GAIDA's anxiety assessment is a support tool, not a diagnosis. If you're concerned about how you're feeling, a counselor can help.
+              </p>
+            </div>
+
+            <button
+              onClick={() => { setShowSummary(false); setShowRating(true); }}
+              className="w-full py-2.5 text-white text-sm font-semibold rounded-2xl transition-colors duration-200 touch-manipulation"
+              style={{ background: theme.accent }}
+            >
+              Continue
+            </button>
           </div>
         </div>
       )}

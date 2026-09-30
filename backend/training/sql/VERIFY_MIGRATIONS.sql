@@ -1,11 +1,11 @@
 -- ============================================================================
--- Post-migration verification for the 7 files in this directory.
+-- Post-migration verification for the 9 files in this directory.
 -- Read-only. Safe to run any number of times.
 --
--- Companion to the migration set, not a migration itself. Run all 7 migrations
+-- Companion to the migration set, not a migration itself. Run all 9 migrations
 -- first, then run this to confirm they actually landed.
 --
---   Block A  schema        — every object the 7 files create. Expect 25 'ok'.
+--   Block A  schema        — every object the 9 files create. Expect 27 'ok'.
 --   Block B  backfill      — both must read 0. See the note below.
 --   Block C  counts        — dataset size, and the P1 loss that is NOT recoverable.
 --   Block D  export        — the check that actually matters (run separately,
@@ -20,7 +20,7 @@
 -- BLOCK A — schema check
 --
 -- Every column, table and index created by these migrations, in one query.
--- MISSING rows sort to the top, so a clean run is 25 'ok' rows and nothing else.
+-- MISSING rows sort to the top, so a clean run is 27 'ok' rows and nothing else.
 --
 -- 25, not 28: 2026_09_add_counselor_takeover_persistence.sql adds only
 -- sessions.counselor_active, sessions.assigned_counselor_id and
@@ -54,7 +54,11 @@ with expected(kind, obj) as (
     ('col','counselor_alerts.escalation_level'),
     ('col','counselor_alerts.needs_supervisor'),
     ('col','counselor_alerts.age_minutes'),
-    ('index','idx_counselor_alerts_pending')
+    ('index','idx_counselor_alerts_pending'),
+    -- 7: 2026_09_add_feedback_comment.sql
+    ('col','message_feedback.comment'),
+    -- 8: 2026_09_add_session_notes_assessment.sql
+    ('col','session_notes.counselor_assessment')
 )
 , checked as (
   select

@@ -364,6 +364,10 @@ class SessionNote(BaseModel):
     session_id: str
     note: str
     outcome: str  # e.g. "resolved", "false_alarm", "referred", "follow_up_scheduled"
+    # Independent professional assessment — the counselor's own judgment of the
+    # student's anxiety level / intended action, kept distinct from GAIDA's
+    # automated classification (migration 2026_09_add_session_notes_assessment.sql).
+    counselor_assessment: str = ""
 
 
 class ResolveSession(BaseModel):
@@ -1147,14 +1151,23 @@ def add_session_note(payload: SessionNote, user: dict = Depends(require_role("co
     try:
         from app.database.database import supabase
 
-        supabase.table("session_notes").insert(
-            {
-                "session_id": payload.session_id,
-                "note": payload.note,
-                "outcome": payload.outcome,
-                "created_at": datetime.utcnow().isoformat() + "Z",
-            }
-        ).execute()
+        row = {
+            "session_id": payload.session_id,
+            "note": payload.note,
+            "outcome": payload.outcome,
+            "created_at": datetime.utcnow().isoformat() + "Z",
+        }
+        if payload.counselor_assessment and payload.counselor_assessment.strip():
+            try:
+                supabase.table("session_notes").insert({
+                    **row, "counselor_assessment": payload.counselor_assessment.strip()[:2000],
+                }).execute()
+            except Exception:
+                # `counselor_assessment` column not migrated yet — retry with the
+                # base columns so the note is never lost.
+                supabase.table("session_notes").insert(row).execute()
+        else:
+            supabase.table("session_notes").insert(row).execute()
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}

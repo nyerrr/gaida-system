@@ -6,7 +6,7 @@ import apiFetch from '../../api';
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const hasSpeechRecognition = !!SpeechRecognition;
 
-export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) {
+export default function VoiceInput({ onTranscript, sessionId, onStatusChange, disabled }) {
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -92,6 +92,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
 
   // ── Start recording ───────────────────────────────────────────────────────
   const handleStart = async () => {
+    if (disabled) return; // low-bandwidth / offline fallback keeps text-only interaction
     clearTimeout(maxRecordTimerRef.current);
     setError(null);
     setLiveTranscript("");
@@ -378,11 +379,17 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
           </button>
         </>
       ) : (
+        <>
+          {disabled && (
+          <div className="absolute bottom-full mb-2 right-0 bg-slate-100 border border-slate-200 text-slate-600 text-[11px] px-3 py-1.5 rounded-xl shadow-md whitespace-nowrap z-20 max-w-[240px]">
+            Text-only mode — voice input is disabled on this connection.
+          </div>
+        )}
         <button
           onClick={handleStart}
-          disabled={loading}
-          title="Start voice recording"
-          aria-label="Record voice message"
+          disabled={loading || disabled}
+          title={disabled ? "Voice input is disabled on this connection — text messages still work" : "Start voice recording"}
+          aria-label={disabled ? "Voice input disabled — text messages still work" : "Record voice message"}
           className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-all duration-200 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         >
           {loading ? (
@@ -393,6 +400,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange }) 
             </svg>
           )}
         </button>
+      </>
       )}
 
       {error && (

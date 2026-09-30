@@ -836,6 +836,7 @@ function ChatModal({ sessionId, onClose }) {
   // ── Case Notes state ──────────────────────────────────────────────────────
   const [noteText, setNoteText] = useState('');
   const [noteOutcome, setNoteOutcome] = useState('');
+  const [noteAssessment, setNoteAssessment] = useState('');
   const [savedNote, setSavedNote] = useState(null);
   const [savingNote, setSavingNote] = useState(false);
   const [noteError, setNoteError] = useState('');
@@ -980,6 +981,7 @@ function ChatModal({ sessionId, onClose }) {
           setSavedNote(latest);
           setNoteText(latest.note || '');
           setNoteOutcome(latest.outcome || '');
+          setNoteAssessment(latest.counselor_assessment || '');
         }
       })
       .catch(() => {});
@@ -1196,11 +1198,12 @@ const typingThrottleRef = useRef(null);
           session_id: sessionId,
           note: noteText,
           outcome: noteOutcome,
+          counselor_assessment: noteAssessment,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (data.ok) {
-        setSavedNote({ note: noteText, outcome: noteOutcome, updated_at: new Date().toISOString(), created_at: new Date().toISOString() });
+        setSavedNote({ note: noteText, outcome: noteOutcome, counselor_assessment: noteAssessment, updated_at: new Date().toISOString(), created_at: new Date().toISOString() });
       } else {
         setNoteError(data.error || 'Failed to save. Please try again.');
       }
@@ -1550,6 +1553,24 @@ const typingThrottleRef = useRef(null);
                 onChange={e => setNoteText(e.target.value)}
                 placeholder="Document what happened, what was said, and any follow-up actions..."
                 rows={5}
+                className="w-full text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5E8FBD] resize-none leading-relaxed"
+                style={{ border: `1px solid ${P.border}`, color: P.textPrimary }}
+              />
+            </div>
+
+            {/* Independent professional assessment (override field — Ch3) */}
+            <div className="mb-4">
+              <label htmlFor="counselor-assessment" className="block text-xs font-semibold mb-2" style={{ color: P.textPrimary }}>
+                Independent assessment <span className="font-normal" style={{ color: P.textMuted }}>(optional)</span>
+              </label>
+              <textarea
+                id="counselor-assessment"
+                name="counselor-assessment"
+                aria-label="Counselor independent assessment"
+                value={noteAssessment}
+                onChange={e => setNoteAssessment(e.target.value)}
+                placeholder="Record your own assessment of the student's anxiety level and the action you intend to take (kept separate from GAIDA's automated classification)..."
+                rows={3}
                 className="w-full text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5E8FBD] resize-none leading-relaxed"
                 style={{ border: `1px solid ${P.border}`, color: P.textPrimary }}
               />

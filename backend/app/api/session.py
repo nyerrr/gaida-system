@@ -33,6 +33,7 @@ class MessageFeedback(BaseModel):
     message_index: int = 0
     message_text: str = ""
     rating: str
+    comment: str = ""  # optional open-text comment (migration 2026_09_add_feedback_comment.sql)
 
 
 @router.post("/start")
@@ -57,23 +58,34 @@ def post_message(payload: MessagePayload, user: dict = Depends(get_current_user)
 
 @router.post("/feedback")
 def submit_message_feedback(payload: MessageFeedback, user: dict = Depends(get_current_user)):
-    """Per-message helpfulness rating (thumbs up/down) from the student.
-    Degrades gracefully if the message_feedback table has not been created yet
-    (run backend/training/sql/2026_09_add_message_feedback.sql in Supabase)."""
+    """Per-message helpfulness rating (thumbs up/down) plus an optional
+    open-text comment from the student. The `comment` column comes from
+    backend/training/sql/2026_09_add_feedback_comment.sql; until that migration
+    is applied, the insert automatically retries without the column so ratings
+    are never dropped. Degrades gracefully if the message_feedback table has not
+    been created yet (run 2026_09_add_message_feedback.sql in Supabase)."""
     require_session_owner(payload.session_id, user)
     if payload.rating not in ("helpful", "not_helpful"):
         raise HTTPException(status_code=400, detail="rating must be 'helpful' or 'not_helpful'")
-    if payload.rating not in ("helpful", "not_helpful"):
-        raise HTTPException(status_code=400, detail="rating must be 'helpful' or 'not_helpful'")
+    row = {
+        "session_id": payload.session_id,
+        "message_index": payload.message_index,
+        "message_text": payload.message_text[:500],
+        "rating": payload.rating,
+        "created_at": datetime.utcnow().isoformat() + "Z",
+    }
     try:
         from app.database.database import supabase
-        supabase.table("message_feedback").insert({
-            "session_id": payload.session_id,
-            "message_index": payload.message_index,
-            "message_text": payload.message_text[:500],
-            "rating": payload.rating,
-            "created_at": datetime.utcnow().isoformat() + "Z",
-        }).execute()
+        if payload.comment and payload.comment.strip():
+            try:
+                supabase.table("message_feedback").insert({
+                    **row, "comment": payload.comment.strip()[:1000],
+                }).execute()
+            except Exception:
+                # `comment` column not migrated yet — retry with base columns.
+                supabase.table("message_feedback").insert(row).execute()
+        else:
+            supabase.table("message_feedback").insert(row).execute()
         return {"ok": True, "stored": True}
     except Exception as e:
         print(f"[session] feedback insert error: {e}")
