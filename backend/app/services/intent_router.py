@@ -4,6 +4,7 @@ import re
 from app.services.session_manager import get_session, start_session, record_interaction
 from app.services.virtual_agent import detect_intent_and_level, _build_result
 from app.services.gpt_agent import generate_response_with_gpt, stream_gpt_response
+from app.services.text_segmenter import analyze_text_segments
 from app.api.counselor import process_alert
 
 logger = logging.getLogger(__name__)
@@ -344,6 +345,7 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
                 "intensity": anxiety_score,
                 "severity": severity,
                 "escalate": escalate,
+                "segments": analyze_text_segments(user_message),
             },
             response=response_text if method != "counselor" else None,
         )
