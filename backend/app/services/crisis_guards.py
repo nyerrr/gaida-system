@@ -167,6 +167,67 @@ def is_third_party_death_wish(text: str) -> bool:
     return bool(THIRD_PARTY_RE.search(text)) and not is_self_referential(text)
 
 
+# Anger that belongs to somebody else. Same reasoning as the death-wish guard:
+# "my mom is angry every time I come home late" reports another person's anger,
+# and handing the student an anger-management flow for it answers the wrong
+# question. The possessive is what separates it from "I'm angry" — a bare "my"
+# plus an anger word is a report, not a disclosure.
+OTHER_PERSON_ANGER_RE = re.compile(
+    r"\b(my|our|his|her|their)\s+"
+    r"(mom|mother|dad|father|parents|brother|sister|friend|classmate|"
+    r"roommate|teacher|prof|boss|classmate|kapit|kaibigan|kapatid|"
+    r"ina|ama|magulang|mananatili|guro)\b",
+    re.IGNORECASE,
+)
+
+# Possessive + anger word in either order, which covers "ang galit niya sa akin"
+# (the anger of him/her at me) where the owner comes after the noun.
+FILIPINO_OTHER_ANGER_RE = re.compile(
+    r"\b(ang\s+)?(galit|buga|matam|bahala)\s+(niya|nila|kanya|nilang|kanila)\b",
+    re.IGNORECASE,
+)
+
+# Anger the student owns, even when a third party is also in the sentence.
+# "my brother keeps taking my stuff and it makes me so furious" is a report
+# *about* the brother but a disclosure *of* the student's anger, and the flow
+# they need is the student's. Without this, the possessive guard above would
+# swallow it.
+SELF_ANGER_RE = re.compile(
+    r"\b(i'?m|i am|i feel|i get|it makes me|makes me|"
+    r"ako|akin|sa sarili ko)\b[^.?!]{0,40}"
+    r"\b(angry|mad|furious|annoyed|irritated|raging|rage|galit|buga|matam)\b"
+    r"|"
+    r"\b(angry|mad|furious|annoyed|irritated|raging|rage|galit|buga|matam)\b"
+    r"[^.?!]{0,20}\b(me|ako|akin)\b",
+    re.IGNORECASE,
+)
+
+
+def is_other_persons_anger(text: str) -> bool:
+    """True when the anger in the message belongs to someone other than the student.
+
+    Two guards have to agree before reported anger is accepted, because a
+    possessive alone is not enough:
+
+      - "my mom is angry every time I come home late" reports the mother's
+        anger. The student is describing a household climate, and an
+        anger-management flow answers a question they did not ask.
+      - "my brother keeps taking my stuff and it makes me so furious" also has
+        a possessive, but the anger is the student's. Self-directed anger
+        anywhere in the sentence keeps it.
+
+    Note this deliberately does not use is_self_referential: that matches the
+    bare "i" in "every time I come home late", which is not the student
+    claiming the anger.
+    """
+    text = text or ""
+    if not (
+        OTHER_PERSON_ANGER_RE.search(text) or FILIPINO_OTHER_ANGER_RE.search(text)
+    ):
+        return False
+    return not SELF_ANGER_RE.search(text)
+
+
 def resolve_crisis_level(matched_keywords, text: str) -> dict:
     """Decide the crisis verdict from the matched suicidal keywords + message
     context. This is the ONE place that converts a suicidal-string match into a

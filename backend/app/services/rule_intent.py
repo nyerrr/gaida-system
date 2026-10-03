@@ -202,6 +202,33 @@ KEYWORDS: Dict[str, List[tuple]] = {
         ("parang may mangyayaring masama", 1.8),
         ("nanginginig sa kaba", 2.0),
         ("nahihirapan huminga pag stressed", 2.0),
+
+        # Somatic panic and racing thoughts. Students describe anxiety in the
+        # body far more often than the word "anxious" — the gold key has 19 of
+        # 24 anxiety messages the old list could not touch at all, and most are
+        # of this shape. Weights sit at or below the existing entries because
+        # a racing mind can accompany grief or anger too; the winner is still
+        # decided by weighted share, so one weak somatic hit cannot outvote a
+        # strong explicit one.
+        ("palms are sweating", 2.0),
+        ("palms are sweaty", 2.0),
+        ("sweating palms", 2.0),
+        ("sweaty palms", 2.0),
+        ("mind is racing", 2.0),
+        ("mind racing", 2.0),
+        ("racing thoughts", 1.8),
+        ("racing mind", 1.8),
+        ("feel panicky", 2.0),
+        ("panicky", 1.8),
+        ("kakaisip", 1.5),
+        ("nahihilo sa kakaisip", 2.0),
+        ("mapigilan ang takot", 2.0),
+        ("nararamdaman ko ang takot", 2.0),
+        ("di ako kumalma", 2.0),
+        ("hindi ako kumalma", 2.0),
+        ("hindi kumalma", 1.8),
+        ("iniisip ang mga pangyayari", 2.0),
+        ("paulit-ulit kong iniisip", 2.0),
     ],
 
     "sadness": [
@@ -236,9 +263,84 @@ KEYWORDS: Dict[str, List[tuple]] = {
         ("di ko na kaya", 2.0),
         ("ayoko na umalis sa kwarto", 2.0),
         ("parang wala akong halaga", 2.2),
+        ("feel rejected", 2.2),
+        ("rejected", 1.8),
+        ("heartbroken", 2.2),
+        ("nobody wanted me", 2.2),
         ("hindi mahanap motivation", 1.8),
         ("iyak gabi gabi", 2.2),
         ("parang ako lang palagi", 2.0),
+
+        # Sustained crying and unnamed physical hurt. "Crying" is the single
+        # most common way a student reports sadness and the old list only had
+        # the narrower "crying for no reason" and "iyak gabi gabi", so a plain
+        # "crying all day and I can't stop" scored nothing. Both halves are
+        # listed because "I can't stop" is what makes it sustained rather
+        # than momentary, and either half alone is the real disclosure.
+        ("crying all day", 2.2),
+        ("cry all day", 2.2),
+        ("can't stop crying", 2.2),
+        ("cannot stop crying", 2.2),
+        ("hindi ako makapagstop", 2.2),
+        ("hindi ko na kayang iyak", 2.2),
+        ("umiiyak", 1.8),
+        ("iyak", 1.5),
+        ("masakit ang loob", 2.0),
+        ("masakit ang pakiramdam", 2.0),
+        ("it hurts so much", 2.0),
+        # "hurts to breathe" is kept whole: the breathing pain is the
+        # distinguishing feature and splitting it loses the sense.
+        ("hurts to breathe", 2.2),
+        # Unwanted recall, which is rumination rather than a named emotion.
+        # "paulit-ulit kong inaalala" ("I keep remembering") on its own is too
+        # weak to read as sadness — remembering a good result is neutral — so
+        # only the pairing with a painful memory is listed.
+        ("masasakit na alaala", 2.2),
+        ("masakit na alaala", 2.2),
+        ("inaalala ang masasakit", 2.2),
+        ("can't even eat", 2.0),
+        ("hindi pa ako makakain", 2.0),
+        ("wala nang kulay ang mundo", 2.2),
+        ("walang kulay ang mundo", 2.2),
+        ("di ko alam paano makabawi", 2.0),
+        ("hindi ko alam kung paano", 1.8),
+    ],
+
+    "anger": [
+        # There was no anger list at all until now, which is why every one of
+        # the 24 gold-key anger messages fell through to neutral. Kept narrow
+        # on purpose: the words below all describe anger aimed at the moment
+        # or at the self ("stay away from me"), never a sustained grievance,
+        # because _build_result caps anger at 0.55 and a wrong anger read on a
+        # neutral message costs more than the recall is worth.
+        ("raging", 2.0),
+        ("rage", 1.8),
+        ("angry", 1.8),
+        ("mad", 1.5),
+        ("furious", 2.0),
+        ("irritated", 1.8),
+        ("annoyed", 1.5),
+        ("about to explode", 2.2),
+        ("explode in anger", 2.2),
+        ("want to scream", 2.0),
+        ("scream at", 1.8),
+        ("can't stand them", 1.8),
+        ("stay away from me", 2.2),
+        ("leave me alone", 1.8),
+        ("don't talk to me", 1.8),
+        ("so fed up", 2.0),
+        ("fed up with", 2.0),
+        ("nagngangalit", 2.0),
+        ("nag aalit", 1.8),
+        ("galit", 1.5),
+        ("mainit ang ulo", 2.2),
+        ("ang init ng ulo", 2.2),
+        ("ayoko kausapin", 2.0),
+        ("ayoko munang kausapin", 2.2),
+        ("ayoko makipag-usap", 2.0),
+        ("sasabog", 2.2),
+        ("para akong sasabog", 2.2),
+        ("mapagbago", 1.5),
     ],
 
     "stress": [

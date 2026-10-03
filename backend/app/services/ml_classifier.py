@@ -310,9 +310,25 @@ def classify_intent(text: str) -> dict:
         # Majority vote — most common intent wins
         majority_intent = vote_counts.most_common(1)[0][0]
 
-        # If tie (all 3 different) — use Logistic Regression as tiebreaker
+        # If tie (all 3 different) — there is no signal at all.
+        #
+        # This used to hand the decision to Logistic Regression alone, which
+        # manufactures a confident answer out of nothing: on the gold key,
+        # "kakain na ako kasi gutom na ako" ("I'll eat, I'm hungry") produced
+        # votes {suicidal: 1, anxiety: 1, neutral: 1} and LR's stray suicidal
+        # became a 0.74 verdict. A three-way split means the models do not
+        # agree on anything, and picking one arbitrarily is how a hunger
+        # message turns into a page. Returning uncertain routes it to the
+        # keyword rules in virtual_agent, which read it as neutral — and an
+        # undecided model should defer, never escalate.
         if vote_counts.most_common(1)[0][1] == 1:
-            majority_intent = predictions["Logistic Regression"]["intent"]
+            return {
+                "intent": "uncertain",
+                "confidence": 0.0,
+                "method": "ml_no_majority",
+                "all_predictions": predictions,
+                "votes": dict(vote_counts),
+            }
 
         # Average confidence of models that agreed with majority
         agreeing_confidences = [

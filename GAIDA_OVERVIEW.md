@@ -263,12 +263,23 @@ look up.)
 
   Current scores:
 
-  | | before | after |
-  |---|---|---|
-  | Overall accuracy | 79.2% | **85.0%** |
-  | Suicidal messages reaching the crisis flow | 15/24 | **24/24** |
-  | Filipino | 64.7% | **89.1%** |
-  | English | 81.6% | 81.5% |
+  | | start | + crisis lexicon | + rule/ML fixes |
+  |---|---|---|---|
+  | Overall accuracy | 79.2% | 85.0% | **98.3%** |
+  | Suicidal reaching the crisis flow | 15/24 | **24/24** | **24/24** |
+  | Filipino | 64.7% | 89.1% | **98.2%** |
+  | English | 81.6% | 81.5% | **98.5%** |
+  | False crises on the gold key | 0 | 0 | **0** |
+
+  The third column came from four changes, all in the rule layer rather than the model:
+  there was **no anger keyword list at all**, so all 24 gold anger messages fell through;
+  the keyword engine is now allowed to overrule a non-crisis ML vote when it is unanimous;
+  a three-way model split is now `uncertain` instead of being settled by Logistic Regression
+  alone (which had turned *"kakain na ako kasi gutom na ako"* — *"I'll eat, I'm hungry"* —
+  into a 0.74 suicidal verdict); and reported anger (*"my mom is angry every time I come
+  home late"*) no longer hands the student an anger-management flow for someone else's mood.
+  **Retraining the classifier fixed none of it** — it produced a byte-identical confusion
+  matrix. See the limitation note below.
 
 - **Validation kits for the thesis:** an expert-validation kit
   (`backend/training/expert_validation`: gold-key sample, agreement script, HTML forms for
@@ -296,11 +307,24 @@ look up.)
 ## Honest limitations (things worth knowing)
 
 **Detection (measured, so these are numbers not guesses)**
-- Safety-critical recall is now complete on the gold key — all 24 suicidal messages reach the
-  crisis flow — but the other classes are not: anger 83%, anxiety 79%, sadness 71%. Every
-  remaining mistake is the same one, **distress read as neutral** (18 of 120 messages). The
-  three ML models under-call ordinary distress, and the keyword fallback does not catch up.
-  This is the next thing worth fixing, and it is a data problem more than a code one.
+- Detection is 98.3% on the gold key (118/120), up from 79.2%, with all 24 suicidal messages
+  reaching the crisis flow and no false crises. Two messages are still wrong: *"I'm doing my
+  homework right now"* reads as anger (all three models vote anger unanimously at 0.609, and
+  the rules have no opinion), and *"parang wala nang kulay ang mundo ko"* — *"the world has no
+  colour"* — reads as suicidal because the rules fuzzy-match it onto *"parang wala nang saysay
+  mabuhay"* (*"what's the point of living"*). The second is the one to watch: it is a
+  counselor-label boundary case, since a counselor called it sadness and the lexicon hears
+  hopelessness. Widening `gold_key.csv` is the honest way to settle it.
+- **The classifier is not the bottleneck, and retraining it is not the fix.** Re-running
+  `python -m app.services.ml_classifier` on the current data produced a *byte-identical
+  pipeline confusion matrix* and a slightly *worse* classifier in isolation (73.6% → 71.8%
+  accuracy). Every remaining gain came from the rule layer. The model is a
+  `TfidfVectorizer` + `MLPClassifier(256,128,64)` trained to a training loss of 0.001 — it
+  memorizes, and returns confidence `1.0` on `anxiety`, `suicidal`, and `neutral` alike.
+  More epochs on the same data will not help; more ordinary-distress examples would.
+  `train_and_compare()` is still not reproducible from the repo: it reads
+  `training/anxiety_training.jsonl`, `anger_augmentation.jsonl`, and
+  `suicidal_augmentation.jsonl` with no seed and no recorded split.
 - The ML classifier has genuine blind spots that no amount of guarding fully removes: it votes
   `suicidal` on `"safe na ako"` (a student confirming they are safe, 0.645) and on
   `"tinalon ako ng mundo sa saya"` (jumped for joy, 0.656). Both are now caught downstream —

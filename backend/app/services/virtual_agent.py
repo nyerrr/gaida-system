@@ -12,6 +12,7 @@ from app.services.crisis_guards import (
     is_self_referential,
     is_soft_venting_phrase,
     is_third_party_death_wish,
+    is_other_persons_anger,
     resolve_crisis_level,
 )
 from app.services.loss_detector import detect_loss
@@ -434,6 +435,16 @@ CRISIS_CONFIDENCE = 0.99
 # training/expert_validation/score_detection.py to confirm.
 ML_SUICIDAL_FLOOR = 0.60
 
+# Rule-engine confidence required before it may overrule a non-crisis ML vote.
+#
+# analyze_with_rules returns the winning label's share of all matched keyword
+# weight, so this threshold means "every phrase the keyword engine found pointed
+# the same way". 1.0 is the only value that carries that guarantee, so it is the
+# only one used: anything looser would let a single incidental hit outvote the
+# classifier on ordinary messages. See the arbitration block in
+# detect_intent_and_level.
+RULE_UNANIMITY = 1.0
+
 
 def _normalize_text(text: str) -> str:
     if not isinstance(text, str):
@@ -617,11 +628,70 @@ def detect_intent_and_level(text: str) -> dict:
         ml_intent = ml_result["intent"]
         ml_confidence = ml_result["confidence"]
 
+        # A `neutral` vote is not evidence that the student is fine — it is the
+        # classifier failing to find a signal, and the gold key shows exactly
+        # what that costs: 12 of the 18 remaining misses sat at a hardcoded 0.3
+        # because this branch returned immediately and the keyword rules at
+        # step 4, which are far more precise on ordinary distress, never ran.
+        #
+        # Falling through instead of returning is the point. The rule engine
+        # ends at its own `neutral` return (line ~702) if nothing matches, so
+        # an ordinary-life message still lands on neutral — it just gets
+        # labelled by something that understands the words. Retraining the
+        # classifier did not fix this: it produced a byte-identical confusion
+        # matrix, because a constant cannot be trained away.
         if ml_intent == "neutral":
-            return _build_result("neutral", 0.3)
+            raise Exception("ML neutral — trying rule_intent fallback")
 
         if ml_intent == "uncertain":
             raise Exception("ML uncertain — trying rule_intent fallback")
+
+        # ── Rule/ML arbitration ──────────────────────────────────────────
+        # The keyword engine is more precise than the classifier on ordinary
+        # distress, and its confidence says something the ML number does not:
+        # `analyze_with_rules` returns the winner's share of ALL matched
+        # keyword weight, so 1.0 means every phrase it found pointed the same
+        # way. On the gold key that is the stronger evidence even when the
+        # classifier is more confident of a different answer — "I feel so sad
+        # that I can't even eat properly" is voted anxiety 0.551 by the model
+        # while the rules put 100% of their weight on sadness.
+        #
+        # Only arbitration, never escalation: a suicidal ML vote is left
+        # completely alone, and a rule verdict can only redirect a non-crisis
+        # ML vote to another non-crisis label. Nothing here can lower a
+        # severity or turn a crisis off.
+        if ml_intent != "suicidal":
+            try:
+                from app.services.rule_intent import analyze_with_rules as _rules
+
+                _rule_verdict = _rules(text)
+                # Reported anger is not the student's anger. "my mom is angry
+                # every time I come home late" scores anger 1.0 on the keyword
+                # engine, and without this the student gets an
+                # anger-management flow for a mood that is not theirs.
+                if (
+                    _rule_verdict.get("intent") == "anger"
+                    and is_other_persons_anger(text)
+                ):
+                    return _build_result("neutral", 0.3)
+                if (
+                    _rule_verdict.get("intent") not in (None, "neutral")
+                    and _rule_verdict.get("confidence", 0) >= RULE_UNANIMITY
+                    and _rule_verdict["intent"] != ml_intent
+                ):
+                    _rule_conf = round(_rule_verdict["confidence"], 3)
+                    _neg = _get_negative_context_multiplier(txt)
+                    _rule_conf = round(_rule_conf * _neg, 3)
+                    _rule_intensity = _rule_verdict.get("intensity", 0.0)
+                    if _rule_intensity > 0.5:
+                        _rule_conf = min(0.98, _rule_conf + (_rule_intensity * 0.1))
+                        _rule_conf = round(_rule_conf, 3)
+                    return _build_result(
+                        _rule_verdict["intent"],
+                        round(min(0.98, 0.3 + 0.7 * _rule_conf), 3),
+                    )
+            except Exception:
+                pass
 
         # Guard ML-reported suicidal when no explicit self-harm keyword matched
         # (rule path already checks explicit keywords). If ML votes suicidal but
@@ -699,6 +769,13 @@ def detect_intent_and_level(text: str) -> dict:
             return _build_result("suicidal", 0.99)
 
         if rule_intent == "neutral":
+            return _build_result("neutral", 0.3)
+
+        # Reported anger is not the student's anger. Mirrors the guard in the
+        # ML arbitration block, and needed separately because a message the
+        # classifier is unsure about never reaches that block — it comes
+        # straight here.
+        if rule_intent == "anger" and is_other_persons_anger(text):
             return _build_result("neutral", 0.3)
 
         neg_multiplier = _get_negative_context_multiplier(txt)
