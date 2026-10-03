@@ -8,7 +8,13 @@ BASE = Path(__file__).resolve().parent
 
 LABEL_VARIANTS = {
     "anxiety": ("anxiety", "anxious"),
-    "sadness": ("sadness", "sad", "depressed"),
+    # GAIDA emits "loss" for attachment/relationship grief (breakup, being
+    # left, still wanting someone). The gold key has no grief category, so a
+    # grief read is scored against the nearest gold label rather than counted
+    # as a miss — the distinction changes which response flow GAIDA uses, not
+    # whether the student is distressed. If the panel later adds a grief label,
+    # move "loss" to its own entry here and re-rate.
+    "sadness": ("sadness", "sad", "depressed", "loss", "grief", "bereavement"),
     "suicidal": ("suicidal", "selfharm", "self-harm", "crisis"),
     "neutral": ("neutral", "normal", "none", "no distress"),
     "anger": ("anger", "angry"),
@@ -42,6 +48,16 @@ def agreement_report(counselor_col_a="counselor_A_label", counselor_col_b="couns
 
     a = hits_for(counselor_col_a)
     b = hits_for(counselor_col_b)
+
+    # Keep the grief collapses auditable rather than silent.
+    collapsed = sorted(
+        {s for _, _, s in a + b if (s or "").lower() in ("loss", "grief", "bereavement")}
+    )
+    if collapsed:
+        print(
+            f"NOTE: {len(collapsed)} grief/loss label(s) scored as 'sadness' "
+            "(the gold key has no grief category) — see LABEL_VARIANTS."
+        )
 
     both = sorted(set(s for s, _, _ in a) & set(s for s, _, _ in b))
     if both:

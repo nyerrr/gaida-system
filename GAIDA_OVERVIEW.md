@@ -2,7 +2,7 @@
 
 **GAIDA =** **G**uidance system with multimodal Anx**I**ety Intelligence and **D**etection **A**ssistance
 
-*Up-to-date as of 2026-09-19 (includes the uncommitted changes on `main`).*
+*Up-to-date as of 2026-10-03 (includes the uncommitted changes on `main`).*
 
 A virtual counseling assistant for University of the East students. It chats in Tagalog,
 Taglish, and English, looks for signs of anxiety in both text and voice, brings in a human
@@ -18,7 +18,9 @@ also works as an installable app that can run with no internet.
 | Feature | In plain terms |
 |---|---|
 | AI chat | A fine-tuned OpenAI model (based on GPT-3.5 turbo, `ft:gpt-3.5-turbo-0125`) replies warmly and copies whatever language the student used. |
-| Text anxiety detection | Every message is sorted into a mood — neutral, stress, sadness, anxiety, anger, loneliness, academic, suicidal — using rules plus 3 small ML models that vote. |
+| Text anxiety detection | Every message is sorted into a mood — neutral, stress, sadness, **grief/loss**, anxiety, anger, loneliness, academic, suicidal — using rules plus 3 small ML models that vote. Measured against a 120-message counselor-labeled gold key: **85% overall, 100% of suicidal messages routed to the crisis flow.** |
+| **Grief as its own reading (new)** | A breakup, a death, or unrequited love is **not** a cognitive distortion, so it does not get the anxiety flow ("here's another way to see it"). It is detected by rule — the ML training labels have no grief class — and gets its own response, its own protocol, and a floor at Moderate. It never pages a counselor on keywords alone, and it stays active until the student says they are better. |
+| **Counselor reply craft (new)** | 13 prompt rules and a "being there" section govern how replies read — presence shown by restraint rather than by announcing it, no invented details about the student's life, exactly one question, and a menu of 2–3 moves per severity rather than a fixed script. Backed by 13 worked replies placed in the system prompt as examples (never as fake conversation turns), plus an echo guard that catches and retries a reply that just echoes the student back. |
 | Voice anxiety detection | A recording is checked for signs of stress in the voice itself (pitch, jitter/shimmer, pauses, speaking speed, energy) and also typed out by OpenAI's hosted speech-to-text (`gpt-4o-mini-transcribe`). The two results are then combined with the text analysis. |
 | Vent mode | A "just listen" mode — GAIDA doesn't try to fix or redirect. Real crisis warnings still break through for safety. |
 | Crisis handling | If a student seems to be in crisis, GAIDA shares hotlines (1553, (02) 893-7603, 911) and automatically notifies a human counselor. |
@@ -108,41 +110,72 @@ also works as an installable app that can run with no internet.
 
 This is the heart of the system and runs on every single message, in this order:
 
-1. **Crisis keywords, first.** A list of dozens of English and Filipino phrases — both
-   direct ("i want to kill myself", "gusto ko na mamatay") and indirect ("no point in
-   living", "suko na ako sa buhay"). Any match is treated as crisis instantly, and it
-   overrides everything else — so a real crisis phrase is never hidden, even inside a
-   venting message.
+1. **Crisis keywords, first.** A list of English and Filipino phrases, covering both
+   *statements of intent* ("i want to kill myself", "gusto ko na mamatay") and **methods and
+   means** ("I'm going to take all these pills", "jumping off the bridge", "lulunukin ko
+   lahat ng gamot"). Filipino verbs inflect, so a short set of roots is matched as substrings
+   rather than enumerating conjugations — otherwise the list only ever contains the one form
+   the author happened to write down. Method verbs must be paired with their object
+   ("maghihigpit **ako**" is a student tidying up; "maghihigpit ako ng **tali**" is not), and
+   a stem only counts when the student is talking about themselves, so "sana mamatay na lang
+   siya" — a death wish aimed at someone else — is not a crisis. Any match is treated as
+   crisis instantly and overrides everything else, so a real crisis is never hidden even
+   inside a venting message.
 2. **"Normal venting" check.** Common study-frustration lines ("ayoko na mag-aral", "pagod
    na ako sa school") are marked as harmless. Safety detail: the crisis check above runs
    first, so this mask can only calm things down, never hide a real emergency. Soft
    "give-up" phrases like "ayoko na ng lahat" are only treated as stress when they are
    clearly about school or work.
-3. **Machine learning vote.** Three small models (Logistic Regression, Random Forest,
+3. **Grief detection.** Runs after the crisis hard path and before the ML vote. Grief is not
+   a distortion to be corrected, so it gets its own intent, protocol, and response flow
+   rather than borrowing the anxiety ladder. It is detected by rule, because the ML training
+   labels have no grief class, so a breakup gets voted `sadness` and handed the "interrupt the
+   overthinking loop" reframe that quietly implies the student is misthinking their loss. It
+   is floored at Moderate (a bereaved student sent a "Normal" conversational check-in reads
+   as indifference), it never pages a counselor on keywords alone, and it stays active until
+   the student explicitly says they are better.
+4. **Machine learning vote.** Three small models (Logistic Regression, Random Forest,
    Neural Network) vote on the mood. If they agree well, that wins. If they're unsure, the
-   system falls through to the rules below. If the models say "suicidal" but no explicit
-   crisis phrase was typed, the context checks in step 5 run again before anything is
-   alerted.
-4. **Keyword rule engine (backup).** A second system scores the message against weighted
+   system falls through to the rules below. **A suicidal vote backed by explicit death or
+   self-harm vocabulary is floored to Crisis.** Without that floor the ML path was
+   structurally incapable of producing a crisis: it scales as `0.3 + 0.7 × confidence` and
+   then caps at 0.98, while the crisis bypass fires at 0.99 — so a message the model was
+   *certain* about ("I'm going to take all these pills tonight", voted suicidal at 0.63) was
+   answered as an ordinary High, with no hotline numbers and no counselor alerted. Both
+   pieces are required, because either alone misfires — see the limitations section.
+5. **Keyword rule engine (backup).** A second system scores the message against weighted
    keywords in English and Filipino and picks the strongest mood.
-5. **Context correction.** The guess is softened when the message is a joke, about a movie
-   or story, in the past tense, about someone else, or hypothetical ("what if"). A
-   hypothetical suicide still triggers a High alert, but not the full Crisis response.
-6. **Conversation memory + de-escalation hold.** GAIDA tracks the trend over time:
+6. **Context correction.** The guess is softened when the message is a joke, about a movie
+   or story, in the past tense, about someone else, or hypothetical ("what if"). These
+   guards live in the shared resolver so **every** route into a crisis verdict passes the
+   same questions, because a matched keyword previously bypassed the past-tense and joke
+   checks entirely and "i used to want to die lol" paged a counselor. A hypothetical suicide
+   still triggers a High alert, but not the full Crisis response.
+7. **Conversation memory + de-escalation hold.** GAIDA tracks the trend over time:
    calming words ("okay na ako", "salamat") ease the detected level back down, repeated
    distress pushes it up, and the level never suddenly drops without a reason. A genuine
    crisis always overrides this. **Important safety hold:** once a High/Crisis is reached,
    the level is *held* there and GAIDA asks "Are you safe right now?" — it only steps back
    down after the student explicitly confirms they're safe.
-7. **Severity label.** The final score becomes one label: **Normal, Low, Moderate, High, or
+8. **Severity label.** The final score becomes one label: **Normal, Low, Moderate, High, or
    Crisis**.
-8. **Voice fusion (if voice was used).** The voice reading is combined with the text
+9. **Voice fusion (if voice was used).** The voice reading is combined with the text
    reading, and a higher reading can bump the overall level up.
-9. **GAIDA replies.** The fine-tuned model responds using a script matched to the severity
-   — e.g., a Crisis reply always includes hotline numbers. GAIDA is also told never to
-   repeat itself or ask the same question twice. (Hotline numbers used: 1553, (02) 893-7603,
-   and 911 for immediate danger.)
-10. **Alert + save.** High/Crisis messages notify the counselor dashboard, and (only if
+10. **GAIDA replies.** The fine-tuned model is given the severity's flow as a **menu of 2-3
+    moves to choose from in priority order** rather than a script to recite, plus 13 worked
+    replies as examples and a list of what GAIDA has already said earlier in the
+    conversation, so it stops circling the same question. Three deterministic safety nets sit
+    underneath the prompt, because a prompt alone cannot guarantee any of them:
+    - **Echo guard** - if a reply only parrots the student's own words back it is rejected and
+      regenerated once. Crisis replies are exempt: the guard fired there in testing and
+      inserted a placeholder hotline line into a real crisis reply.
+    - **Closing-question repair** - if the reply ends without something the student can
+      actually answer, a question is appended, drawn from a pool matched to the reply's
+      language, so a Tagalog reply never gets an English question bolted onto it.
+    - **Resource guarantee** - a Crisis reply missing any of the three numbers (1553,
+      (02) 893-7603, 911) has them restored. The required lines are derived from the caller's
+      own resource block, not a second hardcoded copy that can drift out of sync.
+11. **Alert + save.** High/Crisis messages notify the counselor dashboard, and (only if
     consent was given) the interaction is saved to the database.
 
 ---
@@ -217,11 +250,31 @@ look up.)
   saved and pre-loaded at startup.
 - GAIDA's chat replies come from a separate fine-tuned OpenAI model —
   `ft:gpt-3.5-turbo-0125:personal::DqH2I32e` — with `finetune.jsonl` example conversations.
+  That file has been corrected: 46 of its 179 targets opened by announcing GAIDA's own
+  presence ("I'm here", "Nandito ako", "Naririnig kita") and every crisis target carried
+  only `1553` — never the second hotline, never `911`. Both taught the model behaviour the
+  prompt explicitly forbids, and the missing numbers were the direct cause of crisis replies
+  arriving without resources. All 29 resource-bearing targets now carry all three.
+- **Detection is measured, not asserted.** `backend/training/expert_validation/score_detection.py`
+  runs the real pipeline over the 120-message counselor-labeled `gold_key.csv` (24 per class,
+  about half Filipino) and reports safety-critical misses first, then the confusion matrix,
+  per-class recall, and the Filipino/English split. It stops after detection — generating a
+  reply costs roughly ten times as much and measures something else.
+
+  Current scores:
+
+  | | before | after |
+  |---|---|---|
+  | Overall accuracy | 79.2% | **85.0%** |
+  | Suicidal messages reaching the crisis flow | 15/24 | **24/24** |
+  | Filipino | 64.7% | **89.1%** |
+  | English | 81.6% | 81.5% |
+
 - **Validation kits for the thesis:** an expert-validation kit
-  (`critical/expert_validation`: gold-key sample, agreement script, HTML forms for
-  counselors) and a new acoustic-validation harness
-  (`critical/acoustic_validation`: `evaluate_acoustic.py` + a labeled-clip template) that
-  reports per-emotion accuracy, severity match, and panic/harm recall/false positives.
+  (`backend/training/expert_validation`: gold-key sample, agreement script, HTML forms for
+  counselors) and an acoustic-validation harness
+  (`backend/training/acoustic_validation`: `evaluate_acoustic.py` + a labeled-clip template)
+  that reports per-emotion accuracy, severity match, and panic/harm recall/false positives.
 
 ---
 
@@ -241,6 +294,35 @@ look up.)
 ---
 
 ## Honest limitations (things worth knowing)
+
+**Detection (measured, so these are numbers not guesses)**
+- Safety-critical recall is now complete on the gold key — all 24 suicidal messages reach the
+  crisis flow — but the other classes are not: anger 83%, anxiety 79%, sadness 71%. Every
+  remaining mistake is the same one, **distress read as neutral** (18 of 120 messages). The
+  three ML models under-call ordinary distress, and the keyword fallback does not catch up.
+  This is the next thing worth fixing, and it is a data problem more than a code one.
+- The ML classifier has genuine blind spots that no amount of guarding fully removes: it votes
+  `suicidal` on `"safe na ako"` (a student confirming they are safe, 0.645) and on
+  `"tinalon ako ng mundo sa saya"` (jumped for joy, 0.656). Both are now caught downstream —
+  the crisis floor requires corroborating self-harm vocabulary, and Filipino joy markers were
+  added beside the existing `lol|haha` — but the classifier itself is still wrong, and a
+  future guard is another patch on top of a patch.
+- The gold key is 120 messages. It is enough to catch a regression of this size and not enough
+  to be confident about the tail. It has never been rated for *reply quality*, only for
+  detection.
+
+**Reply quality (the part nobody has measured yet)**
+- GAIDA's replies have been reviewed by counselors, who are being asked the wrong question.
+  Counselors can rate clinical adequacy; they cannot tell you whether a reply felt like a
+  person. That needs **students**. The cheap version is ten reply pairs and one question —
+  which of these two felt more real.
+- One known failure the prompt cannot fix on its own: replies sometimes assert the student's
+  inner state (`"Your heart is still with him even though he's moved on"`), which promotes a
+  suspicion to a fact and is exactly what a bereaved student will object to. The practical
+  test is simple and still worth applying by hand: read the last line first — if it does not
+  end in something the student could answer, the rest of the reply does not matter.
+- Roughly one reply in three in the crisis flow opens in all caps (`"I HEAR YOU."`). This is
+  fine-tune behavior rather than prompt behavior and needs a training run to move.
 
 **Security**
 - Every endpoint requires a bearer login token, except the deliberately-public list: health check, the three login/consent/forgot-password routes, and the research intake + withdraw-by-code routes (a participant may not hold a token when entering or withdrawing). Counselor-only routes additionally require a *counselor* role token (403 otherwise); student/research routes verify the token owns the session.
@@ -308,6 +390,22 @@ npm run dev
 4. Try something like "I can't breathe, my chest is tight" — it should trigger High severity
    and a counselor alert. Then say "I'm safe now" — GAIDA should confirm before easing the
    level down.
-5. Open the Counselor Portal in another tab (`COUNSELOR01` / `counsel123`), check Alerts,
+5. Try "I broke up with my partner and I don't know how to cope", then "I'm fine, just tired".
+   The reply should stay with the loss rather than offering a reframe or a plan, and the
+   level should not drop to a casual check-in while the grief is still disclosed.
+6. Try "gusto ko na mamatay" — the reply must carry 1553, (02) 893-7603, and 911, and a
+   counselor alert must fire. Then check `backend/training/expert_validation/detection_misses.csv`
+   stays empty for that class.
+7. Open the Counselor Portal in another tab (`COUNSELOR01` / `counsel123`), check Alerts,
    and take over the session.
-6. Rate a reply with the "Helpful / Not helpful" buttons to see feedback logging.
+8. Rate a reply with the "Helpful / Not helpful" buttons to see feedback logging.
+
+**Re-running the detection score**
+```bash
+cd backend
+venv\Scripts\python.exe training\expert_validation\score_detection.py
+```
+Prints safety-critical misses first, then overall accuracy, per-class recall, the confusion
+matrix, and the Filipino/English split, and writes every miss to `detection_misses.csv`.
+Run this after touching anything in `intent_router.py`, `virtual_agent.py`, or the crisis
+lexicons — the test suite pins the specific cases, but the score shows what else moved.

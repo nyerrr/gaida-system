@@ -4,6 +4,8 @@ import re
 from app.services.session_manager import get_session, start_session, record_interaction
 from app.services.virtual_agent import detect_intent_and_level, _build_result
 from app.services.gpt_agent import generate_response_with_gpt, stream_gpt_response
+from app.services.loss_detector import CAP_PLAIN as CAP_LOSS_PLAIN
+from app.services.loss_detector import detect_loss, describe_disclosure, describe_disclosure
 from app.services.text_segmenter import analyze_text_segments
 from app.api.counselor import process_alert
 
@@ -83,9 +85,20 @@ def _is_safety_confirmation(text: str, session: Dict[str, Any]) -> bool:
     return False
 
 
+# Calming signals are matched on word boundaries, not substrings. The previous
+# `kw in txt` check made "ok" fire inside "broke", "look", "took", "book" and
+# "good" fire inside "goodbye" — so a breakup disclosure ("we bro**ke** up days
+# ago... I'm so devastated") was read as the student calming down and got a
+# check-in reply instead of grief support. Substring matching on short tokens
+# is not safe for this list.
+_CALMING_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(kw) for kw in CALMING_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
 def _detect_calming(text: str) -> bool:
-    txt = text.lower()
-    return any(kw in txt for kw in CALMING_KEYWORDS)
+    return bool(_CALMING_RE.search(text or ""))
 
 
 def _detect_urgent(text: str) -> bool:
@@ -122,6 +135,17 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     raw_confidence = detection["confidence"]
     crisis_resources = detection["crisis_resources"]
 
+    # Attachment/relationship-loss sub-signals, kept for the conversation
+    # rather than just this turn: which of "still wants them back" / "checking
+    # their profile" / "hopeless" was disclosed decides how GAIDA replies, and
+    # the student rarely restates it on the next message. detect_loss is pure
+    # and cheap (regex only), and virtual_agent already called it — this is the
+    # session-state side of the same signal, not a second opinion.
+    loss_result = detect_loss(user_message)
+    loss_flags = {
+        k: v for k, v in (loss_result.get("flags") or {}).items() if v
+    }
+
     # Whether THIS turn explicitly confirms the student is safe. Determines
     # whether a post-crisis hold may be lifted.
     safety_confirm = _is_safety_confirmation(user_message, session)
@@ -157,6 +181,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
             "crisis_resources": crisis_resources,
             "is_venting": is_venting,
             "counselor_active": False,
+            "loss_flags": loss_flags if detected_intent == "loss" else None,
         }
 
     # --- Normal path: crisis bypass / running confidence / priority ---
@@ -198,12 +223,18 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
                 boosted_raw = _scaled_boost(raw_confidence, REPETITION_BOOST)
 
             RELATED_INTENTS = {
-                "anxiety":    ("stress", "sadness", "academic"),
-                "sadness":    ("anxiety", "loneliness", "stress"),
-                "stress":     ("anxiety", "academic", "sadness"),
+                "anxiety":    ("stress", "sadness", "academic", "loss"),
+                "sadness":    ("anxiety", "loneliness", "stress", "loss"),
+                "stress":     ("anxiety", "academic", "sadness", "loss"),
                 "academic":   ("anxiety", "stress"),
-                "loneliness": ("sadness", "anxiety"),
+                "loneliness": ("sadness", "anxiety", "loss"),
                 "anger":      ("stress", "sadness"),
+                # Grief and the stress riding on top of it (thesis, exams)
+                # are one situation, not two. Treating them as related keeps
+                # the grief-shaped response in play across turns instead of
+                # flipping back to a generic anxiety read the moment the
+                # student mentions their thesis.
+                "loss":       ("sadness", "stress", "loneliness", "anxiety"),
             }
             related = RELATED_INTENTS.get(intent, ())
             if (
@@ -230,16 +261,51 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
             if intent == "suicidal":
                 running_confidence = max(running_confidence, boosted_raw)
 
+            # Same reasoning for a grief disclosure. The 0.7/0.3 blend with a
+            # neutral-history baseline is right for a passing mood, but it
+            # buries a fresh, explicit disclosure: "we broke up days ago and I
+            # still want him" scores 0.74 on its own and lands at ~0.43 after
+            # blending, which is Normal — i.e. no response flow at all, and the
+            # student gets a check-in reply to a bereavement. Cap the floor at
+            # the loss detector's own plain ceiling so a keyword match still
+            # cannot page a counselor.
+            if intent == "loss":
+                running_confidence = max(running_confidence, min(boosted_raw, CAP_LOSS_PLAIN))
+                # ...and the ceiling holds too. REPETITION_BOOST would otherwise
+                # turn a student who describes the same grief twice into a
+                # paging event, which is exactly the alert fatigue that makes
+                # counselors stop trusting the dashboard. Grief escalates on
+                # despair (and always on crisis language, which is matched
+                # before this point), not on repetition.
+                if not loss_flags.get("despair"):
+                    running_confidence = min(running_confidence, CAP_LOSS_PLAIN)
+
             running_confidence = round(running_confidence, 3)
 
-        intent_priority = ["neutral", "academic", "loneliness", "anger", "stress", "sadness", "anxiety", "suicidal"]
+        # Grief sits just below suicidal and just above anxiety. Grief is the
+        # situation; anxiety, stress and sadness are usually what it feels like
+        # from the inside. Left below anxiety, any later turn the student
+        # reports rumination as anxious ("I keep checking his profile") outranks
+        # the breakup and the response silently flips back to the anxiety
+        # reframe flow mid-grief — the exact failure this intent was added to
+        # prevent. Suicidal stays above so a crisis can always take over.
+        intent_priority = ["neutral", "academic", "loneliness", "anger", "stress",
+                           "sadness", "anxiety", "loss", "suicidal"]
         prev_priority = intent_priority.index(previous_intent) if previous_intent in intent_priority else 0
         curr_priority = intent_priority.index(intent) if intent in intent_priority else 0
 
         if post_crisis and _detect_calming(user_message):
             pass
         else:
-            intent = intent if curr_priority >= prev_priority else previous_intent
+            # Grief is held across turns so the student does not get yanked
+            # back to the anxiety flow every time they mention the thesis — but
+            # only while it is still true. An explicit "I'm better now" / "I
+            # feel fine" releases it, so the ladder cannot trap a student in a
+            # grief framing they have moved past.
+            if previous_intent == "loss" and _detect_calming(user_message):
+                intent = intent if intent != "loss" else previous_intent
+            else:
+                intent = intent if curr_priority >= prev_priority else previous_intent
 
         if "meta" not in session:
             session["meta"] = {}
@@ -254,6 +320,28 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
 
     # --- Step 5: Map confidence to anxiety level ---
     post_crisis = session.get("meta", {}).get("post_crisis", False)
+
+    # --- Step 5a: Carry the grief disclosure forward in session memory ---
+    # While the conversation is loss-shaped, the response flow is told exactly
+    # what was disclosed, so later turns stay grounded in the student's actual
+    # situation instead of drifting back to generic validation. Held even when
+    # a later turn reads as another intent (the ladder keeps grief sticky), and
+    # cleared only once the student says they are doing better.
+    session.setdefault("meta", {})
+    if intent == "loss":
+        disclosure = describe_disclosure(loss_result, user_message)
+        if disclosure:
+            session["meta"]["loss_context"] = disclosure
+        elif loss_flags:
+            # A follow-up turn that doesn't restate the story still keeps it.
+            disclosure = describe_disclosure({"is_loss": True, "flags": loss_flags}, user_message)
+            if disclosure:
+                session["meta"]["loss_context"] = disclosure
+    elif _detect_calming(user_message) or session["meta"].get("post_crisis"):
+        # Only an explicit "I'm better now" ends grief framing. Clearing on any
+        # intent change would defeat the stickiness that keeps the response
+        # shaped around the loss instead of the thesis.
+        session["meta"].pop("loss_context", None)
 
     # De-escalation clearance: NEVER silently drop a High/Crisis session to
     # Low or Normal. Hold the last known high level and ask the student to
@@ -319,6 +407,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
         "crisis_resources": crisis_resources,
         "is_venting": is_venting,
         "counselor_active": counselor_active,
+        "loss_flags": loss_flags if intent == "loss" else None,
     }
 
 
@@ -346,6 +435,10 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
                 "severity": severity,
                 "escalate": escalate,
                 "segments": analyze_text_segments(user_message),
+                # Which grief sub-signals fired, so a counselor reading the
+                # dashboard can tell "sad" from "still wants them back and
+                # has been checking their profile for four days".
+                "loss_flags": turn.get("loss_flags") or None,
             },
             response=response_text if method != "counselor" else None,
         )
@@ -422,6 +515,8 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         session_context=turn["session"],
         anxiety_level=turn["anxiety_level"],
         counselor_protocol=gpt_protocol,
+        intent=turn["intent"],
+        crisis_resources=turn["crisis_resources"],
     )
 
     if gpt_result.get("used") and gpt_result.get("response"):
@@ -465,6 +560,8 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
         session_context=turn["session"],
         anxiety_level=turn["anxiety_level"],
         counselor_protocol=gpt_protocol,
+        intent=turn["intent"],
+        crisis_resources=turn["crisis_resources"],
     ):
         # A final (None, trimmed_text) pair can arrive after a truncated
         # reply (see gpt_agent.stream_gpt_response) — it corrects what gets

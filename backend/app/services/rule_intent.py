@@ -277,6 +277,39 @@ KEYWORDS: Dict[str, List[tuple]] = {
         ("andaming expectations", 1.8),
         ("sabay sabay problema", 2.0),
     ],
+
+    # Attachment / relationship loss. Kept deliberately small and
+    # high-precision — the authoritative detection (with its breakup /
+    # unrequited / rumination / despair sub-flags) lives in loss_detector.py
+    # and runs before this engine. These entries exist so that when this
+    # fallback is used on its own it never votes a clear breakup down to
+    # generic "sadness" — which would hand the model the anxiety reframe flow
+    # for a real loss.
+    "loss": [
+        ("we broke up", 2.5),
+        ("broke up with me", 2.5),
+        ("we break up", 2.5),
+        ("we broke up days ago", 2.5),
+        ("my ex", 2.0),
+        ("ex-boyfriend", 2.5),
+        ("ex-girlfriend", 2.5),
+        ("he left me", 2.2),
+        ("she left me", 2.2),
+        ("she ended it", 2.2),
+        ("he ended it", 2.2),
+        ("don't want me back", 2.5),
+        ("does not want me back", 2.5),
+        ("still want him", 2.2),
+        ("still want her", 2.2),
+        ("still love him", 2.2),
+        ("still love her", 2.2),
+        ("naghihati", 2.5),
+        ("hiwalay na kami", 2.5),
+        ("tapos na kami", 2.2),
+        ("gusto ko pa siya", 2.2),
+        ("hindi niya gusto ako", 2.2),
+        ("hindi ko na kaya na wala siya", 2.0),
+    ],
 }
 
 INTENSIFIERS = {
@@ -385,6 +418,29 @@ def analyze_with_rules(user_input: str) -> Dict[str, object]:
 
     best_label = max(scores, key=scores.get)
     best_score = scores[best_label]
+
+    # Loss has an authoritative detector (loss_detector.detect_loss) that
+    # carries the context guards this keyword engine does not repeat — fiction,
+    # past tense, third party, corroboration requirements. Confirm a loss vote
+    # against it instead of duplicating those guards here and letting the two
+    # drift apart. A disagreement means this message is not actually a
+    # disclosure, so fall through to the next-best label.
+    if best_label == "loss" and best_score > 0:
+        from app.services.loss_detector import detect_loss
+
+        if not detect_loss(raw_text)["is_loss"]:
+            total_score -= scores["loss"]
+            scores["loss"] = 0.0
+            remaining = {k: v for k, v in scores.items() if v > 0}
+            if not remaining:
+                return {
+                    "intent": "neutral",
+                    "confidence": 0.5,
+                    "intensity": 0.0,
+                    "matched_keywords": {},
+                }
+            best_label = max(remaining, key=remaining.get)
+            best_score = scores[best_label]
 
     # Confidence: share of total weighted score belonging to best label
     confidence = round(best_score / total_score, 3)

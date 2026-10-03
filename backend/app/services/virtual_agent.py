@@ -9,9 +9,12 @@ from app.services.crisis_guards import (
     has_fiction_context,
     has_hypothetical_context,
     has_venting_context,
+    is_self_referential,
     is_soft_venting_phrase,
+    is_third_party_death_wish,
     resolve_crisis_level,
 )
+from app.services.loss_detector import detect_loss
 
 # ---------------------------------------------------------------------------
 # COUNSELOR FIRST AID PROTOCOLS
@@ -52,6 +55,28 @@ COUNSELOR_PROTOCOLS = {
     - Provide crisis resources warmly: National Crisis Hotline 1553 (24/7), In Touch (02) 893-7603
     - Encourage them to reach out to someone nearby
     - End with reassurance and presence — not a question
+    """,
+        # ── RELATIONSHIP / ATTACHMENT LOSS ────────────────────────────────
+        # Grief is not a cognitive distortion. Do NOT apply the anxiety
+        # reframe machinery ("you're overthinking it", "maybe there's another
+        # explanation") to a real loss — a human counselor works hard to avoid
+        # that, because the student usually notices immediately and stops
+        # trusting the conversation.
+        "loss": """
+    Respond like a counselor who works with grief: steady, honest, unhurried.
+    - Do NOT reframe the loss as a thought pattern and do NOT suggest they are
+      overthinking. The loss is real; the wanting is normal, not a symptom.
+    - Name the contradiction they are holding instead of resolving it.
+      Wanting someone and knowing it is over can both be true at the same time.
+    - Do not tell them what to feel, what their heart is doing, or what will
+      happen next. Reflect what they said; do not narrate their inner state.
+    - If they suspect he/she is already with someone, keep it a suspicion.
+      Never state it as fact, and do not argue them out of it either.
+    - Where there is a second pressure (thesis, exams), shrink it to one
+      concrete next step instead of adding to the pile.
+    - It is appropriate — once, gently — to mention that a real counselor is
+      available for this kind of loss. Frame it as an option, never a handoff.
+    - End with ONE real question that invites them to keep going.
     """,
 }
 # ---------------------------------------------------------------------------
@@ -235,8 +260,134 @@ KEYWORDS = {
         ("nagpaalam na ako", 3.5),
         ("wish i was never born", 3.5),
         ("never born", 3.0),
+
+        # ── METHOD AND MEANS ────────────────────────────────────────────
+        # Every entry above is a statement of INTENT. Scored against the gold
+        # key, 7 of the 24 suicidal messages named a method instead, and every
+        # one of them missed: "I swallowed some pills", "I've been thinking of
+        # jumping off the bridge", "I've already written my goodbye letters".
+        # Intent phrasing is what a student writes when they are still
+        # deciding. Naming a method means they are not.
+        ("swallow", 4.0),
+        ("swallowed", 4.0),
+        ("pills", 4.0),
+        ("my pills", 4.0),
+        ("overdose", 4.0),
+        ("overdosed", 4.0),
+        ("tablets", 4.0),
+        ("take all these pills", 4.0),
+        ("jump off", 4.0),
+        ("jumping off", 4.0),
+        ("jumped off", 4.0),
+        ("the bridge", 4.0),
+        ("highest building", 4.0),
+        ("top of the building", 4.0),
+        ("rooftop", 4.0),
+        ("hang myself", 4.0),
+        ("hanged myself", 4.0),
+        ("noose", 4.0),
+        ("goodbye letter", 4.0),
+        ("farewell letter", 4.0),
+        ("goodnight letter", 4.0),
+        ("last letter", 4.0),
+        ("i've decided", 3.8),
+        ("i have decided", 3.8),
+        ("nothing can stop me", 4.0),
+        ("no one can stop me", 4.0),
+        ("nobody can stop me", 4.0),
+        ("no one can stop", 3.8),
+        ("i'm ready to die", 4.0),
+        ("im ready to die", 4.0),
+        ("ready to die", 3.8),
+        ("don't want to wake up", 4.0),
+        ("do not want to wake up", 4.0),
+        ("not want to wake up", 3.8),
+
+        # ── FILIPINO: METHOD, MEANS, AND CONJUGATION ────────────────────
+        # The Filipino entries above are all full phrases in one conjugation.
+        # Students do not write for GAIDA's benefit: "mamamatay na lang ako"
+        # contains none of "gusto ko na mamatay", and it scored as neutral.
+        ("wala nang pag-asa", 4.0),
+        ("walang pag-asa", 4.0),
+        ("wala na ang pag-asa", 4.0),
+        ("makakapigil sa akin", 4.0),
+        ("makapipigil sa akin", 4.0),
+        ("walang makakapigil", 4.0),
+        ("di na ako kayang pigilan", 4.0),
+        ("aalis na ako sa mundo", 4.0),
+        ("na ako sa mundo", 3.5),
+        ("hihinto na ako", 4.0),
+        ("tatapusin ko na ang lahat", 4.0),
+        ("gusto ko nang tapusin", 4.0),
+        ("lulunukin ko", 4.0),
+        ("lunukin ko", 4.0),
+        ("lumunok ako", 4.0),
+        ("sumisulit ako", 4.0),
+        ("tatlong gabing gabi", 3.5),
+        ("gumamon ako", 4.0),
+        ("magtatagal", 3.8),
+        ("nagtagal ako", 3.8),
+        ("tatagal na ako", 3.8),
+
+        # Height/place plus purpose. The jump verb alone is unsafe —
+        # "tumulon sa akin" is an attack, not a suicide — so the jump words
+        # are matched only where "para" marks the stated intent of the verb.
+        ("pinakamataas na building", 4.0),
+        ("mataas na building", 4.0),
+        ("para tumalon", 4.0),
+        ("para tatalon", 4.0),
+        ("tatalon ako", 3.8),
+        # No explicit "maghihigpit ... ng tali" phrase here on purpose. The
+        # word-window fuzzy matcher scored it 0.91 against "maghihigpit ako
+        # ng" — a student adjusting a curtain. METHOD_OBJECT_PAIRS below makes
+        # the same call exactly, and cannot confuse a rope for a curtain.
     ],
 }
+
+# Filipino verbs inflect by prefix, and the list above enumerates conjugations
+# rather than roots — which is a losing game. Every Filipino miss on the gold
+# key was a different inflection of a word already on the list: the list has
+# "gusto ko na mamatay", the student wrote "mamamatay". So the roots are
+# matched as substrings instead, which covers every form the affix system can
+# produce from one entry.
+#
+# Deliberately tiny. Each stem has to be specific enough that ordinary Tagalog
+# cannot reach it: "tagal" is excluded (moved to explicit forms above) because
+# "tagal ng pagmamahal" is not a crisis, and "talon" is excluded because it is
+# also a body part. A stem fires the crisis path, so a wrong entry here pages a
+# counselor over a sentence that meant nothing by it.
+FILIPINO_CRISIS_STEMS = (
+    "mamatay",      # mamatay / mamamatay / mamamatay na lang ako
+    "lunuk",        # lumunok / lulunukin / nalunok — ingesting something
+    "bitbit",       # bumble / bibitbit — hanging
+    "sundok",       # susundok / sundokan — jumping
+)
+# "sulit" was here and has been removed. It means exam grade, so every student
+# who mentioned their marks would have paged a counselor — and the pipeline is
+# full of students talking about marks. Overdose is now covered by the object
+# pair below, which requires the pills as well as the verb.
+
+# First-person markers live in crisis_guards.SELF_REFERENTIAL_RE, not here.
+# The stem check below and the third-party death-wish guard have to agree
+# exactly on what "self-referential" means, so they read the same constant.
+
+# A crisis method needs its object. "Maghihigpit ako" alone is a student
+# tidying up; "maghihigpit ako ng tali" is not. Enumerating the verb
+# conjugations instead would repeat exactly the mistake the phrase list above
+# keeps making, so these are matched as pairs — both present, in any order, any
+# inflection. The object is what makes the pair unambiguous, so each object is
+# a specific item rather than a common noun.
+#
+# Objects are matched on word boundaries, stems are not. "Tali" is a rope but
+# it is also the middle of "kurtina", and a student adjusting a curtain is not
+# a crisis — which is exactly how it first fired.
+METHOD_OBJECT_PAIRS = (
+    ("higpit", "tali"),       # tightening a rope — hanging
+    ("bitbit", "balumbok"),  # bumble — hanging
+    ("sundok", "gusali"),    # jumping — a wall or ledge
+    ("lunuk", "gamot"),      # swallowing — pills
+    ("sulit", "gamot"),      # overdose — a grade word without the pills
+)
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +405,34 @@ EXPLICIT_SELF_HARM_RE = re.compile(
     r"mawala|tatapusin|tapusin)\b",
     re.IGNORECASE,
 )
+
+# The confidence the crisis bypass requires, and the ML vote that earns it.
+#
+# These exist because of a measured failure. Scored against the 120-message
+# gold key, 15 of 24 suicidal messages missed the crisis flow — and not one of
+# them had matched a crisis keyword. All 15 were decided by the ML classifier,
+# which voted `suicidal` correctly on 8 of them at 0.58-0.77 confidence.
+#
+# Those could never arrive. The ML path scales with 0.3 + 0.7*confidence and
+# then caps at 0.98, while the crisis bypass in intent_router fires at >= 0.99.
+# So a message the model was certain was suicidal was structurally incapable of
+# producing a crisis: "I'm going to take all these pills tonight" (ML 0.63)
+# landed at Moderate, with no hotline numbers and no counselor alerted.
+#
+# The floor is applied last, after the cap, because the cap is what caused it.
+CRISIS_CONFIDENCE = 0.99
+
+# 0.60, not a rounder number. Lower was tried and rejected: at 0.55 the floor
+# started paging counselors for "nakakaenggrain siya, ang sanay ko na" (ML
+# 0.585) — mild irritation the classifier happens to read as suicidal.
+#
+# This floor is now a backstop, not the main mechanism. Every suicidal
+# message on the gold key is caught by a keyword or method pair outright, so
+# nothing in the measured set depends on this number; it exists so a future
+# message the lexicon has not seen still cannot be capped below crisis. Raise
+# it freely — the cost of raising it is low — and re-run
+# training/expert_validation/score_detection.py to confirm.
+ML_SUICIDAL_FLOOR = 0.60
 
 
 def _normalize_text(text: str) -> str:
@@ -286,6 +465,11 @@ NEGATIVE_CONTEXTS = [
     (re.compile(r"\b(but (im|i'm|i am) (better|okay|fine|good)|better now|okay na|ayos na)\b"), 0.2),
     (re.compile(r"\b(not|no longer|never|wala|hindi|hindi na|di na|wala na)\b"), 0.4),
     (re.compile(r"\b(dying of (laughter|boredom|cuteness)|dead (tired|serious)|i('m| am) dead|lol|haha|hehe|joke|kidding|char)\b"), 0.1),
+    # Tagalog equivalents of lol/haha. Without these the Filipino equivalent of
+    # "jumped for joy" ("tinalon ako ng mundo sa saya") was read as a suicide
+    # method — the classifier voted it suicidal at 0.656, and "sa saya" is the
+    # only thing in the sentence saying otherwise.
+    (re.compile(r"\b(sa saya|nakakatawa|nakatawa|tawa tawa|nakakatawa ako|para lang ka\b|kasi nakakatawa)\b"), 0.1),
     (re.compile(r"\b(killed it|crushing it|nailed it|aced it|passed|pumasa|pumasa ako)\b"), 0.1),
     (re.compile(r"\b(my (friend|classmate|roommate|sister|brother|mom|dad|kaibigan|kaklase))\b"), 0.3),
     (re.compile(r"^(do you|are you|can you|have you|did you|would you|will you|should i|could you)\b"), 0.2),
@@ -384,6 +568,18 @@ def _match_suicidal_keyword(txt: str, tokens: set):
     ):
         return "kill themselves"
 
+    # Filipino inflection stems, checked last and only for first-person
+    # statements. Every other check above is an exact phrase or token; this is
+    # the one place a substring is allowed to stand in for a phrase, because
+    # the conjugation is the thing the phrase lists keep missing.
+    if is_self_referential(txt):
+        for stem in FILIPINO_CRISIS_STEMS:
+            if stem in txt:
+                return f"{stem} (stem)"
+        for verb, obj in METHOD_OBJECT_PAIRS:
+            if verb in txt and re.search(rf"\b{re.escape(obj)}\b", txt):
+                return f"{verb}+{obj} (pair)"
+
     return found_soft
 
 
@@ -400,10 +596,20 @@ def detect_intent_and_level(text: str) -> dict:
         verdict = resolve_crisis_level([crisis_kw], txt)
         return _build_result(verdict["intent"], verdict["confidence"])
 
+    # ── Step 2b: Attachment / relationship loss ────────────────────────────
+    # Runs after the crisis hard path (so a real crisis always wins) and
+    # before the ML vote, because the ML training labels have no grief class:
+    # a breakup gets voted `sadness`, which would hand the model the anxiety
+    # reframe flow and quietly imply the student is misthinking their loss.
+    # Loss detection is rule-based and self-capping — it can reach Moderate,
+    # and only reaches High when despair co-occurs (see loss_detector).
+    loss_result = detect_loss(text)
+    if loss_result["is_loss"]:
+        return _build_result("loss", loss_result["confidence"], loss_result=loss_result)
+
     # ── Step 3: Safe phrase check — masks venting, never masks a real crisis ──
     if _is_safe_phrase(txt):
         return _build_result("neutral", 0.3)
-
     # ── Step 2: ML classifier ─────────────────────────────────────────────────
     try:
         from app.services.ml_classifier import classify_intent
@@ -442,6 +648,32 @@ def detect_intent_and_level(text: str) -> dict:
             scaled_confidence = max(scaled_confidence, 0.85)
 
         scaled_confidence = round(min(0.98, scaled_confidence), 3)
+
+        # A suicidal vote backed by explicit death or self-harm vocabulary is
+        # real signal, and it is floored to crisis rather than left to compete
+        # with the running-confidence blend. Reaching this point means the
+        # fiction, venting and hypothetical overrides above all declined to
+        # fire and neg_multiplier is untouched, so the guards are not
+        # bypassed — they have already had their say.
+        #
+        # The vocabulary requirement is not decoration. A confidence number
+        # alone was tried and it escalated the one message in this codebase
+        # where being wrong is worst: "safe na ako" — a student confirming
+        # they are safe — is classified suicidal by the model at 0.645, and
+        # the floor turned that into a crisis. It broke the de-escalation
+        # clearance path, which is how a crisis session is ever allowed to
+        # come down. A model that says suicidal and text that names dying is
+        # two pieces of evidence; either alone is not enough to page someone.
+        #
+        # Applied after the 0.98 cap for the reason at ML_SUICIDAL_FLOOR.
+        if (
+            ml_intent == "suicidal"
+            and neg_multiplier >= 1.0
+            and ml_confidence >= ML_SUICIDAL_FLOOR
+            and EXPLICIT_SELF_HARM_RE.search(text)
+            and not is_third_party_death_wish(text)
+        ):
+            scaled_confidence = CRISIS_CONFIDENCE
 
         return _build_result(ml_intent, scaled_confidence)
 
@@ -487,11 +719,24 @@ def detect_intent_and_level(text: str) -> dict:
     return _build_result("neutral", 0.3)
 
 
-def _build_result(intent: str, confidence: float, post_crisis: bool = False) -> dict:
+def _build_result(
+    intent: str,
+    confidence: float,
+    post_crisis: bool = False,
+    loss_result: dict | None = None,
+) -> dict:
     # Anger is a valid emotion but an angry rant is not inherently an anxiety
     # crisis — cap its severity so it can never reach "high"/alert level.
     if intent == "anger":
         confidence = min(confidence, 0.55)
+
+    # Grief is never "Normal". A breakup disclosed to a counselor gets a real
+    # response flow at minimum, because Normal routes to a conversational
+    # check-in with no validation at all — which is what a bereaved student
+    # would read as indifference. Floored at the low band rather than capped:
+    # the loss detector has already applied its own ceilings upstream.
+    if intent == "loss":
+        confidence = max(confidence, 0.45)
 
     if confidence >= 0.99:
         return {
@@ -532,6 +777,18 @@ def _build_result(intent: str, confidence: float, post_crisis: bool = False) -> 
         else:
             severity = "Normal"
 
+    # Grief beats the severity band for protocol selection. A breakup at
+    # Moderate must still be answered as grief — the moderate anxiety flow
+    # would push "interrupt the overthinking loop" and "here's another way to
+    # see it", which is exactly the wrong move on a real loss. When loss
+    # reaches High the grounding protocol is appended rather than replaced,
+    # because that turn has genuinely paged a counselor.
+    if intent == "loss" and anxiety_level and anxiety_level != "crisis":
+        if anxiety_level == "high":
+            protocol = COUNSELOR_PROTOCOLS["loss"] + "\n" + COUNSELOR_PROTOCOLS["high"]
+        else:
+            protocol = COUNSELOR_PROTOCOLS["loss"]
+
     return {
         "intent": intent,
         "confidence": confidence,
@@ -540,4 +797,5 @@ def _build_result(intent: str, confidence: float, post_crisis: bool = False) -> 
         "counselor_protocol": protocol,
         "crisis_resources": None,
         "anxiety_score": anxiety_score,
+        "loss_flags": (loss_result or {}).get("flags") if intent == "loss" else None,
     }

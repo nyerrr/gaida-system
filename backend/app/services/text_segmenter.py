@@ -101,6 +101,17 @@ _DISTRESS_PATTERNS: List[re.Pattern] = [
         r"wawakasan|tatapusin|mawala na lang)\b",
         re.IGNORECASE,
     ),
+    # Relationship / attachment loss. Observability only (see the module
+    # contract) — this does not classify intent, change confidence, or fire
+    # anything. It exists so a counselor reviewing a transcript can see that a
+    # message carried "still love him" / "naghihati" as distinct cues rather
+    # than reading as generic sadness.
+    re.compile(
+        r"\b(broke up|break up|breakup|my ex|ex-boyfriend|ex-girlfriend|"
+        r"naghihati|hiwalay na|gusto ko pa|still (want|love|miss) (him|her)|"
+        r"naiisip ko siya|checking his|checking her)\b",
+        re.IGNORECASE,
+    ),
 ]
 
 

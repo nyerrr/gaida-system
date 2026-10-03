@@ -103,6 +103,70 @@ def has_hypothetical_context(text: str) -> bool:
     return bool(HYPOTHETICAL_CONTEXT_RE.search(text or ""))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Guards the hard keyword path was missing
+#
+# NEGATIVE_CONTEXTS in virtual_agent.py carries a retrospective list ("used to",
+# "dati") and a joking list ("lol", "haha"), but it is only ever consulted on
+# the ML branch. A message that matched a crisis KEYWORD skipped it entirely
+# and went straight to 0.99 — so "i used to want to die lol" paged a counselor,
+# and "sana mamatay na lang siya" (a death wish aimed at someone else) did too.
+#
+# Both belong here, beside the fiction and hypothetical guards that already
+# apply to the hard path, so every route into a crisis verdict passes the same
+# set of questions.
+# ─────────────────────────────────────────────────────────────────────────────
+
+JOKING_RE = re.compile(
+    r"\b(lol|lmao|haha|hehe|joke|joking|kidding|jk|char|dies laughing|"
+    r"nakakatawa)\b",
+    re.IGNORECASE,
+)
+
+RETROSPECTIVE_RE = re.compile(
+    r"\b(used to|i used to|before|back then|last time|yesterday|last week|"
+    r"last month|previously|former|dati|noon|noong| dati)\b",
+    re.IGNORECASE,
+)
+
+# Someone other than the speaker. Combined with the absence of a first-person
+# marker, this separates "sana mamatay na lang siya" (hostile speech about a
+# third party) from "mamamatay na lang ako" (a disclosure).
+THIRD_PARTY_RE = re.compile(
+    r"\b(siya|sila|niya|nila|kanila|kanya|nang kanila|kanila|them|him|her|"
+    r"they|this person|that person)\b",
+    re.IGNORECASE,
+)
+
+SELF_REFERENTIAL_RE = re.compile(
+    r"\b(ako|akin|ako'y|ayoko|hindi ko|di ko|ko na|sa akin|ng sa akin|"
+    r"i|i'm|im|me|my|myself|i'll|i will)\b",
+    re.IGNORECASE,
+)
+
+
+def has_joking_context(text: str) -> bool:
+    """True when the message marks itself as not-serious."""
+    return bool(JOKING_RE.search(text or ""))
+
+
+def has_retrospective_context(text: str) -> bool:
+    """True when the death-talk is placed in the past or a stated interval ago."""
+    return bool(RETROSPECTIVE_RE.search(text or ""))
+
+
+def is_self_referential(text: str) -> bool:
+    return bool(SELF_REFERENTIAL_RE.search(text or ""))
+
+
+def is_third_party_death_wish(text: str) -> bool:
+    """A death wish aimed at someone else. Not self-harm, so not a crisis —
+    though it may still be worth hearing, which is why it lands on anger at a
+    low band rather than being discarded."""
+    text = text or ""
+    return bool(THIRD_PARTY_RE.search(text)) and not is_self_referential(text)
+
+
 def resolve_crisis_level(matched_keywords, text: str) -> dict:
     """Decide the crisis verdict from the matched suicidal keywords + message
     context. This is the ONE place that converts a suicidal-string match into a
@@ -111,10 +175,13 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
     Order of precedence (safety first):
       1. explicit-self-harm keyword → full crisis
       2. third-person disclosure ("kill themselves") → HIGH unless fiction
-      3. soft give-up phrase + venting context → stress (false-positive guard)
-      4. fiction context → angry fiction (no alert; low risk)
-      5. hypothetical/hedged, or any give-up phrase with no vent → MODERATE alert
-      6. explicit keyword in hypothetical → HIGH (still real, but not plan)
+      3. joking context → neutral, no alert
+      4. third-party death wish ("sana mamatay siya") → anger, no alert
+      5. retrospective context ("i used to want to die") → sadness, no alert
+      6. soft give-up phrase + venting context → stress (false-positive guard)
+      7. fiction context → angry fiction (no alert; low risk)
+      8. hypothetical/hedged, or any give-up phrase with no vent → MODERATE alert
+      9. explicit keyword in hypothetical → HIGH (still real, but not plan)
     """
     text = text or ""
 
@@ -131,6 +198,17 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
         return {"intent": "suicidal", "confidence": 0.85}
 
     if any(not is_soft_venting_phrase(k) for k in matched_keywords):
+        # Order matters: a joke or a retrospective mention is a statement about
+        # the past or about nothing, and it outranks the keyword that matched.
+        # Checked here rather than in NEGATIVE_CONTEXTS because that list is
+        # only consulted on the ML branch — a keyword match bypassed it, which
+        # is how "i used to want to die lol" became a crisis.
+        if has_joking_context(text):
+            return {"intent": "neutral", "confidence": 0.3}
+        if is_third_party_death_wish(text):
+            return {"intent": "anger", "confidence": 0.55}
+        if has_retrospective_context(text):
+            return {"intent": "sadness", "confidence": 0.55}
         if has_hypothetical_context(text):
             return {"intent": "suicidal", "confidence": 0.88}
         return {"intent": "suicidal", "confidence": 0.99}
