@@ -249,10 +249,13 @@ class WithdrawResponse(BaseModel):
 
 # Every child table is keyed by the same session_id string used across the
 # app, so deleting is a simple multi-table sweep in session_id order.
+# Keep in sync with CHILD_TABLES in tools/delete_participant.py.
 _WITHDRAW_SESSION_CHILD_TABLES = [
     "interactions",
     "consents",
     "gad7_responses",
+    "sus_responses",
+    "message_feedback",
     "session_ratings",
     "session_notes",
     "counselor_alerts",
