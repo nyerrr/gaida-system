@@ -25,7 +25,7 @@ const STEP = { CONSENT: 0, IDENTIFICATION: 1, DEMOGRAPHICS: 2, GAD7: 3, SUBMITTI
 
 // -----------------------------------------------------------------------
 const RESEARCH_TEAM = 'Burlasa, Lazaro, Olazo, Reyes, and Roxas — BS Computer Science, University of the East, Manila';
-const RESEARCH_CONTACT_EMAIL = 'lazaro.edward@ue.edu.ph, olazo.davenathaniel@ue.edu.ph, reyes.laurienaemanuel@ue.edu.ph, or roxas.jahnvincent@ue.edu.ph';
+const RESEARCH_CONTACT_EMAIL = 'burlasa.rainier@ue.edu.ph, lazaro.edward@ue.edu.ph, olazo.davenathaniel@ue.edu.ph, reyes.laurienaemanuel@ue.edu.ph, or roxas.jahnvincent@ue.edu.ph';
 const CERC_REFERENCE = 'CCSS-CERC Code/Registration ID 2025-1-PTCS-202';
 
 // UE student numbers observed as 4-digit enrollment year + 7-digit sequence
@@ -294,7 +294,7 @@ export default function ResearchFlow() {
                 <strong style={{ color: T.textPrimary }}>Your rights:</strong> Participation is voluntary. You may stop at
                 any time by closing this page, with no penalty. If you participated with
                 your student number, you may request access to or deletion of your data at
-                any time by contacting the research team below. If you participated
+                any time by contacting the research team below, and we will complete your request within 7 days of receiving it. If you participated
                 anonymously, you may request deletion using the personal code you'll be
                 shown, but note that without it we cannot locate or identify your specific
                 session. If you are under 18, please also have a parent or guardian review
