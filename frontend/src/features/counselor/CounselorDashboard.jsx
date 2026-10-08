@@ -1011,6 +1011,14 @@ function ChatModal({ sessionId, onClose }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, studentTyping, activeTab]);
 
+  // onClose is an inline arrow in the parent, so it is a new function on every
+  // parent render (the dashboard re-renders every couple of seconds while
+  // polling). Keeping it in a ref stops this effect from re-running, which
+  // used to steal focus back to the close button and drop the counselor's
+  // cursor out of the message box mid-typing.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     previousActiveElementRef.current = document.activeElement;
     const focusTimer = requestAnimationFrame(() => {
@@ -1020,7 +1028,7 @@ function ChatModal({ sessionId, onClose }) {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === 'Tab') {
@@ -1057,7 +1065,7 @@ function ChatModal({ sessionId, onClose }) {
         });
       }
     };
-  }, [onClose]);
+  }, []);
 
   // Append a message pushed over the realtime WebSocket, deduped against the
   // transcript the poll returns (matched by sender + timestamp + text, all

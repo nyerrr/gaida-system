@@ -411,6 +411,75 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     }
 
 
+# ---------------------------------------------------------------------------
+# Crisis hold (hard halt)
+# ---------------------------------------------------------------------------
+# On a Crisis detection GAIDA stops generating replies. The student gets ONE
+# fixed, pre-written message (below), the chat screen shows a persistent
+# banner, and every later message is recorded for the counselor but answered
+# with nothing until a counselor takes over (which sets counselor_active) and
+# later hands back (which clears crisis_hold). No LLM text is produced on this
+# path. Wording is for counselor/adviser review before the pilot.
+CRISIS_HOLD_EN = (
+    "I'm really glad you told me. What you wrote sounds serious, and I want you to be safe right now.\n\n"
+    "I've alerted a UE guidance counselor so a real person can reach out to you here. "
+    "I'm going to pause my usual replies so I don't say the wrong thing.\n\n"
+    "If you might act on thoughts of hurting yourself, or you're in danger, please call someone now:\n"
+    "- National Crisis Hotline: 1553\n"
+    "- In Touch Crisis Line: (02) 893-7603\n"
+    "- Emergency: 911\n"
+    "- UE Guidance Office: guidance@ue.edu.ph\n\n"
+    "If you can, please stay on this page, or tell someone near you what's going on."
+)
+CRISIS_HOLD_EN_OFFHOURS = (
+    "\n\nThe guidance office may not be open right now, so a counselor might not reply right away. "
+    "Please don't wait on that. Call 1553 or 911, or go to someone you trust nearby."
+)
+CRISIS_HOLD_FIL = (
+    "Salamat sa pagsabi sa akin nito. Mukhang mabigat ang isinulat mo, at gusto kong maging ligtas ka ngayon.\n\n"
+    "Naabisuhan ko na ang isang guidance counselor ng UE para may taong makipag-ugnayan sa iyo dito. "
+    "Pansamantala kong ihihinto ang mga karaniwan kong sagot para hindi ako magkamali ng sasabihin.\n\n"
+    "Kung may balak kang saktan ang sarili mo o nasa panganib ka, tumawag ka na ngayon:\n"
+    "- National Crisis Hotline: 1553\n"
+    "- In Touch Crisis Line: (02) 893-7603\n"
+    "- Emergency: 911\n"
+    "- UE Guidance Office: guidance@ue.edu.ph\n\n"
+    "Kung kaya mo, manatili ka sa page na ito o sabihin sa kasama mo ang nangyayari."
+)
+CRISIS_HOLD_FIL_OFFHOURS = (
+    "\n\nMaaaring sarado ngayon ang guidance office, kaya baka hindi agad makasagot ang counselor. "
+    "Huwag nang maghintay: tumawag sa 1553 o 911, o lumapit sa taong pinagkakatiwalaan mo."
+)
+
+
+def _manila_off_hours() -> bool:
+    """Weekday 8:00-17:00 Philippine time counts as office hours."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone(timedelta(hours=8)))
+    return now.hour < 8 or now.hour >= 17 or now.weekday() >= 5
+
+
+def _crisis_hold_state(turn: Dict[str, Any]) -> str | None:
+    """None = no hold. "start" = Crisis just detected (send the fixed message).
+    "continue" = already held (send nothing)."""
+    meta = turn["session"].setdefault("meta", {})
+    if meta.get("crisis_hold"):
+        return "continue"
+    if turn["severity"] == "Crisis":
+        meta["crisis_hold"] = True
+        return "start"
+    return None
+
+
+def _crisis_hold_message(user_message: str) -> str:
+    from app.services.gpt_agent import _uses_filipino
+    fil = _uses_filipino(user_message)
+    base = CRISIS_HOLD_FIL if fil else CRISIS_HOLD_EN
+    if _manila_off_hours():
+        base += CRISIS_HOLD_FIL_OFFHOURS if fil else CRISIS_HOLD_EN_OFFHOURS
+    return base
+
+
 def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, method: str, escalate: bool, fire_alert: bool = True) -> Dict[str, Any]:
     """Steps 8–9 shared by both paths: record interactions, fire alerts,
     track covered themes, and return the canonical result dict."""
@@ -493,6 +562,7 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
         "anxiety_score": anxiety_score,
         "response": response_text if method != "counselor" else None,
         "counselor_active": method == "counselor",
+        "crisis_hold": bool(session.get("meta", {}).get("crisis_hold")) and method != "counselor",
         "method": method,
     }
 
@@ -504,6 +574,13 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
     if turn["counselor_active"]:
         escalate = turn["anxiety_level"] in ("high", "crisis") or turn["running_confidence"] >= 0.99
         return _finalize_turn(turn, user_message, "", "counselor", escalate, fire_alert=False)
+
+    # --- Step 6b: Crisis hold — fixed message once, then silence ---
+    hold = _crisis_hold_state(turn)
+    if hold == "start":
+        return _finalize_turn(turn, user_message, _crisis_hold_message(user_message), "crisis_hold", True)
+    if hold == "continue":
+        return _finalize_turn(turn, user_message, "", "crisis_hold", True, fire_alert=False)
 
     # --- Step 7: GPT response (only when counselor is NOT active) ---
     gpt_protocol = turn["counselor_protocol"]
@@ -546,6 +623,17 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
     if turn["counselor_active"]:
         escalate = turn["anxiety_level"] in ("high", "crisis") or turn["running_confidence"] >= 0.99
         yield {"type": "done", "result": _finalize_turn(turn, user_message, "", "counselor", escalate, fire_alert=False)}
+        return
+
+    # --- Step 6b: Crisis hold — fixed message once, then silence ---
+    hold = _crisis_hold_state(turn)
+    if hold == "start":
+        msg = _crisis_hold_message(user_message)
+        yield {"type": "delta", "text": msg}
+        yield {"type": "done", "result": _finalize_turn(turn, user_message, msg, "crisis_hold", True)}
+        return
+    if hold == "continue":
+        yield {"type": "done", "result": _finalize_turn(turn, user_message, "", "crisis_hold", True, fire_alert=False)}
         return
 
     # --- Step 7: Stream GPT response ---

@@ -186,6 +186,7 @@ def virtual_agent(input: UserInput, user: dict = Depends(get_current_user)):
         "anxiety_score": result.get("anxiety_score"),
         "response": result.get("response"),
         "method": result.get("method"),
+        "crisis_hold": result.get("crisis_hold", False),
     }
 
 

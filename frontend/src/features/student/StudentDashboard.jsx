@@ -469,6 +469,9 @@ export default function StudentDashboard() {
   const [voiceStatus,       setVoiceStatus]       = useState('');
   const [counselorTyping,   setCounselorTyping]   = useState(false);
   const [counselorActive,   setCounselorActive]   = useState(false);
+  // Crisis hold: GAIDA has paused its replies until a counselor takes over.
+  const [crisisHold,        setCrisisHold]        = useState(false);
+  useEffect(() => { if (counselorActive) setCrisisHold(false); }, [counselorActive]);
   const [ventMode,          setVentMode]          = useState(false);
   const [lowBandwidth,      setLowBandwidth]      = useState(false);
   const [showSummary,       setShowSummary]       = useState(false);
@@ -524,6 +527,7 @@ export default function StudentDashboard() {
           setCounselorActive(true);
           wasCounselorActive.current = true;
         }
+        setCrisisHold(!!data.crisis_hold && !data.counselor_active);
         return true;
       }
       return false;
@@ -888,6 +892,7 @@ export default function StudentDashboard() {
           const normSev = normalizeSeverity(result.severity);
           if (normSev) setSeverity(normSev);
           if (result.counselor_active) setCounselorActive(true);
+          setCrisisHold(!!result.crisis_hold && !result.counselor_active);
 
           if (!result.counselor_active && (!botMsg || !botMsg.text) && result.response) {
             appendOrUpdateBot({ role: 'bot', text: result.response, timestamp: new Date() });
@@ -1674,6 +1679,21 @@ export default function StudentDashboard() {
             </div>
           )}
         </div>
+
+        {/* Crisis hold banner: GAIDA's replies are paused until a counselor joins */}
+        {crisisHold && !counselorActive && (
+          <div
+            role="alert"
+            className="px-4 sm:px-6 py-3 text-sm leading-relaxed flex-shrink-0"
+            style={{ background: '#FDECEA', color: '#7A1F17', borderTop: '1px solid #F2B8B0' }}
+          >
+            <strong>A counselor has been notified and will message you here.</strong>{' '}
+            GAIDA has paused its replies for your safety. If you are in danger, call{' '}
+            <a href="tel:1553" style={{ textDecoration: 'underline', fontWeight: 600 }}>1553</a>{' '}or{' '}
+            <a href="tel:911" style={{ textDecoration: 'underline', fontWeight: 600 }}>911</a> now.
+            You can keep typing; your counselor will see everything you send.
+          </div>
+        )}
 
         {/* Input */}
         <div

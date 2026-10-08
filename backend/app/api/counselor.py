@@ -979,6 +979,7 @@ def get_chat_transcript(session_id: str, user: dict = Depends(get_current_user))
             "counselor_typing": typing.get("counselor", False),
             "student_typing": typing.get("student", False),
             "counselor_active": session.get("meta", {}).get("counselor_active", False),
+            "crisis_hold": bool(session.get("meta", {}).get("crisis_hold")),
             "assigned_counselor_id": session.get("meta", {}).get("assigned_counselor_id"),
         }
     except Exception as e:
@@ -1112,6 +1113,9 @@ def return_to_gaida(payload: dict, user: dict = Depends(require_role("counselor"
 
         session["meta"]["counselor_active"] = False
         session["meta"]["assigned_counselor_id"] = None
+        # The counselor has judged the student safe to hand back; lift the
+        # crisis hold so GAIDA may reply again (a new Crisis re-triggers it).
+        session["meta"]["crisis_hold"] = False
 
         record_interaction(
             session_id=session_id,
