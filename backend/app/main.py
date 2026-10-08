@@ -12,6 +12,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.append(project_root)
 
+import threading
+
 # ----------------------------
 # Imports
 # ----------------------------
@@ -48,14 +50,32 @@ app = FastAPI(
 
 
 # ----------------------------
-# Pre-warm cold-start dependencies at startup
+# Pre-warm cold-start dependencies
 # ----------------------------
-@app.on_event("startup")
-def prewarm():
+#
+# Deliberately NOT on the startup critical path.
+#
+# Uvicorn does not serve a single request until the startup event returns: it
+# prints "Waiting for application startup." and holds there. Anything slow in
+# here delays (and can indefinitely block) the deployment's healthcheck, which
+# is how a healthy app gets reported as failed on deploy.
+#
+# All three steps hit the network or load ~50MB of pickles, and the Supabase
+# calls are bare `.execute()` with no timeout. try/except handles a call that
+# *fails*, but not one that *hangs* — so a stalled request would previously
+# leave the process alive, answering nothing, while healthchecks piled up
+# against it. Moving the work to a daemon thread means "Application startup
+# complete." prints in milliseconds regardless, and a hung warm call costs
+# nothing but one thread.
+_PREWARM_DONE = {"ml": False, "supabase": False, "alerts": False}
+
+
+def _prewarm():
     # 1. Pre-load ML classifier models
     try:
         from app.services.ml_classifier import _load_all_models
         _load_all_models()
+        _PREWARM_DONE["ml"] = True
         print("[startup] ML models loaded")
     except Exception as e:
         print(f"[startup] ML model load skipped: {e}")
@@ -64,6 +84,7 @@ def prewarm():
     try:
         from app.database.database import supabase
         supabase.table("sessions").select("id").limit(1).execute()
+        _PREWARM_DONE["supabase"] = True
         print("[startup] Supabase connection warmed")
     except Exception as e:
         print(f"[startup] Supabase warm skipped: {e}")
@@ -75,8 +96,15 @@ def prewarm():
         from app.api.counselor import _hydrate_alerts, _start_escalation_monitor
         _hydrate_alerts()
         _start_escalation_monitor()
+        _PREWARM_DONE["alerts"] = True
+        print("[startup] alert hydration + escalation monitor started")
     except Exception as e:
         print(f"[startup] escalation monitor start skipped: {e}")
+
+
+@app.on_event("startup")
+def prewarm():
+    threading.Thread(target=_prewarm, name="gaida-prewarm", daemon=True).start()
 
 
 # ----------------------------
@@ -152,6 +180,31 @@ def root_head():
 @app.get("/")
 def root():
     return {"status": "ok", "message": "GAIDA Backend"}
+
+
+# Healthcheck endpoint for the deploy platform.
+#
+# Always 200 once the process is serving — intentionally, and this is the whole
+# point of it existing. A healthcheck that reflected warm-up state would fail
+# forever if warm-up stalls, which is precisely the outage shape we are
+# defending against: the process is up and can answer requests, so it is
+# healthy. Readiness is reported in the body instead, where a human reading
+# the response can see it without it ever gating the deployment.
+#
+# HEAD is registered explicitly because FastAPI does not auto-add HEAD for a
+# GET route, and several platforms probe with HEAD.
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "service": "GAIDA Backend",
+        "warmup": dict(_PREWARM_DONE),
+    }
+
+
+@app.head("/health")
+def health_head():
+    return Response(status_code=200)
 
 
 @app.post("/virtual-agent")
