@@ -125,6 +125,13 @@ ALLOWED_ORIGINS = [
     "https://gaida-system.vercel.app",
 ]
 
+# The deployed frontend origin, set via FRONTEND_URL on Render. Adding it here
+# means pointing FRONTEND_URL at a new frontend domain (custom domain, preview
+# deploy, etc.) is enough to allow it in CORS — no code edit required.
+_FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+if _FRONTEND_URL:
+    ALLOWED_ORIGINS.append(_FRONTEND_URL)
+
 # Also allow the Vite dev server when it's reached over the local network
 # (e.g. http://192.168.1.23:5173) — this is what lets a phone on the same
 # Wi-Fi test against `npm run dev -- --host` without editing this list by

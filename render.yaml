@@ -4,6 +4,8 @@ services:
     runtime: docker
     rootDir: backend
     dockerfilePath: ./Dockerfile
+    # The app exposes GET/HEAD /health (backend/app/main.py) — there is no /healthz.
+    healthCheckPath: /health
     envVars:
       - key: OPENAI_API_KEY
         sync: false
@@ -13,8 +15,8 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
-      - key: WHISPER_MODEL
-        value: medium
+      - key: CAPTCHA_SECRET
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
