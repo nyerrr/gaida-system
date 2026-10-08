@@ -18,3 +18,4 @@ scikit-learn
 reportlab==4.2.0
 imageio-ffmpeg
 supabase
+Pillow>=10.1

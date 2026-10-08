@@ -4,6 +4,15 @@ from fastapi.testclient import TestClient
 from app.services.rule_intent import analyze_with_rules
 from app.services.virtual_agent import detect_intent_and_level, _build_result
 from app.main import app
+from app.services import captcha
+
+
+def _captcha_token(answer: str) -> str:
+    """A valid single-use CAPTCHA token for `answer` (tests know the secret)."""
+    import time
+    nonce = 'test' + str(time.time_ns())
+    exp = int(time.time()) + 60
+    return f"{nonce}.{exp}.{captcha._sign(nonce, exp, answer)}"
 
 
 def test_rule_intent_basic():
@@ -24,6 +33,7 @@ def test_virtual_agent_endpoint():
             "email": "student1@ue.edu.ph",
             "access_code": "ACCESS123",
             "antibot": "HELLO",
+            "captcha_token": _captcha_token("HELLO"),
         },
     )
     assert login.status_code == 200
@@ -55,6 +65,7 @@ def test_virtual_agent_stream():
             "email": "student1@ue.edu.ph",
             "access_code": "ACCESS123",
             "antibot": "HELLO",
+            "captcha_token": _captcha_token("HELLO"),
         },
     )
     assert login.status_code == 200

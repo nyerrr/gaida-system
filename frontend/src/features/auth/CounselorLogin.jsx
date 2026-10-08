@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
@@ -8,77 +8,34 @@ export default function CounselorLogin() {
   const [facultyId, setFacultyId] = useState('');
   const [password, setPassword] = useState('');
   const [antibot, setAntibot] = useState('');
-  const [captchaText, setCaptchaText] = useState('');
-  const [showCaptcha, setShowCaptcha] = useState(true);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaImage, setCaptchaImage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const canvasRef = useRef(null);
 
-  // Generate captcha immediately when the page loads, same as StudentLogin,
-  // instead of waiting for the field to be focused.
   useEffect(() => {
-    const text = generateCaptcha();
-    drawCaptcha(text);
+    loadCaptcha();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- single mount-time load
   }, []);
 
-  const generateCaptcha = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let text = '';
-    for (let i = 0; i < 6; i++) {
-      text += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setCaptchaText(text);
-    return text;
-  };
-
-  const drawCaptcha = (text) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#f9fafb';
-    ctx.fillRect(0, 0, width, height);
-    for (let i = 0; i < 5; i++) {
-      ctx.strokeStyle = `rgba(${Math.random()*200},${Math.random()*50},${Math.random()*50},0.3)`;
-      ctx.beginPath();
-      ctx.moveTo(Math.random()*width, Math.random()*height);
-      ctx.lineTo(Math.random()*width, Math.random()*height);
-      ctx.stroke();
-    }
-    for (let i = 0; i < 40; i++) {
-      ctx.fillStyle = `rgba(0,0,0,0.05)`;
-      ctx.fillRect(Math.random()*width, Math.random()*height, 2, 2);
-    }
-    ctx.font = 'bold 24px monospace';
-    ctx.textBaseline = 'middle';
-    for (let i = 0; i < text.length; i++) {
-      const x = 12 + i * 22;
-      const y = height / 2;
-      const angle = (Math.random() - 0.5) * 0.4;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(angle);
-      ctx.fillStyle = `rgb(${120 + Math.random()*80},${Math.random()*30},${Math.random()*30})`;
-      ctx.fillText(text[i], 0, 0);
-      ctx.restore();
-    }
-  };
-
-  const handleAntibotFocus = () => {
-    if (!showCaptcha) {
-      setShowCaptcha(true);
-      setTimeout(() => {
-        const text = generateCaptcha();
-        drawCaptcha(text);
-      }, 0);
+  // The verification image is drawn and checked by the server; the browser
+  // only shows it and sends back the typed code with the signed token.
+  const loadCaptcha = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/auth/captcha`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      setCaptchaToken(data.token);
+      setCaptchaImage(data.image);
+    } catch {
+      setCaptchaToken('');
+      setCaptchaImage('');
+      setError('Could not load the verification image. Please press refresh.');
     }
   };
 
   const handleRefreshCaptcha = () => {
-    const text = generateCaptcha();
-    drawCaptcha(text);
+    loadCaptcha();
     setAntibot('');
   };
 
@@ -127,8 +84,8 @@ export default function CounselorLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (antibot.toLowerCase() !== captchaText.toLowerCase()) {
-      setError('Incorrect verification code. Please try again.');
+    if (!captchaToken) {
+      setError('Verification image not loaded. Please press refresh.');
       return;
     }
     setLoading(true);
@@ -136,7 +93,7 @@ export default function CounselorLogin() {
       const response = await fetch(`${BACKEND_URL}/api/auth/counselor-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faculty_id: facultyId, password }),
+        body: JSON.stringify({ faculty_id: facultyId, password, antibot, captcha_token: captchaToken }),
       });
       const data = await response.json();
       if (response.ok) {
@@ -152,6 +109,7 @@ export default function CounselorLogin() {
         navigate('/counselor-dashboard');
       } else {
         setError(data.detail || 'Invalid credentials. Please check your faculty ID and password.');
+        handleRefreshCaptcha();
         setLoading(false);
       }
     } catch (err) {
@@ -229,23 +187,28 @@ export default function CounselorLogin() {
             <input
               type="text"
               id="antibot"
-              placeholder="Click here to show code"
+              placeholder="Type the code shown below"
               value={antibot}
               onChange={(e) => setAntibot(e.target.value)}
-              onFocus={handleAntibotFocus}
               autoComplete="off"
               required
               disabled={loading}
               className="w-full px-4 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-colors disabled:opacity-50"
             />
-            {showCaptcha && (
+            {(
               <div className="flex items-center gap-3 mt-2">
-                <canvas
-                  ref={canvasRef}
-                  width={148}
-                  height={44}
-                  className="rounded-lg border border-gray-200"
-                />
+                {captchaImage ? (
+                  <img
+                    src={captchaImage}
+                    alt="Verification code"
+                    width={150}
+                    height={50}
+                    draggable={false}
+                    className="rounded-lg border border-gray-200"
+                  />
+                ) : (
+                  <div style={{ width: 150, height: 50 }} className="rounded-lg border border-gray-200 bg-gray-100" aria-hidden="true" />
+                )}
                 <button
                   type="button"
                   onClick={handleRefreshCaptcha}

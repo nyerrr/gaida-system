@@ -1,12 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
 
 export default function StudentLogin() {
-  const [captchaText, setCaptchaText] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaImage, setCaptchaImage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const canvasRef = useRef(null);
 
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -22,8 +22,8 @@ export default function StudentLogin() {
   // Generate captcha immediately when the page loads. Mount-only on purpose:
   // re-running on every re-render would reset the captcha mid-typing.
   useEffect(() => {
-    handleRefreshCaptcha();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRefreshCaptcha is recreated each render; we want a single mount-time refresh
+    loadCaptcha();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadCaptcha is recreated each render; we want a single mount-time load
   }, []);
 
   const handleChange = (e) => {
@@ -38,58 +38,24 @@ export default function StudentLogin() {
     return email.trim().toLowerCase().endsWith('@ue.edu.ph');
   };
 
-  const generateCaptcha = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let text = '';
-    for (let i = 0; i < 6; i++) {
-      text += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setCaptchaText(text);
-    return text;
-  };
-
-  const drawCaptcha = (text) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#f9fafb';
-    ctx.fillRect(0, 0, width, height);
-
-    for (let i = 0; i < 5; i++) {
-      ctx.strokeStyle = `rgba(${Math.random() * 200},${Math.random() * 50},${Math.random() * 50},0.3)`;
-      ctx.beginPath();
-      ctx.moveTo(Math.random() * width, Math.random() * height);
-      ctx.lineTo(Math.random() * width, Math.random() * height);
-      ctx.stroke();
-    }
-
-    for (let i = 0; i < 40; i++) {
-      ctx.fillStyle = 'rgba(0,0,0,0.05)';
-      ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
-    }
-
-    ctx.font = 'bold 20px monospace';
-    ctx.textBaseline = 'middle';
-    for (let i = 0; i < text.length; i++) {
-      const x = 10 + i * 16;
-      const y = height / 2;
-      const angle = (Math.random() - 0.5) * 0.4;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(angle);
-      ctx.fillStyle = `rgb(${120 + Math.random() * 80},${Math.random() * 30},${Math.random() * 30})`;
-      ctx.fillText(text[i], 0, 0);
-      ctx.restore();
+  // The verification image is drawn and checked by the server; the browser
+  // only shows it and sends back the typed code with the signed token.
+  const loadCaptcha = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/auth/captcha`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      setCaptchaToken(data.token);
+      setCaptchaImage(data.image);
+    } catch {
+      setCaptchaToken('');
+      setCaptchaImage('');
+      setError('Could not load the verification image. Please press refresh.');
     }
   };
 
   const handleRefreshCaptcha = () => {
-    const text = generateCaptcha();
-    drawCaptcha(text);
+    loadCaptcha();
     setFormData((prev) => ({ ...prev, antibot: '' }));
   };
 
@@ -104,10 +70,9 @@ export default function StudentLogin() {
       return;
     }
 
-    if (formData.antibot.toLowerCase() !== captchaText.toLowerCase()) {
-      setError('Incorrect verification code. Please try again.');
+    if (!captchaToken) {
+      setError('Verification image not loaded. Please press refresh.');
       setFieldErrors({ antibot: true });
-      handleRefreshCaptcha();
       return;
     }
 
@@ -116,7 +81,7 @@ export default function StudentLogin() {
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, captcha_token: captchaToken }),
       });
       const data = await response.json();
       if (response.ok) {
@@ -320,7 +285,11 @@ export default function StudentLogin() {
             </label>
             <div className="flex gap-2">
               <div className="flex-shrink-0 relative rounded-lg border border-gray-200 bg-white overflow-hidden flex items-center justify-center p-0.5 shadow-sm">
-                <canvas ref={canvasRef} width={110} height={34} className="rounded" />
+                {captchaImage ? (
+                  <img src={captchaImage} alt="Verification code" width={140} height={47} className="rounded" draggable={false} />
+                ) : (
+                  <div style={{ width: 140, height: 47 }} className="rounded bg-gray-100" aria-hidden="true" />
+                )}
               </div>
               <div className="relative flex-1">
                 <input

@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 from datetime import datetime
 from google.oauth2 import id_token
@@ -8,6 +8,7 @@ from google.auth.transport import requests as google_requests
 from app.database.database import supabase
 from app.constants import TEST_CREDENTIALS
 from app.services.rate_limiter import check_rate_limit
+from app.services.captcha import new_challenge, verify_captcha
 from app.utils.auth import create_session_token
 
 
@@ -26,6 +27,7 @@ class LoginRequest(BaseModel):
     email: str
     access_code: str
     antibot: str
+    captcha_token: str = ""
 
 
 class LoginResponse(BaseModel):
@@ -49,6 +51,8 @@ class GoogleLoginRequest(BaseModel):
 class CounselorLoginRequest(BaseModel):
     faculty_id: str
     password: str
+    antibot: str = ""
+    captcha_token: str = ""
 
 
 COUNSELOR_ACCOUNT_ID = "COUNSELOR01"
@@ -58,6 +62,17 @@ def validate_email_domain(email: str) -> bool:
     return email.strip().lower().endswith(ALLOWED_DOMAIN)
 
 
+@router.get("/captcha")
+def get_captcha(request: Request, response: Response):
+    """Issue a server-drawn verification image + signed single-use token.
+    The answer is never sent to the browser; the login endpoints verify it."""
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = fwd.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    check_rate_limit(f"captcha:{ip}", limit=60, window=60)
+    response.headers["Cache-Control"] = "no-store"
+    return new_challenge()
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
     """
@@ -65,6 +80,7 @@ def login(payload: LoginRequest):
     Returns a session token on successful login.
     """
     check_rate_limit(payload.student_number)
+    verify_captcha(payload.captcha_token, payload.antibot)
 
     student_number = payload.student_number.strip()
 
@@ -147,6 +163,7 @@ def counselor_login(payload: CounselorLoginRequest):
     unlocks the /api/counselor/* endpoints (role-gated server-side).
     """
     check_rate_limit(payload.faculty_id)
+    verify_captcha(payload.captcha_token, payload.antibot)
 
     faculty_id = payload.faculty_id.strip().upper()
     creds = TEST_CREDENTIALS.get(COUNSELOR_ACCOUNT_ID)
