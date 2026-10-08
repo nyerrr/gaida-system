@@ -55,18 +55,51 @@ ANGRY_ENERGY_FRACTION = float(os.getenv("GAIDA_ANGRY_ENERGY_FRACTION", "1.6"))
 # above reduce to the legacy absolute values with no behavior change.
 _LEGACY_REFERENCE_RMS = 0.05
 
-try:
-    import noisereduce as _nr  # type: ignore
-    _NR_AVAILABLE = True
-except Exception:  # pragma: no cover - import-failure path
-    _nr = None  # type: ignore
-    _NR_AVAILABLE = False
-    if VOICE_CLEANING_ENABLED:
-        print(
-            "[voice_cleaning] WARNING: 'noisereduce' is not installed — "
-            "background-noise removal is disabled (loudness normalization "
-            "still applies). Add it to requirements: pip install noisereduce"
-        )
+# ── noisereduce, imported lazily ────────────────────────────────────────────
+#
+# noisereduce pulls in torch (~5.8s) and scipy.signal (~3.3s) — measured 9.4s
+# of the 17.5s `import app.main` takes. Uvicorn serves nothing while the app
+# module imports, so that 9.4s sat directly on the deployment's healthcheck
+# path: the platform polled `/`, got no answer, and reported the deploy as
+# failed. Background-noise removal is only ever needed once a voice request
+# actually arrives, so that is when the cost is paid.
+_nr = None
+_NR_LOADED = False
+
+
+def _load_noisereduce():
+    """Import noisereduce on first use; returns the module or None.
+
+    Attempted at most once — the failure path (package absent) is cached too,
+    so a missing optional dependency costs one failed import rather than one
+    per call.
+    """
+    global _nr, _NR_LOADED
+    if _NR_LOADED:
+        return _nr
+    _NR_LOADED = True
+    try:
+        import noisereduce as _nr_mod  # type: ignore
+
+        _nr = _nr_mod
+    except Exception:  # pragma: no cover - import-failure path
+        _nr = None
+        if VOICE_CLEANING_ENABLED:
+            print(
+                "[voice_cleaning] WARNING: 'noisereduce' is not installed — "
+                "background-noise removal is disabled (loudness normalization "
+                "still applies). Add it to requirements: pip install noisereduce"
+            )
+    return _nr
+
+
+def __getattr__(name):
+    # PEP 562 — keeps `voice_cleaning._NR_AVAILABLE` readable (the voice tests
+    # use it to skip) without defining it eagerly, which would force the import
+    # we just moved off the startup path.
+    if name == "_NR_AVAILABLE":
+        return _load_noisereduce() is not None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def cleaning_enabled() -> bool:
@@ -164,9 +197,10 @@ def clean_voice(y: np.ndarray, sr: int) -> np.ndarray:
         return y
 
     # 1) Background-noise removal (stationary spectral gating, conservative).
-    if _NR_AVAILABLE:
+    _nr_mod = _load_noisereduce()
+    if _nr_mod is not None:
         try:
-            y = _nr.reduce_noise(
+            y = _nr_mod.reduce_noise(
                 y=np.asarray(y, dtype=np.float64),
                 sr=int(sr),
                 stationary=True,
