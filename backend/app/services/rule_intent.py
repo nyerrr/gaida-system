@@ -1,14 +1,17 @@
 import re
 from typing import Dict, List
-from difflib import SequenceMatcher
-
-# Fuzzy match thresholds
-PHRASE_FUZZY_THRESHOLD = 0.72
-TOKEN_FUZZY_THRESHOLD = 0.84
 
 from app.services.crisis_guards import (
+    contains_harm_keyword,
     has_venting_context,
+    negated_death_wish,
     resolve_crisis_level,
+)
+from app.services.fuzzy_match import (
+    PHRASE_FUZZY_THRESHOLD,
+    TOKEN_FUZZY_THRESHOLD,
+    phrase_fuzzy_match,
+    token_matches,
 )
 
 STOPWORDS = {
@@ -39,6 +42,8 @@ KEYWORDS: Dict[str, List[tuple]] = {
         ("bakit pa mabuhay", 4.0),
         ("wala nang saysay mabuhay", 4.0),
         ("hindi ko alam kung may dahilan pa", 3.5),
+        ("wala na akong rason para mabuhay", 4.0),
+        ("wala na akong rason", 3.5),
         ("wala na kong dahilan magpatuloy", 4.0),
         ("para saan pa mabuhay", 4.0),
 
@@ -451,16 +456,11 @@ def remove_stopwords(text: str) -> str:
 def _phrase_match(keyword: str, text: str) -> bool:
     if re.search(r"\b" + re.escape(keyword) + r"\b", text):
         return True
-    return SequenceMatcher(None, keyword, text).ratio() >= PHRASE_FUZZY_THRESHOLD
+    return phrase_fuzzy_match(keyword, text, PHRASE_FUZZY_THRESHOLD)
 
 
 def _token_match(keyword: str, tokens: set) -> bool:
-    if keyword in tokens:
-        return True
-    return any(
-        SequenceMatcher(None, keyword, t).ratio() >= TOKEN_FUZZY_THRESHOLD
-        for t in tokens
-    )
+    return token_matches(keyword, tokens, TOKEN_FUZZY_THRESHOLD)
 
 
 def _count_intensifiers(text: str) -> int:
@@ -472,6 +472,7 @@ def analyze_with_rules(user_input: str) -> Dict[str, object]:
     text = normalize_text(raw_text)
     clean_text = remove_stopwords(text)
     tokens = set(clean_text.split())
+    negated_harm = negated_death_wish(raw_text)
 
     scores: Dict[str, float] = {label: 0.0 for label in KEYWORDS}
     matched: Dict[str, List[str]] = {label: [] for label in KEYWORDS}
@@ -480,6 +481,12 @@ def analyze_with_rules(user_input: str) -> Dict[str, object]:
         for kw, weight in kw_list:
             hit = False
             tag = kw
+
+            # A negated death/harm phrase is not a wish ("i don't want to die"),
+            # while a negated LIFE verb still is ("i don't want to live") — so
+            # the check is per keyword, not per label.
+            if label == "suicidal" and negated_harm and contains_harm_keyword(kw):
+                continue
 
             if " " in kw:
                 if _phrase_match(kw, clean_text):

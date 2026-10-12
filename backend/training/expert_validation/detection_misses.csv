@@ -1,3 +1,2 @@
 ﻿sample_id,gold,predicted,level,severity,confidence,language,text
 74,neutral,anger,none,Normal,0.375,english,I'm doing my homework right now
-99,sadness,suicidal,high,High,0.88,filipino,parang wala nang kulay ang mundo ko

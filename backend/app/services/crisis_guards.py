@@ -228,6 +228,123 @@ def is_other_persons_anger(text: str) -> bool:
     return not SELF_ANGER_RE.search(text)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Negation guard
+#
+# "I don't want to die", "i'm not going to kill myself" and "I don't want to
+# hurt myself" all reached a crisis — the first two through the ML self-harm
+# floor and the phrase "kill myself" is a literal substring of the third. Each
+# one says the OPPOSITE of a death wish, but the keyword matchers cannot see the
+# "don't". So a matched harm phrase paged a counselor for a student who had just
+# said they did not want to die.
+#
+# The guard is deliberately narrow: it fires only when EVERY death/harm word in
+# the message is negated. The reverse construction is left completely alone — a
+# negated LIFE verb ("i don't want to live", "i don't want to exist", "i don't
+# want to wake up") is still a death wish, and live/exist/wake are not in the
+# harm set.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_WORD_RE = re.compile(r"[a-z0-9']+")
+
+# Punctuation that ends a clause. The guard has to see clause boundaries —
+# "Ayoko na, lulunukin ko lahat ng gamot" is a plan, but "Ayoko na" is an idiom
+# for giving up and would otherwise cancel the verb in the next clause. The
+# pipeline's own normalizer strips this punctuation, so the guard is always fed
+# the RAW message.
+_CLAUSE_SPLIT_RE = re.compile(r"[,;:.!?\u2026\u2014\u2013\r\n]+")
+
+# True negators only. "wala" (none/absent) and "ayoko" (I don't want — but also
+# the give-up idiom "ayoko na") were removed after they suppressed "wala nang
+# pag-asa, mamamatay na lang ako" and "Ayoko na, lulunukin ko ... gamot".
+NEGATORS = frozenset({
+    "not", "no", "never", "none", "nobody", "nothing", "nowhere",
+    "dont", "don't", "doesnt", "doesn't", "didnt", "didn't",
+    "wont", "won't", "wouldnt", "wouldn't", "cant", "can't", "cannot",
+    "couldnt", "couldn't", "shouldnt", "shouldn't",
+    "hindi", "di", "dili", "ayaw",
+})
+
+# Words whose negation means "I do NOT want to die / hurt myself". Life verbs
+# (live, exist, wake up, be here) are deliberately absent: negating those is a
+# death wish, not a denial of one.
+DEATH_HARM_WORDS = frozenset({
+    "die", "died", "dies", "dying", "dead", "death", "kill", "killed",
+    "killing", "suicide", "suicidal", "kms", "harm", "harmed", "harming",
+    "hurt", "hurting", "cut", "cutting", "overdose", "overdosing", "pills",
+})
+
+# Filipino crisis stems (virtual_agent.FILIPINO_CRISIS_STEMS plus the explicit
+# losing/ending verbs). Matched as substrings, because the guard has to see the
+# same conjugations the stem path fires on ("mamatay" inside "mamamatay").
+_FILIPINO_HARM_STEMS = (
+    "mamatay", "magpakamatay", "kamatayan", "patayin", "papatayin",
+    "mawala", "makamatay", "wakasan", "wawakasan", "tapusin", "tatapusin",
+    "lunuk", "bitbit", "sundok",
+)
+
+# Coordinators that end a negator's reach, so a "not" in one clause cannot
+# cancel a death word in the next ("I'm not sad, I want to die").
+_CLAUSE_BREAKS = frozenset({
+    "but", "pero", "yet", "however", "although", "though", "because",
+    "kasi", "dahil", "so", "then", "tapos", "and", "or", "if", "kung",
+})
+
+_NEGATION_LOOKBACK = 4
+
+
+def _harm_positions(tokens):
+    """Indexes of death/harm words, including the "off myself" construction."""
+    positions = []
+    for i, tok in enumerate(tokens):
+        if tok in DEATH_HARM_WORDS or any(s in tok for s in _FILIPINO_HARM_STEMS):
+            positions.append(i)
+        elif tok in ("off", "end") and i + 1 < len(tokens) and tokens[i + 1] in (
+            "myself", "self", "my", "it"
+        ):
+            positions.append(i)
+    return positions
+
+
+def _is_negated(tokens, pos) -> bool:
+    for j in range(pos - 1, max(-1, pos - 1 - _NEGATION_LOOKBACK), -1):
+        if tokens[j] in _CLAUSE_BREAKS:
+            return False
+        if tokens[j] in NEGATORS:
+            return True
+    return False
+
+
+def negated_death_wish(text: str) -> bool:
+    """True when every death/harm word in the message is negated.
+
+    Evaluated clause by clause, so a negator cannot reach across punctuation:
+    "Ayoko na, lulunukin ko lahat ng gamot" stays a crisis even though "ayoko"
+    looks like a negator, and "i'm not sad, i want to die" stays one too.
+
+    "i don't want to die" -> True (do not escalate the model's vote).
+    "i want to die"       -> False (a real wish).
+    "i don't want to live"       -> False ("live" is not a harm word).
+    """
+    text = (text or "").lower()
+    saw_harm = False
+    for clause in _CLAUSE_SPLIT_RE.split(text):
+        tokens = _WORD_RE.findall(clause)
+        positions = _harm_positions(tokens)
+        if not positions:
+            continue
+        saw_harm = True
+        if not all(_is_negated(tokens, p) for p in positions):
+            return False
+    return saw_harm
+
+
+def contains_harm_keyword(keyword: str) -> bool:
+    """True when a matched keyword is a death/harm phrase (so the negation guard
+    can tell it apart from a life-negation phrase like "i don't want to live")."""
+    return bool(_harm_positions(_WORD_RE.findall((keyword or "").lower())))
+
+
 def resolve_crisis_level(matched_keywords, text: str) -> dict:
     """Decide the crisis verdict from the matched suicidal keywords + message
     context. This is the ONE place that converts a suicidal-string match into a

@@ -1,11 +1,13 @@
 import re
-from difflib import SequenceMatcher
 
-PHRASE_FUZZY_THRESHOLD = 0.85
-TOKEN_FUZZY_THRESHOLD = 0.82
-FUZZY_WEIGHT_MULTIPLIER = 0.9
-
+from app.services.fuzzy_match import (
+    PHRASE_FUZZY_THRESHOLD,
+    TOKEN_FUZZY_THRESHOLD,
+    phrase_fuzzy_match,
+    token_fuzzy_match,
+)
 from app.services.crisis_guards import (
+    contains_harm_keyword,
     has_fiction_context,
     has_hypothetical_context,
     has_venting_context,
@@ -13,6 +15,7 @@ from app.services.crisis_guards import (
     is_soft_venting_phrase,
     is_third_party_death_wish,
     is_other_persons_anger,
+    negated_death_wish,
     resolve_crisis_level,
 )
 from app.services.loss_detector import detect_loss
@@ -225,7 +228,13 @@ KEYWORDS = {
         ("sana hindi na ako nagising", 3.5),
         ("pagod na ako mabuhay", 3.5),
         ("wala na akong dahilan para mabuhay", 3.5),
+        # "rason" is the everyday synonym of "dahilan"; the anchored fuzzy
+        # matcher cannot bridge two unrelated content words, so the variant is
+        # listed rather than left to "wala na akong dahilan" fuzzy-matching a
+        # message that never says "dahilan".
+        ("wala na akong rason para mabuhay", 3.5),
         ("wala na akong dahilan", 3.0),
+        ("wala na akong rason", 3.0),
         ("gusto ko nang mawala sa mundo", 3.5),
         ("gusto ko nang mawala sa lahat", 3.5),
         ("papatayin ko na ang sarili ko", 3.5),
@@ -435,6 +444,15 @@ CRISIS_CONFIDENCE = 0.99
 # training/expert_validation/score_detection.py to confirm.
 ML_SUICIDAL_FLOOR = 0.60
 
+# Above this the classifier's own confidence is treated as a second piece of
+# evidence even without a death word, and its suicidal vote is untouchable. Below
+# it, an ML `suicidal` vote with no explicit death/self-harm vocabulary at all is
+# an ungrounded guess: "I'm proud of myself", "I think of myself" and "I want to
+# disappear for a while on vacation" are all voted suicidal at 0.60-0.68 by the
+# classifier, which latches onto the word "myself". Those must not reach the
+# alert band on the model's word alone. See the arbitration block.
+ML_SUICIDAL_STRONG = 0.80
+
 # Rule-engine confidence required before it may overrule a non-crisis ML vote.
 #
 # analyze_with_rules returns the winning label's share of all matched keyword
@@ -515,58 +533,66 @@ def _context_override_for_suicidal(text: str):
 
 
 def _windowed_fuzzy(kw: str, txt: str) -> bool:
-    """Match a multiword keyword against sliding windows of the text so a long
-    message can't dilute the similarity score below the threshold."""
-    kw_tokens = kw.split()
-    n = len(kw_tokens)
-    if n == 0:
-        return False
-    txt_tokens = _tokenize(txt)
-    for i in range(len(txt_tokens) - n + 1):
-        window = " ".join(txt_tokens[i:i + n])
-        if SequenceMatcher(None, kw, window).ratio() >= PHRASE_FUZZY_THRESHOLD:
-            return True
-    return False
+    """Anchored windowed fuzzy match for a multi-word keyword.
+
+    Delegates to fuzzy_match.phrase_fuzzy_match, which requires every content
+    word of the keyword to be present in the window. The old unanchored version
+    matched "of myself" against the suicide phrase "off myself" (ratio 0.947)
+    and "don't want to die" against "don't want to exist", firing a full crisis
+    on both.
+    """
+    return phrase_fuzzy_match(kw, txt, PHRASE_FUZZY_THRESHOLD)
 
 
-def _match_suicidal_keyword(txt: str, tokens: set):
+def _match_suicidal_keyword(txt: str, tokens: set, raw_text: str | None = None):
     """Return the matched suicidal keyword, preferring an explicit (hard)
-    self-harm phrase over a colloquial give-up phrase when both are present."""
+    self-harm phrase over a colloquial give-up phrase when both are present.
+
+    A death/harm phrase whose negation covers the whole message is skipped:
+    "i'm not going to kill myself" contains the literal substring "kill
+    myself", but it is a denial, not a plan. The negation guard reads raw_text —
+    the normalizer strips the punctuation it needs for clause boundaries.
+    """
     found_soft = None
+    negated_harm = negated_death_wish(raw_text if raw_text is not None else txt)
     for kw, _weight in KEYWORDS.get("suicidal", []):
+        matched = False
         if ' ' in kw:
             if re.search(r"\b" + re.escape(kw) + r"\b", txt) or \
                _windowed_fuzzy(kw, txt):
-                if not is_soft_venting_phrase(kw):
-                    return kw
-                if found_soft is None:
-                    found_soft = kw
+                matched = True
         else:
             if kw in tokens:
-                if not is_soft_venting_phrase(kw):
-                    return kw
-                if found_soft is None:
-                    found_soft = kw
-                continue
-            for t in tokens:
-                if SequenceMatcher(None, kw, t).ratio() >= TOKEN_FUZZY_THRESHOLD:
-                    if not is_soft_venting_phrase(kw):
-                        return kw
-                    if found_soft is None:
-                        found_soft = kw
-                    break
+                matched = True
+            else:
+                for t in tokens:
+                    if token_fuzzy_match(kw, t, TOKEN_FUZZY_THRESHOLD):
+                        matched = True
+                        break
+
+        if not matched:
+            continue
+        if negated_harm and contains_harm_keyword(kw):
+            continue
+        if not is_soft_venting_phrase(kw):
+            return kw
+        if found_soft is None:
+            found_soft = kw
 
     # Robust fallback: explicit self-referential death talk caught from bare
     # token pairs. Catches glued/misspelled variants the phrase matcher misses
     # ("kill my self", "will end myself", "off my self") even after the
     # "my self -> myself" normalization step. Only unambiguous self-referential
     # verbs are used — "kill/end/off me" is deliberately excluded so idiomatic
-    # "this class is killing me" never hard-triggers a crisis.
-    for verb, objects in (("kill", ("myself", "self", "kms")),
-                          ("end", ("myself", "self")),
-                          ("off", ("myself", "self"))):
-        if verb in tokens and any(o in tokens for o in objects):
-            return "kill myself"
+    # "this class is killing me" never hard-triggers a crisis. Skipped entirely
+    # when the harm is negated: "i'm not going to kill myself" reaches here as a
+    # bare (kill, myself) pair and would otherwise be a false crisis.
+    if not negated_harm:
+        for verb, objects in (("kill", ("myself", "self", "kms")),
+                              ("end", ("myself", "self")),
+                              ("off", ("myself", "self"))):
+            if verb in tokens and any(o in tokens for o in objects):
+                return "kill myself"
 
     # Third-person disclosure: "my friend wants to kill herself" — a
     # classmate/relative reporting suicidal intent matters, but is handled a
@@ -582,8 +608,9 @@ def _match_suicidal_keyword(txt: str, tokens: set):
     # Filipino inflection stems, checked last and only for first-person
     # statements. Every other check above is an exact phrase or token; this is
     # the one place a substring is allowed to stand in for a phrase, because
-    # the conjugation is the thing the phrase lists keep missing.
-    if is_self_referential(txt):
+    # the conjugation is the thing the phrase lists keep missing. Skipped when
+    # the harm is negated ("hindi ako gusto mamatay").
+    if is_self_referential(txt) and not negated_harm:
         for stem in FILIPINO_CRISIS_STEMS:
             if stem in txt:
                 return f"{stem} (stem)"
@@ -601,7 +628,7 @@ def detect_intent_and_level(text: str) -> dict:
     # ── Step 1: Suicidal keyword check — run BEFORE the safe-phrase mask so a
     #    real crisis is never hidden (e.g. "ayoko na mag aral... gusto ko na
     #    mamatay" must still be caught). Context guards below tune the level. ──
-    crisis_kw = _match_suicidal_keyword(txt, tokens)
+    crisis_kw = _match_suicidal_keyword(txt, tokens, text)
 
     if crisis_kw:
         verdict = resolve_crisis_level([crisis_kw], txt)
@@ -656,11 +683,24 @@ def detect_intent_and_level(text: str) -> dict:
         # that I can't even eat properly" is voted anxiety 0.551 by the model
         # while the rules put 100% of their weight on sadness.
         #
-        # Only arbitration, never escalation: a suicidal ML vote is left
-        # completely alone, and a rule verdict can only redirect a non-crisis
-        # ML vote to another non-crisis label. Nothing here can lower a
-        # severity or turn a crisis off.
-        if ml_intent != "suicidal":
+        # Only arbitration, never escalation: a rule verdict can only redirect a
+        # non-crisis ML vote to another non-crisis label. Nothing here can lower
+        # a severity or turn a crisis off.
+        #
+        # The one suicidal vote that is NOT left alone is an UNGROUNDED one:
+        # the model says suicidal but the message contains no explicit death or
+        # self-harm vocabulary and the model is not confident. That is how
+        # "I'm proud of myself", "I think of myself" and "I want to disappear
+        # for a while on vacation" became a suicidal HIGH and paged a counselor
+        # — the classifier latches onto the word "myself". A grounded vote
+        # (explicit vocabulary) or a very confident one stays untouchable.
+        _ungrounded_suicidal = (
+            ml_intent == "suicidal"
+            and not EXPLICIT_SELF_HARM_RE.search(text)
+            and ml_confidence < ML_SUICIDAL_STRONG
+        )
+
+        if ml_intent != "suicidal" or _ungrounded_suicidal:
             try:
                 from app.services.rule_intent import analyze_with_rules as _rules
 
@@ -693,6 +733,29 @@ def detect_intent_and_level(text: str) -> dict:
             except Exception:
                 pass
 
+            # An ungrounded suicidal vote the keyword engine cannot corroborate
+            # is not a crisis: the model named no harm and nothing in the words
+            # supports it. Neutral rather than suicidal, at Normal severity.
+            if _ungrounded_suicidal:
+                return _build_result("neutral", 0.3)
+
+        # "I don't want to die" / "i'm not going to kill myself": an explicit
+        # denial of a death or self-harm wish. The model can still fire on the
+        # vocabulary ("die", "kill"), but the sentence says the opposite. Fall
+        # back to the keyword engine so real co-occurring distress still counts.
+        if ml_intent == "suicidal" and negated_death_wish(text):
+            try:
+                from app.services.rule_intent import analyze_with_rules as _rv_rules
+
+                _rv = _rv_rules(text)
+                _ri = _rv.get("intent")
+                if _ri in (None, "neutral", "suicidal"):
+                    return _build_result("neutral", 0.3)
+                _rc = round(min(0.98, 0.3 + 0.7 * _rv.get("confidence", 0.3)), 3)
+                return _build_result(_ri, _rc)
+            except Exception:
+                return _build_result("neutral", 0.3)
+
         # Guard ML-reported suicidal when no explicit self-harm keyword matched
         # (rule path already checks explicit keywords). If ML votes suicidal but
         # the message is fiction/venting, downgrade instead of alerting.
@@ -714,6 +777,7 @@ def detect_intent_and_level(text: str) -> dict:
             ml_intent == "suicidal"
             and neg_multiplier >= 1.0
             and EXPLICIT_SELF_HARM_RE.search(text)
+            and not negated_death_wish(text)
         ):
             scaled_confidence = max(scaled_confidence, 0.85)
 
@@ -742,6 +806,7 @@ def detect_intent_and_level(text: str) -> dict:
             and ml_confidence >= ML_SUICIDAL_FLOOR
             and EXPLICIT_SELF_HARM_RE.search(text)
             and not is_third_party_death_wish(text)
+            and not negated_death_wish(text)
         ):
             scaled_confidence = CRISIS_CONFIDENCE
 
