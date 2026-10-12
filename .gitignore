@@ -56,6 +56,10 @@ interactions.json
 research_export_for_review.csv
 *_for_review.csv
 
+# Raw pilot transcripts pasted for the real-data expert packet (real, sensitive
+# participant messages with pids/session refs/timestamps - never ship or commit).
+real_student_messages.csv
+
 # PWA dev build output
 frontend/dev-dist/
 

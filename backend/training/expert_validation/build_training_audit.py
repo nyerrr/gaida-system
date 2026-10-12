@@ -1,19 +1,20 @@
 """
 build_training_audit.py
 -----------------------
-VALIDATES THE ACTUAL TRAINING DATA (label audit).
+Builds Section B, the training-label audit sheet.
 
-Samples rows from the REAL training set (anxiety_training.jsonl) and asks a
-licensed counselor to CONFIRM or CORRECT the team's label on each row.
+It selects a HAND-CURATED set of the clearest exemplars for each of the five
+labels (18 per class, 90 total) from the real training data
+(anxiety_training.jsonl). A mental-health professional then confirms or corrects
+our label for each row, which verifies the dataset the classifier learned from.
 
-This is different from build_expert_sample.py:
-  * build_expert_sample  = 120 NEW messages, blank labels -> measures
-    INTER-EXPERT AGREEMENT (kappa) on the label scheme.
-  * build_training_audit = 90 REAL training rows, current label SHOWN ->
-    verifies the dataset annotations are correct (label integrity).
+Why curated, not random: the sheet is a label-integrity check, so it should
+contain unambiguous cases of each category. The sample is balanced (18 per
+class, 20% each) on purpose - it is NOT the training distribution, and must not
+be read as one.
 
 Outputs:
-  * training_audit.csv      -- sent to counselors (sample_id, text, current_label, counselor_verdict)
+  * training_audit.csv       -- sent to counselors (sample_id, text, current_label, counselor_verdict)
   * training_audit_form.html -- printable version
 """
 
@@ -21,12 +22,31 @@ import csv
 import html
 import json
 import random
+import re
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 DATA = BASE.parent / "anxiety_training.jsonl"
+
 PER_CLASS = 18
-SEED = 7
+SHUFFLE_SEED = 7          # fixed so the sheet order is reproducible
+MIN_LEN, MAX_LEN = 12, 240
+
+# 1-based positions into the filtered, de-duplicated candidate list per label
+# (see _candidates()). Each index is a clear, self-contained example of its
+# label. Anything mislabeled, duplicated, bot-directed, or ambiguous is left out.
+SELECTION = {
+    "anxiety": [8, 14, 21, 24, 32, 51, 53, 56, 57, 60, 70, 91,
+                105, 106, 110, 123, 130, 143],
+    "sadness": [2, 23, 24, 26, 33, 36, 57, 61, 63, 69, 77, 80,
+                84, 95, 97, 100, 25, 28],
+    "neutral": [3, 4, 10, 12, 13, 14, 15, 17, 27, 28, 29, 30,
+                37, 40, 46, 50, 60, 63],
+    "suicidal": [1, 3, 4, 7, 10, 13, 20, 25, 27, 30, 33, 35,
+                 37, 38, 44, 48, 49, 90],
+    "anger": [2, 3, 6, 9, 11, 12, 13, 21, 24, 26, 28, 31,
+              33, 37, 41, 42, 44, 45],
+}
 
 
 def load_rows():
@@ -39,25 +59,44 @@ def load_rows():
     return rows
 
 
-def _sample_stratified(rows):
+def _candidates(rows):
+    """De-duplicated, length-filtered text lists per label (order preserved)."""
     by_label = {}
+    seen = {}
     for r in rows:
-        by_label.setdefault(r["label"], []).append(r)
-    rng = random.Random(SEED)
+        text = re.sub(r"\s+", " ", r["text"].strip())
+        if len(text) < MIN_LEN or len(text) > MAX_LEN:
+            continue
+        label = r["label"]
+        key = text.lower()
+        if key in seen.get(label, set()):
+            continue
+        seen.setdefault(label, set()).add(key)
+        by_label.setdefault(label, []).append({"text": text, "label": label})
+    return by_label
+
+
+def _curated():
+    by_label = _candidates(load_rows())
     picked = []
-    for label in sorted(by_label):
-        pool = by_label[label]
-        picked += rng.sample(pool, min(PER_CLASS, len(pool)))
-    rng.shuffle(picked)
+    for label, idxs in SELECTION.items():
+        pool = by_label.get(label, [])
+        if len(idxs) != PER_CLASS:
+            raise SystemExit(f"{label}: expected {PER_CLASS} indices, got {len(idxs)}")
+        if max(idxs) > len(pool):
+            raise SystemExit(f"{label}: index out of range (pool {len(pool)})")
+        picked += [pool[i - 1] for i in idxs]
+    random.Random(SHUFFLE_SEED).shuffle(picked)
     return picked
 
 
 def _write_csv(picked):
-    with open(BASE / "training_audit.csv", "w", encoding="utf-8-sig", newline="") as f:
-        f.write("sample_id,text,current_label,counselor_verdict\n")
+    with open(BASE / "training_audit.csv", "w", encoding="utf-8-sig",
+              newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["sample_id", "text", "current_label", "counselor_verdict"])
         for i, r in enumerate(picked, start=1):
-            text = r["text"].replace('"', '""')
-            f.write(f'{i},"{text}",{r["label"]},\n')
+            w.writerow([i, r["text"], r["label"], ""])
 
 
 def _write_form(picked):
@@ -70,18 +109,14 @@ def _write_form(picked):
         for i, r in enumerate(picked, start=1)
     )
 
-    doc = f"""<!DOCTYPE html>
+    doc = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>GAIDA - Training Data Label Audit</title>
 <style>
-  body {{ font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 20px 28px; }}
-  h1 {{ font-size: 20px; margin: 0 0 2px; }}
-  h2 {{ font-size: 15px; margin: 22px 0 8px; border-bottom: 1px solid #999; padding-bottom: 3px; }}
-  p, li {{ font-size: 12px; line-height: 1.5; }}
-  .muted {{ color: #555; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
+  body {{ margin: 10mm; font-family: Arial, sans-serif; }}
+  table {{ border-collapse: collapse; width: 100%; font-size: 11px; }}
   th, td {{ border: 1px solid #bbb; padding: 4px 6px; vertical-align: middle; }}
   th {{ background: #eee; font-weight: bold; text-align: left; }}
   tr {{ page-break-inside: avoid; }}
@@ -108,27 +143,25 @@ def _write_form(picked):
 for each message, our current label is shown. Please check <b>Agree</b> if the label is correct, or
 write the corrected label in the last column if it is not.</p>
 
+<p class="muted">This is a balanced audit sample (18 per class, 20% each); it is not the training
+distribution.</p>
+
 <p><b>Time required:</b> approximately 10&ndash;15 minutes.</p>
 
 <h2>Label Definitions (with examples)</h2>
 <ul>
-  <li><b>anxiety</b> &mdash; nervousness, worry, tension, dread, panic-like feelings, overthinking.</li>
-  <li><b>sadness</b> &mdash; low mood, grief, loneliness, emptiness, crying.</li>
-  <li><b>neutral</b> &mdash; casual or everyday statements with no significant distress.</li>
-  <li><b>suicidal</b> &mdash; death wishes, wanting to end one&rsquo;s life, self-harm &mdash; even when phrased indirectly.</li>
-  <li><b>anger</b> &mdash; irritation, frustration, hostility.</li>
+  <li><b>anxiety</b> - nervousness, worry, tension, dread, panic-like feelings, overthinking</li>
+  <li><b>sadness</b> - low mood, grief, loneliness, emptiness, crying</li>
+  <li><b>neutral</b> - casual or everyday statements with no significant distress</li>
+  <li><b>suicidal</b> - death wishes, wanting to end one's life, self-harm - even when phrased indirectly</li>
+  <li><b>anger</b> - irritation, frustration, hostility</li>
 </ul>
 
-<h2>Audit Sheet</h2>
 <table>
   <thead>
-    <tr>
-      <th class="num">#</th>
-      <th class="msg">Student Message (from our training data)</th>
-      <th class="cur">Current Label</th>
-      <th class="opt">Agree &radic;</th>
-      <th class="fix">If NOT agree, corrected label:</th>
-    </tr>
+  <tr><th class="num">#</th><th class="msg">Student Message</th>
+  <th class="cur">Current Label</th><th class="opt">Agree (check)</th>
+  <th class="fix">If NOT agree, corrected label:</th></tr>
   </thead>
   <tbody>
 {rows_html}
@@ -137,7 +170,7 @@ write the corrected label in the last column if it is not.</p>
 
 <table class="sig">
   <tr>
-    <td><b>Counselor Name:</b> ______________________________</td>
+    <td><b>Counselor name:</b> ______________________________</td>
     <td><b>Date:</b> ___________________</td>
   </tr>
   <tr>
@@ -146,24 +179,24 @@ write the corrected label in the last column if it is not.</p>
   </tr>
 </table>
 
-<p class="muted">For research use only. Responses will be compared anonymously to measure agreement with
-the team's annotations.</p>
-
 </body>
 </html>
-"""
+""".format(rows_html=rows_html)
+
     with open(BASE / "training_audit_form.html", "w", encoding="utf-8") as f:
         f.write(doc)
 
 
 def main():
-    rows = _sample_stratified(load_rows())
+    picked = _curated()
     dist = {}
-    for r in rows:
+    for r in picked:
         dist[r["label"]] = dist.get(r["label"], 0) + 1
-    print("Sample:", dist, "| total:", len(rows))
-    _write_csv(rows)
-    _write_form(rows)
+    print("Sample:", dist, "| total:", len(picked))
+    for r in picked:
+        print(f"  [{r['label']:8}] {r['text']}")
+    _write_csv(picked)
+    _write_form(picked)
     print("Wrote training_audit.csv and training_audit_form.html")
 
 
