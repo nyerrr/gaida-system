@@ -34,8 +34,13 @@ export function usePWA() {
     () => window.matchMedia("(display-mode: standalone)").matches
   );
   const [swReady, setSwReady] = useState(false);
+  // True when a freshly installed worker is waiting to take control — i.e. a
+  // new build has been downloaded. We surface a prompt instead of reloading on
+  // our own, so a deploy never yanks the page out from under a conversation.
+  const [needRefresh, setNeedRefresh] = useState(false);
 
   const deferredPromptRef = useRef(null);
+  const registrationRef = useRef(null);
 
   // ── Register service worker ─────────────────────────────────
   useEffect(() => {
@@ -70,15 +75,60 @@ export function usePWA() {
     // here is what gets the worker installed and kept up to date.
     if (import.meta.env.DEV) return;
 
+    let cancelled = false;
+
+    // A waiting worker only means "an update is available" when a controller
+    // already exists. On the very first install there is no controller and
+    // nothing to prompt for.
+    const flagUpdateIfWaiting = (registration) => {
+      if (!cancelled && registration.waiting && navigator.serviceWorker.controller) {
+        setNeedRefresh(true);
+      }
+    };
+
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((registration) => {
+        if (cancelled) return;
         console.log("[GAIDA PWA] Service worker registered:", registration.scope);
         setSwReady(true);
+        registrationRef.current = registration;
+
+        // An update may already have downloaded on a previous load and be
+        // sitting in the waiting state.
+        flagUpdateIfWaiting(registration);
+
+        registration.addEventListener("updatefound", () => {
+          const installing = registration.installing;
+          if (!installing) return;
+          installing.addEventListener("statechange", () => {
+            if (installing.state === "installed") flagUpdateIfWaiting(registration);
+          });
+        });
       })
       .catch((err) => {
         console.error("[GAIDA PWA] Service worker registration failed:", err);
       });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Re-check for an update on focus ─────────────────────────
+  // The browser checks for a new worker on navigation, but an installed PWA
+  // that is only backgrounded never navigates and can otherwise stay on a stale
+  // build indefinitely. The generated worker does not skipWaiting, so a
+  // downloaded update parks in "waiting" until we trigger it (updateApp).
+  useEffect(() => {
+    const checkForUpdate = () => {
+      if (document.visibilityState !== "visible") return;
+      registrationRef.current?.update().catch(() => { /* offline — try again later */ });
+    };
+    window.addEventListener("focus", checkForUpdate);
+    document.addEventListener("visibilitychange", checkForUpdate);
+    return () => {
+      window.removeEventListener("focus", checkForUpdate);
+      document.removeEventListener("visibilitychange", checkForUpdate);
+    };
   }, []);
 
   // ── Online / Offline status ─────────────────────────────────
@@ -128,6 +178,38 @@ export function usePWA() {
     return outcome === "accepted";
   }, []);
 
+  // ── Apply an available update ───────────────────────────────
+  const updateApp = useCallback(async () => {
+    const registration = registrationRef.current;
+
+    let waiting = registration?.waiting;
+    if (!waiting && registration) {
+      // The new worker may still be installing; nudge it, then re-check.
+      try { await registration.update(); } catch { /* offline — reload regardless */ }
+      waiting = registration.waiting;
+    }
+
+    if (waiting && navigator.serviceWorker.controller) {
+      // Reload once the new worker claims this client. Bounded so the tap
+      // always does something even if the handoff never lands.
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, 3000);
+        navigator.serviceWorker.addEventListener(
+          "controllerchange",
+          () => { clearTimeout(timer); resolve(); },
+          { once: true },
+        );
+        try { waiting.postMessage({ type: "SKIP_WAITING" }); }
+        catch { clearTimeout(timer); resolve(); }
+      });
+    }
+
+    setNeedRefresh(false);
+    window.location.reload();
+  }, []);
+
+  const dismissUpdate = useCallback(() => setNeedRefresh(false), []);
+
   return {
     isOnline,
     isOffline: !isOnline,
@@ -135,5 +217,8 @@ export function usePWA() {
     isInstalled,
     swReady,
     installApp,
+    needRefresh,
+    updateApp,
+    dismissUpdate,
   };
 }

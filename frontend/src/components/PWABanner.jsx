@@ -1,16 +1,13 @@
 /**
  * PWABanner.jsx
  * ─────────────────────────────────────────────────────────────
- * Shows:
+ * Shows, stacked at the very top of the app:
+ *   - Update prompt, when a new build has downloaded and is waiting (usePWA)
+ *   - Offline status bar, with the count of messages waiting to send
  *   - "Add to Home Screen" install banner (when installable)
- *   - Offline status bar (when connection is lost)
  *
  * Usage:
  *   <PWABanner />   ← drop anywhere in your App layout
- *
- * There is no queued-message notice here any more. See the note in usePWA.js:
- * the hand-written service worker that would have populated it was never built,
- * so the counter it read was permanently 0 and the banner could not render.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -25,6 +22,9 @@ export default function PWABanner() {
     isInstallable,
     isInstalled,
     installApp,
+    needRefresh,
+    updateApp,
+    dismissUpdate,
   } = usePWA();
 
   const [installDismissed, setInstallDismissed] = useState(false);
@@ -55,6 +55,30 @@ export default function PWABanner() {
             {queuedCount > 0 ? ` (${queuedCount} waiting to send)` : ''}.
             {' '}If this is an emergency, call 1553 (NCMH) or 911.
           </span>
+        </div>
+      )}
+
+      {/* ── Update Prompt ────────────────────────────────────── */}
+      {needRefresh && (
+        <div style={{ ...styles.banner, ...styles.updateBanner }} role="status">
+          <span style={styles.updateIcon}>✨</span>
+          <span style={styles.bannerText}>A new version of GAIDA is available.</span>
+          <div style={styles.installActions}>
+            <button
+              style={styles.dismissBtn}
+              onClick={dismissUpdate}
+              aria-label="Remind me later"
+            >
+              Later
+            </button>
+            <button
+              style={styles.installBtn}
+              onClick={updateApp}
+              aria-label="Refresh to update GAIDA"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       )}
 
@@ -123,6 +147,17 @@ const styles = {
     color: "#e8e4ff",
     justifyContent: "space-between",
     padding: "12px 16px",
+  },
+  updateBanner: {
+    background: "rgba(15, 12, 35, 0.97)",
+    borderBottom: "1px solid rgba(124,106,247,0.35)",
+    color: "#e8e4ff",
+    justifyContent: "space-between",
+  },
+  updateIcon: {
+    fontSize: "1.05rem",
+    lineHeight: 1,
+    flexShrink: 0,
   },
   dot: {
     width: "7px",
