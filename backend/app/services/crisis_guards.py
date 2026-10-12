@@ -358,8 +358,16 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
       5. retrospective context ("i used to want to die") → sadness, no alert
       6. soft give-up phrase + venting context → stress (false-positive guard)
       7. fiction context → angry fiction (no alert; low risk)
-      8. hypothetical/hedged, or any give-up phrase with no vent → MODERATE alert
-      9. explicit keyword in hypothetical → HIGH (still real, but not plan)
+      8. hypothetical/hedged → HIGH (still real, but not a plan)
+      9. soft give-up phrase with no venting context → crisis
+
+    Step 9 is deliberately safety-first and is NOT the MODERATE alert an earlier
+    version of this docstring described: a give-up phrase with nothing in the
+    message to blunt it ("I just want it all to stop permanently") is escalated
+    to the full crisis path. That is what tests/test_detection.py locks in. It
+    does mean common vents with no school/work context ("I'm tired of it all")
+    also reach crisis — a known false positive, kept because the alternative
+    risks silencing a real one. See SOFT_VENTING_PHRASES above.
     """
     text = text or ""
 
