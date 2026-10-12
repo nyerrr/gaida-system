@@ -7,7 +7,8 @@
 A virtual counseling assistant for University of the East students. It chats in Tagalog,
 Taglish, and English, looks for signs of anxiety in both text and voice, brings in a human
 counselor when things get serious, and keeps a record of the sessions you agreed to save. It
-also works as an installable app that can run with no internet.
+also installs as an app and opens with no internet — messages written offline are saved and
+sent once the connection returns.
 
 **Live:** backend `https://gaida-system--rainierburlasa4.replit.app` · frontend `https://gaida-system.vercel.app`
 
@@ -29,7 +30,7 @@ also works as an installable app that can run with no internet.
 | Counseler takeover | A counselor can jump into a live chat. GAIDA goes quiet, the human takes over, and control can be handed back to GAIDA later. |
 | Counselor dashboard | Live alerts, active chats, transcripts, typing indicators, case notes, PDF exports, analytics, a resolved-case archive, and now a welfare-check list. |
 | Consent | Students must agree to a consent screen before any of their chat data is saved. |
-| Offline mode | Installable app; the app opens when there is no internet and shows a "please reconnect" banner. Past chats are **not** cached offline and offline messages are **not** queued — GAIDA needs a connection to chat. |
+| Offline mode | Installable app; it opens when there is no internet. A message written offline is **saved and sent automatically on reconnect**, shown as "waiting to send", with the offline banner offering the crisis hotline. Past chats are **not** cached offline, and GAIDA's reply still needs a connection. |
 | Post-chat check-in | After a session, students rate how they feel (1–4), which counselors can review. |
 | **Per-message feedback (new)** | Under every GAIDA reply there are "Helpful / Not helpful" buttons; ratings are stored so the team can see which replies work. |
 | **Research participation (new)** | An optional, separate research flow: students enter an anonymous code given by the researcher, take a GAD-7 questionnaire, and can later **delete all their research data by code**. |
@@ -40,7 +41,7 @@ also works as an installable app that can run with no internet.
 
 1. **The Browser (what students and counselors see).** A React web app with a portal
    selector, student + counselor login, consent screen, student chat, and the counselor
-   dashboard. A background "service worker" caches pages and data for offline use.
+   dashboard. A background "service worker" caches the app shell so the app opens offline.
 2. **The Backend (the brains).** A Python server (FastAPI) that:
    - talks to the frontend over simple web requests, and streams replies as they are typed,
    - runs all the anxiety-detection logic,
@@ -231,11 +232,13 @@ look up.)
 ## Offline support
 
 - The app caches its core pages (the app shell) so it still opens without internet.
-- Chat transcripts and alerts are **not** cached for offline viewing, and there is
-  **no offline message queue** — while offline, sending is blocked and a banner tells
-  the student to reconnect. This is a deliberate trade-off (see the note in
-  `frontend/src/hooks/usePWA.js`): the earlier queue silently posted messages that never
-  arrived, so pretending to queue them was judged worse than clearly being offline.
+- A message written offline is **saved to an on-device outbox and sent automatically when
+  the connection returns** (it shows as "Waiting to send" meanwhile, and the offline banner
+  shows how many are queued). The outbox is cleared on logout and session end.
+- Chat transcripts and alerts are **not** cached for offline viewing, and GAIDA's reply still
+  needs the server — detection and the fine-tuned model run in the backend. There is
+  deliberately no offline API/transcript cache (see `frontend/src/hooks/usePWA.js` and
+  `frontend/src/offlineQueue.js`).
 - Developer note: there is no service worker on localhost at all — offline behavior only
   engages when the app is served from a real web location.
 

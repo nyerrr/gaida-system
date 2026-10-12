@@ -14,8 +14,9 @@
  * ─────────────────────────────────────────────────────────────
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePWA } from '../hooks/usePWA';
+import { subscribe as subscribeOfflineQueue } from '../offlineQueue';
 
 export default function PWABanner() {
   const {
@@ -28,11 +29,18 @@ export default function PWABanner() {
 
   const [installDismissed, setInstallDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [queuedCount, setQueuedCount] = useState(0);
+
+  // Number of messages written offline that are still waiting to send.
+  useEffect(() => subscribeOfflineQueue(setQueuedCount), []);
 
   const handleInstall = async () => {
     setInstalling(true);
-    await installApp();
-    setInstalling(false);
+    try {
+      await installApp();
+    } catch { /* prompt rejected or unavailable — just stop the spinner */ } finally {
+      setInstalling(false);
+    }
   };
 
   return (
@@ -40,10 +48,12 @@ export default function PWABanner() {
 
       {/* ── Offline Bar ──────────────────────────────────────── */}
       {isOffline && (
-        <div style={{ ...styles.banner, ...styles.offlineBanner }}>
+        <div style={{ ...styles.banner, ...styles.offlineBanner }} role="status">
           <span style={styles.dot} />
           <span style={styles.bannerText}>
-            You're offline. GAIDA can't send or receive messages right now — please reconnect.
+            You're offline. Messages you write are saved and will send when you reconnect
+            {queuedCount > 0 ? ` (${queuedCount} waiting to send)` : ''}.
+            {' '}If this is an emergency, call 1553 (NCMH) or 911.
           </span>
         </div>
       )}

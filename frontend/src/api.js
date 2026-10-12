@@ -48,9 +48,10 @@ export function getAuthToken(targetUrl = null) {
 // Each step is a no-op if the thing it targets isn't there, which is the normal
 // case: the service worker no longer caches API responses (deliberately — that
 // cache was keyed only by URL, so one student's data could be served to the
-// next on a shared profile) and the offline message queue is gone (see the
-// note in usePWA.js). Kept as a safety net so that if either is ever
-// reintroduced, logout still clears it.
+// next on a shared profile), and the offline outbox
+// (`gaida-offline-queue`, see offlineQueue.js) is empty. Deleting it here is
+// what keeps messages queued on a shared device from outliving the login that
+// created them.
 export async function clearSensitiveLocalData() {
   try {
     if ('caches' in window && typeof caches.keys === 'function') {

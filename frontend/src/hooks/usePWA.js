@@ -6,16 +6,16 @@
  *   - Install prompt (Add to Home Screen)
  *   - Online/offline status
  *
- * There is deliberately no offline message queue here. An earlier version of
- * this hook listened for MESSAGE_QUEUED / QUEUED_MESSAGE_SENT messages from a
- * hand-written service worker and replayed failed sends on reconnect, but that
- * worker was never actually built: vite.config.js leaves `strategies` unset, so
- * vite-plugin-pwa emits its own `generateSW` worker and src/sw.js was dead
- * code. Every message it posted went nowhere, so `queuedCount` was permanently
- * 0 and the queue UI could never render. The listeners are removed rather than
- * re-enabled on purpose — see the note in vite.config.js. The worker itself is
- * recoverable from git history (commit a0e1e9d) if the queue is ever wanted
- * back as a tested feature.
+ * Offline messaging is handled at the app level, not by a service worker:
+ * messages composed offline go to the durable outbox in offlineQueue.js and
+ * are replayed from StudentDashboard on the `online` event. This hook only
+ * registers the generated worker and tracks connectivity / install state.
+ *
+ * History: an earlier version of this hook listened for MESSAGE_QUEUED /
+ * QUEUED_MESSAGE_SENT from a hand-written service worker, but that worker was
+ * never built (vite.config.js uses the plugin's generateSW worker), so the
+ * queue never worked and was removed. The current outbox is that idea done
+ * client-side.
  *
  * Usage:
  *   const { isOnline, isInstallable, installApp } = usePWA();

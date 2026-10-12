@@ -87,16 +87,17 @@ Things that are genuinely done and should not be touched.
 
 Present but incomplete — the visible surface exists, the behaviour does not.
 
-### 2.1 PWA / offline 🟡
-- **What exists:** `usePWA.js` + `PWABanner.jsx`, service worker via `vite-plugin-pwa`, `public/offline.html`.
-- **What is missing:**
-  - `swReady` is set at `usePWA.js:36` and returned at `:136`, but `PWABanner.jsx:23-27` destructures the hook **without it** → dead state, install prompt never gated on SW readiness.
-  - The banner copy **"Chat anytime, even offline" (`PWABanner.jsx:58`) is false.** There is no message queue and no transcript cache. This is a promise to a distressed user that the app cannot keep. The same file's own header comment at `:11` admits "There is no queued-message notice here any more" — the *copy* was never updated to match.
-  - Install button can stick: `PWABanner.jsx:34` calls `await installApp()` with no `try/finally`, so a rejected `prompt()` leaves the button spinning.
-  - Offline bar has no `role="status"` → not announced.
-- **Where:** `frontend/src/hooks/usePWA.js`, `frontend/src/components/PWABanner.jsx`
-- **Expected:** either (a) implement the queue, or (b) delete the claim. Option (b) is one line and is the honest fix.
-- **Required:** the false claim (🟡). The stuck button (🟡). `swReady` cleanup (🟢).
+### 2.1 PWA / offline ✅ (fixed 2026-10-12)
+- **What exists:** `usePWA.js` + `PWABanner.jsx`, service worker via `vite-plugin-pwa`, and now a real offline outbox (`offlineQueue.js`).
+- **Fixed:**
+  - Offline messages are now **queued** (IndexedDB `gaida-offline-queue`) and replayed on `online`, shown as "Waiting to send"; the offline banner states this, shows the queued count, and offers the crisis hotline. The old false "Chat anytime, even offline" copy is gone.
+  - Offline bar has `role="status"`.
+  - Dead `frontend/public/offline.html` removed — the SW's `NavigationRoute` serves `index.html` for offline navigation.
+- **Still open:**
+  - `swReady` is set and returned by `usePWA`, but `PWABanner.jsx` destructures the hook **without it** → still dead state (🟢).
+  - Install button can still stick: `PWABanner.jsx` calls `await installApp()` with no `try/finally` (🟡).
+- **Where:** `frontend/src/offlineQueue.js`, `frontend/src/components/PWABanner.jsx`, `frontend/src/features/student/StudentDashboard.jsx`
+- **Required:** the stuck button (🟡). `swReady` cleanup (🟢).
 
 ### 2.2 Captcha on both logins 🟡
 - **What exists:** a working captcha challenge on `StudentLogin.jsx` and `CounselorLogin.jsx`.
@@ -206,7 +207,7 @@ See §0 items #1, #2, #3, #5, #6, #7, #8. Each fix is small; the aggregate is wh
 
 ### 4.6 Documentation drift 🟡
 Docs currently assert behaviour that does not exist. Anyone reading them will build the wrong thing.
-- `GAIDA_OVERVIEW.md:30`, `:200-205` — used to claim an **offline message queue** and **offline chat caching**. Both removed; not in the codebase. ✅ **Corrected** — `GAIDA_SYSTEM.md` + `GAIDA_OVERVIEW.md` now state plainly that there is no offline queue and no offline transcript cache.
+- `GAIDA_SYSTEM.md` §11 — used to describe a hand-written service worker, an offline message queue, and API data caching that never existed. ✅ **Corrected** — §11 now matches the generated Workbox worker and the offline outbox that *does* exist (`frontend/src/offlineQueue.js`).
 - `GAIDA_OVERVIEW.md:192` — claims an always-visible hotline & crisis panel. Does not exist (§3.1).
 - `GAIDA_OVERVIEW.md:278` — claims the frontend "still polls instead of WebSocket". WebSocket **is** implemented; both mechanisms run.
 - `HANDOFF.md` §D — lists `theme-color` as open. Already fixed.
@@ -221,7 +222,7 @@ Unreferenced leftovers to delete or promote:
 - **Two byte-identical icon sets** — `frontend/public/*.png` and `frontend/public/icons/*.png` (9 files each, same byte sizes, plus a duplicate `manifest.json` / `site.webmanifest`). Confirm which one `manifest.json` actually references, then delete the other.
 - root `package.json`, `eslint.config.js`, `postcss.config.js`, `public/vite.svg` — stale duplicates of the `frontend/` originals. Vite's public dir is `frontend/public`, so root `public/vite.svg` can never be served.
 - `requirements.txt~` (0 bytes) — editor backup artifact
-- `frontend/public/offline.html` — confirm the SW actually references it; if not, dead
+- `frontend/public/offline.html` — **removed.** The SW's `NavigationRoute` serves `index.html` for navigation, so the static page was never reachable.
 - **Required:** 🟢
 
 ---

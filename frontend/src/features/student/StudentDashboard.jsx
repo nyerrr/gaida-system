@@ -9,6 +9,11 @@ import ReactMarkdown from 'react-markdown';
 
 import { BACKEND_URL as BACKEND } from '../../config';
 import apiFetch, { clearSensitiveLocalData } from '../../api';
+import {
+  enqueue as enqueueOffline,
+  getAll as getQueuedOffline,
+  remove as removeOffline,
+} from '../../offlineQueue';
 const POLL_INTERVAL = 3000;
 const TYPING_DEBOUNCE = 2000;
 
@@ -265,7 +270,7 @@ function Avatar({ role, accent, breathing = false }) {
 }
 
 function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlayingTTS, onFeedbackComment }) {
-  const { role, text, isVoice, acoustic, timestamp } = message;
+  const { role, text, isVoice, acoustic, timestamp, pending } = message;
   const [commentText, setCommentText] = useState('');
   const [commentSent, setCommentSent] = useState(false);
 
@@ -308,6 +313,12 @@ function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlay
           >
             {text}
           </ReactMarkdown>
+        )}
+
+        {role === 'user' && pending && (
+          <span className="block mt-1 text-[11px] font-medium" style={{ opacity: 0.65 }}>
+            {pending === 'sending' ? 'Sending…' : 'Waiting to send'}
+          </span>
         )}
       </div>
 
@@ -567,6 +578,7 @@ export default function StudentDashboard() {
   const audioRef           = useRef(null);
   const audioUrlRef        = useRef(null);
   const ventUsedRef        = useRef(false);
+  const flushingRef        = useRef(false);
 
   // ── Counselor-chat helpers ───────────────────────────────────
   // Shared by BOTH the 3s poll and the realtime WebSocket so the two paths
@@ -615,6 +627,170 @@ export default function StudentDashboard() {
     { value: 4, emoji: '😊', label: 'Much better' },
   ];
 
+  // ── Agent streaming + offline replay ───────────────────────────────
+  // One turn to /virtual-agent/stream, with the streaming loop factored out
+  // so the online send path and the offline replay path share it. Throws an
+  // Error with `.isNetworkError = true` when the request never reached the
+  // server (offline / DNS / dropped connection), and with `.httpStatus` set
+  // when the server answered with a non-OK status.
+  const streamAgentReply = useCallback(async (payload, { onDelta, onDone } = {}) => {
+    const token = localStorage.getItem('session_token');
+    let res;
+    try {
+      res = await apiFetch(`${BACKEND}/virtual-agent/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (netErr) {
+      const e = new Error(netErr?.message || 'Network request failed');
+      e.isNetworkError = true;
+      throw e;
+    }
+
+    if (!res.ok || !res.body) {
+      const errText = await res.text().catch(() => String(res.status));
+      const e = new Error(errText || String(res.status));
+      e.httpStatus = res.status;
+      throw e;
+    }
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result = null;
+
+    const processLine = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      let event;
+      try { event = JSON.parse(trimmed); } catch { return; }
+      if (event.type === 'delta') {
+        onDelta?.(event.text);
+      } else if (event.type === 'done') {
+        result = event.result || {};
+        onDone?.(result);
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      lines.forEach(processLine);
+    }
+    if (buffer.trim()) processLine(buffer);
+    return result;
+  }, []);
+
+  const applyAgentResult = useCallback((result) => {
+    if (!result) return;
+    if (result.session_id) {
+      localStorage.setItem('session_id', result.session_id);
+      setSessionId(result.session_id);
+    }
+    const normSev = normalizeSeverity(result.severity);
+    if (normSev) setSeverity(normSev);
+    if (result.counselor_active) setCounselorActive(true);
+    setCrisisHold(!!result.crisis_hold && !result.counselor_active);
+  }, []);
+
+  // Replay messages queued while offline (and any restored from a previous
+  // offline session) in order, then drop each from the outbox once delivered.
+  // A still-offline failure stops the loop and leaves the rest queued.
+  const flushOfflineQueue = useCallback(async () => {
+    if (flushingRef.current) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+    flushingRef.current = true;
+    let didStart = false;
+    try {
+      const queued = await getQueuedOffline();
+      if (!queued.length) return;
+
+      didStart = true;
+      setSending(true);
+      setStreamingStarted(false);
+
+      for (const item of queued) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) break;
+
+        setMessages(prev => prev.map(m =>
+          m.queueId === item.id ? { ...m, pending: 'sending' } : m
+        ));
+
+        let botMsg = null;
+        const appendOrUpdateBot = (next) => {
+          if (!botMsg) {
+            botMsg = next;
+            setMessages(prev => [...prev, botMsg]);
+          } else {
+            botMsg = next;
+            setMessages(prev => [...prev.slice(0, -1), botMsg]);
+          }
+        };
+
+        try {
+          await streamAgentReply(
+            {
+              message:    item.text,
+              session_id: item.session_id || localStorage.getItem('session_id'),
+              user_id:    item.user_id || localStorage.getItem('student_id'),
+              intent:     item.intent || 'unknown',
+              vent_mode:  !!item.vent_mode,
+            },
+            {
+              onDelta: (chunk) => {
+                setStreamingStarted(true);
+                const prevText = botMsg ? botMsg.text : '';
+                appendOrUpdateBot({
+                  role: 'bot',
+                  text: prevText + chunk,
+                  timestamp: botMsg ? botMsg.timestamp : new Date(),
+                });
+              },
+              onDone: (result) => {
+                applyAgentResult(result);
+                if (!result.counselor_active && (!botMsg || !botMsg.text) && result.response) {
+                  appendOrUpdateBot({ role: 'bot', text: result.response, timestamp: new Date() });
+                }
+              },
+            },
+          );
+          await removeOffline(item.id);
+          setMessages(prev => prev.map(m =>
+            m.queueId === item.id ? { ...m, pending: false, queueId: undefined } : m
+          ));
+        } catch (e) {
+          if (e.isNetworkError || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            // Dropped again: leave it queued and wait for the next `online`.
+            setMessages(prev => prev.map(m =>
+              m.queueId === item.id ? { ...m, pending: true } : m
+            ));
+            break;
+          }
+          // The server answered with an error — don't retry forever.
+          await removeOffline(item.id);
+          setMessages(prev => prev.map(m =>
+            m.queueId === item.id ? { ...m, pending: false, queueId: undefined } : m
+          ));
+          setMessages(prev => [...prev, {
+            role: 'system',
+            text: `A message you wrote offline couldn't be delivered: ${e.message}`,
+          }]);
+        }
+      }
+    } finally {
+      flushingRef.current = false;
+      if (didStart) setSending(false);
+    }
+  }, [streamAgentReply, applyAgentResult]);
+
   // ── Auth + session rehydration on mount ────────────────────────────
   useEffect(() => {
     const token   = localStorage.getItem('session_token');
@@ -632,6 +808,25 @@ export default function StudentDashboard() {
       if (sid) {
         hasMessages = await loadTranscript(sid);
       }
+
+      // Re-surface messages written offline that haven't been delivered yet,
+      // so a reload (or reopening the installed app) still shows them.
+      try {
+        const queued = await getQueuedOffline();
+        if (queued.length) {
+          hasMessages = true;
+          setMessages(prev => [
+            ...prev,
+            ...queued.map(q => ({
+              role: 'user',
+              text: q.text,
+              timestamp: new Date(q.queued_at),
+              pending: true,
+              queueId: q.id,
+            })),
+          ]);
+        }
+      } catch { /* queue unavailable — nothing to restore */ }
 
       // Check-in is only offered on clean start when there are no messages in the current session
       if (!hasMessages && studentId) {
@@ -652,12 +847,23 @@ export default function StudentDashboard() {
           }
         } catch { /* ignore check-in errors */ }
       }
+
+      // If we're back online, deliver anything still queued.
+      flushOfflineQueue();
     };
 
     initSession();
 
     return () => clearInterval(timerRef.current);
-  }, [navigate, loadTranscript]);
+  }, [navigate, loadTranscript, flushOfflineQueue]);
+
+  // Deliver queued messages as soon as the connection returns.
+  useEffect(() => {
+    const onOnline = () => flushOfflineQueue();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [flushOfflineQueue]);
+
 
   useEffect(() => {
     const notifyLeave = () => {
@@ -822,97 +1028,89 @@ export default function StudentDashboard() {
     fireTyping(false);
     typingActiveRef.current = false;
 
-    setMessages(prev => [...prev, { role: 'user', text, timestamp: new Date() }]);
     setInput('');
-    setSending(true);
-    setStreamingStarted(false);
     if (window.innerWidth < 1024) setSidebarOpen(false);
 
-    const sessionId = localStorage.getItem('session_id');
-    const token     = localStorage.getItem('session_token');
+    // ── Offline: keep the message and deliver it when the connection
+    // returns. The student sees an honest "waiting to send" bubble, never a
+    // connection error.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const id = await enqueueOffline({
+        text,
+        session_id: localStorage.getItem('session_id'),
+        user_id: localStorage.getItem('student_id'),
+        intent: ventMode ? 'venting' : 'unknown',
+        vent_mode: ventMode,
+      });
+      setMessages(prev => [...prev, {
+        role: 'user', text, timestamp: new Date(), pending: true, queueId: id,
+      }]);
+      return;
+    }
+
+    setMessages(prev => [...prev, { role: 'user', text, timestamp: new Date() }]);
+    setSending(true);
+    setStreamingStarted(false);
+
     let botMsg = null;
+    const appendOrUpdateBot = (next) => {
+      if (!botMsg) {
+        botMsg = next;
+        setMessages(prev => [...prev, botMsg]);
+      } else {
+        botMsg = next;
+        setMessages(prev => [...prev.slice(0, -1), botMsg]);
+      }
+    };
 
     try {
-      const res = await apiFetch(`${BACKEND}/virtual-agent/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
+      await streamAgentReply(
+        {
           message:    text,
-          session_id: sessionId,
-          user_id: localStorage.getItem('student_id'),
-          intent:    ventMode ? 'venting' : 'unknown',
+          session_id: localStorage.getItem('session_id'),
+          user_id:    localStorage.getItem('student_id'),
+          intent:     ventMode ? 'venting' : 'unknown',
           vent_mode:  ventMode,
-        }),
-      });
-
-      if (!res.ok || !res.body) {
-        const err = await res.text().catch(() => String(res.status));
-        setMessages(prev => [...prev, { role: 'bot', text: `Error: ${err || res.status}`, timestamp: new Date() }]);
-        return;
-      }
-
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      const appendOrUpdateBot = (next) => {
-        if (!botMsg) {
-          botMsg = next;
-          setMessages(prev => [...prev, botMsg]);
-        } else {
-          botMsg = next;
-          setMessages(prev => [...prev.slice(0, -1), botMsg]);
-        }
-      };
-
-      const processLine = (line) => {
-        const trimmed = line.trim();
-        if (!trimmed) return;
-
-        let event;
-        try { event = JSON.parse(trimmed); } catch { return; }
-
-        if (event.type === 'delta') {
-          setStreamingStarted(true);
-          const prevText = botMsg ? botMsg.text : '';
-          appendOrUpdateBot({
-            role: 'bot',
-            text: prevText + event.text,
-            timestamp: botMsg ? botMsg.timestamp : new Date(),
-          });
-        } else if (event.type === 'done') {
-          const result = event.result || {};
-          if (result.session_id) {
-            localStorage.setItem('session_id', result.session_id);
-            setSessionId(result.session_id);
-          }
-          const normSev = normalizeSeverity(result.severity);
-          if (normSev) setSeverity(normSev);
-          if (result.counselor_active) setCounselorActive(true);
-          setCrisisHold(!!result.crisis_hold && !result.counselor_active);
-
-          if (!result.counselor_active && (!botMsg || !botMsg.text) && result.response) {
-            appendOrUpdateBot({ role: 'bot', text: result.response, timestamp: new Date() });
-          }
-        }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        lines.forEach(processLine);
-      }
-
-      if (buffer.trim()) processLine(buffer);
+        },
+        {
+          onDelta: (chunk) => {
+            setStreamingStarted(true);
+            const prevText = botMsg ? botMsg.text : '';
+            appendOrUpdateBot({
+              role: 'bot',
+              text: prevText + chunk,
+              timestamp: botMsg ? botMsg.timestamp : new Date(),
+            });
+          },
+          onDone: (result) => {
+            applyAgentResult(result);
+            if (!result.counselor_active && (!botMsg || !botMsg.text) && result.response) {
+              appendOrUpdateBot({ role: 'bot', text: result.response, timestamp: new Date() });
+            }
+          },
+        },
+      );
     } catch (err) {
-      if (botMsg && botMsg.text) {
+      if (err.isNetworkError && !botMsg) {
+        // The request never reached the server — likely just lost the
+        // connection. Queue it and keep the bubble, marked as pending.
+        const id = await enqueueOffline({
+          text,
+          session_id: localStorage.getItem('session_id'),
+          user_id: localStorage.getItem('student_id'),
+          intent: ventMode ? 'venting' : 'unknown',
+          vent_mode: ventMode,
+        });
+        setMessages(prev => prev.map((m, i) =>
+          i === prev.length - 1 && m.role === 'user' && !m.pending
+            ? { ...m, pending: true, queueId: id }
+            : m
+        ));
+      } else if (err.httpStatus) {
+        setMessages(prev => [...prev, {
+          role: 'bot', text: `Error: ${err.message || err.httpStatus}`, timestamp: new Date(),
+        }]);
+      } else if (botMsg && botMsg.text) {
         setMessages(prev => [...prev, {
           role: 'system',
           text: `Connection interrupted: ${err.message || 'Stream closed'}.`,
@@ -1567,10 +1765,12 @@ export default function StudentDashboard() {
                 </svg>
               </div>
               <p className="text-base font-semibold mb-1" style={{ color: theme.textPrimary }}>
-                Unable to load conversation history
+                {lowBandwidth ? "You're offline" : 'Unable to load conversation history'}
               </p>
               <p className="text-sm max-w-sm mb-4" style={{ color: theme.textSecondary }}>
-                We could not retrieve your previous messages. Please check your connection and try again.
+                {lowBandwidth
+                  ? 'You can still write a message. It will be saved and sent to GAIDA as soon as you reconnect.'
+                  : 'We could not retrieve your previous messages. Please check your connection and try again.'}
               </p>
               <button
                 onClick={() => loadTranscript(localStorage.getItem('session_id'))}
