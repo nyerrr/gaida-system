@@ -409,3 +409,142 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
         return {"intent": "suicidal", "confidence": 0.88}
 
     return {"intent": "suicidal", "confidence": 0.99}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Non-distress guard
+#
+# Added after the Section A expert audit (Oct 2026). Four licensed counselors
+# rated 100 real pilot messages against the five-class scheme and kept landing
+# on the same complaint: a message that states a goal, describes a coping
+# strategy, reports relief, or narrates an ordinary activity was being handed a
+# distress label anyway. The classifier is not hallucinating a signal — "I'm
+# trying to stay focused" really does share surface vocabulary with anxiety —
+# but a faint signal with no distress word anywhere in the message is not a
+# classification, and on the gold key it paged a counselor for a student who
+# said they were prioritising their workload to avoid burnout.
+#
+# The guard is conservative in the only direction that matters: it fires only
+# when a positive/coping or routine marker is present AND no distress
+# vocabulary appears at all. A negated marker ("not doing fine") is not
+# evidence of calm, so it does not count. It runs after the crisis path and
+# after loss detection, so it can never silence a crisis or a bereavement.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Genuine distress vocabulary. Over-inclusive on purpose: every extra word here
+# only makes the guard quieter, never louder.
+DISTRESS_SIGNAL_RE = re.compile(
+    r"\b("
+    r"worry|worries|worrying|worried|anxious|anxiety|nervous|nerbiyos|"
+    r"panic|panicky|panicking|overthink|overthinking|overwhelmed|overwhelming|"
+    r"kaba|kinakabahan|kakabahan|takot|natatakot|scared|afraid|fear|fearful|"
+    r"terrified|restless|racing|pounding|shaking|trembling|nanginginig|"
+    r"stress|stressed|burnout|"
+    r"sad|sadness|lonely|alone|empty|hopeless|hopelessness|"
+    r"cry|crying|umiiyak|iiyak|tears|lungkot|malungkot|"
+    r"hurt|hurts|sakit|broken|heartbroken|"
+    r"worthless|failure|ashamed|disappointed|meaningless|numb|"
+    r"no energy|no motivation|exhausted|drained|"
+    r"can'?t function|can'?t get out|can'?t get up|can'?t concentrate|"
+    r"can'?t handle|can'?t do anything|can'?t eat|can'?t move|"
+    r"angry|anger|mad|furious|rage|raging|annoyed|irritated|frustrated|"
+    r"galit|inis|bwisit|nakakainis|nakakagalit|sasabog|"
+    r"die|died|dying|dead|death|kill|killed|killing|suicide|suicidal|"
+    r"end it|end my|off myself|off my self|kms|cut myself|"
+    r"self.?harm|hurt myself|harming myself|better off dead|not worth living|"
+    r"hate|pissed|fed up|"
+    r"mamatay|magpakamatay|kamatayan|patayin|papatayin|mawala|wakasan|tapusin|"
+    r"wala nang|"
+    r"i miss|miss them|miss him|miss her|give up|gave up|"
+    r"can'?t cope|can'?t take|can'?t sleep|can'?t focus|can'?t breathe|"
+    r"no point|pointless"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Coping, relief and a positive turn. Multi-word on purpose so a negated
+# positive ("i don't enjoy") does not match the bare marker ("i enjoy").
+_POSITIVE_COPING_MARKERS = (
+    "i enjoy", "enjoying my", "enjoy it now", "enjoying it", "i enjoyed",
+    "relieved", "relief", "nakaluwag", "nakahinga", "gumaan", "gumagaan",
+    "doing fine", "doing okay", "doing ok", "i'm fine", "im fine",
+    "okay na ako", "ok na ako", "i'm okay", "im okay",
+    "proud of", "looking forward", "excited",
+    "trying to relax", "try to relax", "to relax myself", "relax myself",
+    "stay focused", "staying focused", "keep focused",
+    "taking a break", "take a break", "taking it one", "one at a time",
+    "my priority", "my priorities", "prioritiz", "prioritis",
+    "manage my time", "managing my time",
+    "i passed", "passed my", "pumasa", "nakatapos", "finished my",
+    "better now", "getting better",
+)
+
+# Ordinary daily activity. These are the "is this even a distress message?"
+# items the counselors kept marking Neutral.
+_ROUTINE_MARKERS = (
+    "homework", "my project", "school project", "video games", "videogame",
+    "netflix", "scrolling", "ate lunch", "eating lunch", "go to the mall",
+    "at the mall", "cleaning", "cleaned", "chores", "errands",
+    "played basketball", "watching netflix",
+)
+
+_NEGATOR_WORDS = frozenset({
+    "not", "no", "never", "dont", "don't", "doesnt", "doesn't", "didnt",
+    "didn't", "cant", "can't", "cannot", "wont", "won't", "isnt", "isn't",
+    "wasnt", "wasn't", "hindi", "di", "dili", "ayaw",
+})
+
+_WORD_RE_GENERIC = re.compile(r"[a-z']+")
+
+
+def _marker_without_negation(text: str, markers) -> bool:
+    """True if any marker appears without a negator in the three words before it."""
+    for marker in markers:
+        start = 0
+        while True:
+            idx = text.find(marker, start)
+            if idx == -1:
+                break
+            before = _WORD_RE_GENERIC.findall(text[max(0, idx - 18):idx])
+            if not any(w in _NEGATOR_WORDS for w in before[-3:]):
+                return True
+            start = idx + len(marker)
+    return False
+
+
+def has_distress_signal(text: str) -> bool:
+    """True when the message names any distress/anxiety/sadness/anger/crisis word."""
+    return bool(DISTRESS_SIGNAL_RE.search(text or ""))
+
+
+def is_non_distress(text: str) -> bool:
+    """True when a message only reports coping, relief or routine activity and
+    names no distress anywhere. Used to keep such messages Neutral instead of
+    letting a faint classifier signal stamp them as anxiety/sadness/anger."""
+    normalised = (text or "").lower().translate(_APOS_TRANSLATE)
+    if DISTRESS_SIGNAL_RE.search(normalised):
+        return False
+    return (
+        _marker_without_negation(normalised, _POSITIVE_COPING_MARKERS)
+        or _marker_without_negation(normalised, _ROUTINE_MARKERS)
+    )
+
+
+ACADEMIC_SETBACK_RE = re.compile(
+    r"\b(fail|failed|failing|fails|flunk|flunked|bagsak|bumagsak|nabagsak)\b"
+    r"|\b(low|mababa|mababang)\s+(grade|grades|mark|marks|score)\b",
+    re.IGNORECASE,
+)
+
+
+def is_academic_setback_without_distress(text: str) -> bool:
+    """A bare academic outcome ("I failed math") is a fact about a stressor, not
+    a disclosure of an emotion. The counselors did not read these as anxiety,
+    and the classifier only reaches anxiety on them by latching onto the word
+    "fail". Any co-occurring distress vocabulary vetoes the guard, so
+    "I'm terrified I'll fail everything" is left to the normal path.
+    """
+    neutralized = (text or "").lower().translate(_APOS_TRANSLATE)
+    if DISTRESS_SIGNAL_RE.search(neutralized):
+        return False
+    return bool(ACADEMIC_SETBACK_RE.search(neutralized))

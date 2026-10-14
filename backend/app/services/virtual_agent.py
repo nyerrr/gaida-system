@@ -11,6 +11,8 @@ from app.services.crisis_guards import (
     has_fiction_context,
     has_hypothetical_context,
     has_venting_context,
+    is_academic_setback_without_distress,
+    is_non_distress,
     is_self_referential,
     is_soft_venting_phrase,
     is_third_party_death_wish,
@@ -648,6 +650,21 @@ def detect_intent_and_level(text: str) -> dict:
     # ── Step 3: Safe phrase check — masks venting, never masks a real crisis ──
     if _is_safe_phrase(txt):
         return _build_result("neutral", 0.3)
+
+    # A message that only reports coping, relief or an ordinary activity, and
+    # names no distress anywhere, is not a distress message. Checked after loss
+    # (which keeps its own flow) and after the crisis path, so it can never
+    # silence either. See crisis_guards.is_non_distress.
+    if is_non_distress(text):
+        return _build_result("neutral", 0.3)
+
+    # A bare academic outcome ("I failed math") is a fact about a stressor, not
+    # a disclosure of an emotion. Routed to the internal `stress` intent at the
+    # low band: acknowledged, never mislabelled as clinical anxiety, and never
+    # paged through to a counselor.
+    if is_academic_setback_without_distress(text):
+        return _build_result("stress", 0.50)
+
     # ── Step 2: ML classifier ─────────────────────────────────────────────────
     try:
         from app.services.ml_classifier import classify_intent
