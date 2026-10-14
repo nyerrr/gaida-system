@@ -55,7 +55,17 @@ class CounselorLoginRequest(BaseModel):
     captcha_token: str = ""
 
 
-COUNSELOR_ACCOUNT_ID = "COUNSELOR01"
+def _counselor_credentials(faculty_id: str) -> dict | None:
+    """Return the counselor account for `faculty_id`, or None.
+
+    Any TEST_CREDENTIALS entry tagged role="counselor" is a valid counselor
+    login, so onboarding another counselor is a constants.py change rather than
+    a change to this endpoint.
+    """
+    creds = TEST_CREDENTIALS.get(faculty_id)
+    if creds and creds.get("role") == "counselor":
+        return creds
+    return None
 
 
 def validate_email_domain(email: str) -> bool:
@@ -166,17 +176,17 @@ def counselor_login(payload: CounselorLoginRequest):
     verify_captcha(payload.captcha_token, payload.antibot)
 
     faculty_id = payload.faculty_id.strip().upper()
-    creds = TEST_CREDENTIALS.get(COUNSELOR_ACCOUNT_ID)
+    creds = _counselor_credentials(faculty_id)
 
-    if faculty_id != COUNSELOR_ACCOUNT_ID or not creds or payload.password != creds.get("access_code"):
+    if not creds or payload.password != creds.get("access_code"):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    session_token = create_session_token(COUNSELOR_ACCOUNT_ID, role="counselor")
+    session_token = create_session_token(faculty_id, role="counselor")
 
     return LoginResponse(
         success=True,
         message="Login successful",
-        student_id=COUNSELOR_ACCOUNT_ID,
+        student_id=faculty_id,
         session_token=session_token,
         name=creds.get("name"),
     )

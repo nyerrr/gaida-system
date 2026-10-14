@@ -597,7 +597,7 @@ has consent**. (It's a developer-oriented artifact; the source of truth is Supab
 |---|---|---|
 | `/` | `PortalSelection` | Student vs Counselor portal chooser |
 | `/student-login` | `StudentLogin` | email/access-code + CAPTCHA; stores `session_token`, `student_id` |
-| `/counselor-login` | `CounselorLogin` | client-side check against hard-coded `counselor01/counsel123`; stores `'dev-token'` |
+| `/counselor-login` | `CounselorLogin` | calls `/api/auth/counselor-login`; stores `counselor_token` + `counselorData` |
 | `/forgot-password` | `ForgotPassword` | UI only (backend always says "reset link sent") |
 | `/consent` | `InformedConsent` | must accept → `POST /api/auth/consent`, sets `consent_given` + `session_id` |
 | `/student-dashboard` | `StudentDashboard` | the chat app |
@@ -831,11 +831,15 @@ phrases, jokes, and past-tense contexts.
 | `2024002` | `student2@ue.edu.ph` | `ACCESS456` | Juan dela Cruz | BS Computer Science, 3 |
 | `2024003` | `student3@ue.edu.ph` | `ACCESS789` | Ana Reyes | BS Nursing, 1 |
 | `COUNSELOR01` | `counselor01` | `counsel123` | Dr. Patricia Lim | — |
+| `COUNSELOR02` | `counselor02` | `counsel202` | Guidance Counselor 2 | — |
+| `COUNSELOR03` | `counselor03` | `counsel303` | Guidance Counselor 3 | — |
+| `COUNSELOR04` | `counselor04` | `counsel404` | Guidance Counselor 4 | — |
+| `COUNSELOR05` | `counselor05` | `counsel505` | Guidance Counselor 5 | — |
 
-The counselor login (frontend) uses its own hard-coded copy: `counselor01` / `counsel123`.
+Any `TEST_CREDENTIALS` entry tagged `role: "counselor"` can sign in at `/api/auth/counselor-login`; the endpoint no longer hardcodes a single account, so onboarding a counselor is a `constants.py` change. Names are placeholder until real staff are onboarded.
 
 - Email domain gate: must end in `@ue.edu.ph` (checked client- and server-side).
-- CAPTCHA ("antibot") is generated and validated client-side only (canvas-drawn 6 chars).
+- CAPTCHA ("antibot") is drawn and validated server-side (`/api/auth/captcha`); the browser only displays the image and returns the typed code with a signed, single-use token.
 
 ---
 

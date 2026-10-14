@@ -353,8 +353,8 @@ look up.)
 
 **Security**
 - Every endpoint requires a bearer login token, except the deliberately-public list: health check, the three login/consent/forgot-password routes, and the research intake + withdraw-by-code routes (a participant may not hold a token when entering or withdrawing). Counselor-only routes additionally require a *counselor* role token (403 otherwise); student/research routes verify the token owns the session.
-- Counselor login is still test credentials (`COUNSELOR01` / `counsel123`), passed through a real `/api/auth/counselor-login` endpoint now — there's no self-service account system yet (counselors hand out access).
-- The login CAPTCHA is checked in the browser only.
+- Counselor login uses test credentials (`COUNSELOR01`–`COUNSELOR05`) passed through a real `/api/auth/counselor-login` endpoint — there's no self-service account system yet (counselors hand out access). Any `TEST_CREDENTIALS` entry tagged `role: "counselor"` can sign in.
+- The login CAPTCHA is generated and verified server-side; the browser only displays it and sends back the typed code with a signed, single-use token.
 
 **Reliability**
 - Everything assumes a single server instance — it isn't built to run across multiple

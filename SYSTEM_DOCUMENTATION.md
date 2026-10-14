@@ -213,11 +213,15 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
 | Counselor ID | Access code | Name |
 |---|---|---|
 | `COUNSELOR01` | `counsel123` | Dr. Patricia Lim |
+| `COUNSELOR02` | `counsel202` | Guidance Counselor 2 |
+| `COUNSELOR03` | `counsel303` | Guidance Counselor 3 |
+| `COUNSELOR04` | `counsel404` | Guidance Counselor 4 |
+| `COUNSELOR05` | `counsel505` | Guidance Counselor 5 |
 
 ### 7.2 Login flows
 - **Student ID login** → `POST /api/auth/login` — checks `@ue.edu.ph` domain + hardcoded credential, issues bearer token. Rate-limited by student number.
 - **Google login** → `POST /api/auth/google` — verifies the ID token against `GOOGLE_CLIENT_ID`; requires `email_verified` and a `@ue.edu.ph` domain; maps a matching `TEST_CREDENTIALS` e-mail back to the student number. `503` if server-side `GOOGLE_CLIENT_ID` is unset.
-- **Counselor login** → `POST /api/auth/counselor-login` — validates the `COUNSELOR01` faculty ID + access code and issues a **counselor-bearing** token (unlocks the role-gated `/api/counselor/*` routes). `401` on bad credentials (rate-limited by faculty ID).
+- **Counselor login** → `POST /api/auth/counselor-login` — validates any `TEST_CREDENTIALS` entry tagged `role: "counselor"` (COUNSELOR01–COUNSELOR05) by faculty ID + password and issues a **counselor-bearing** token (unlocks the role-gated `/api/counselor/*` routes). `401` on bad credentials (rate-limited by faculty ID). Onboarding a counselor is a `constants.py` change, not an auth.py change.
 - **Consent** → `POST /api/auth/consent` records `consent_given` per session (upsert).
 - **Forgot password** → `POST /api/auth/forgot-password` — always returns success (no e-mail enumeration).
 
