@@ -292,6 +292,36 @@ _CLAUSE_BREAKS = frozenset({
 
 _NEGATION_LOOKBACK = 4
 
+# "Give up (on) (this|my) life" is a death wish built from words none of the
+# harm sets above can see: "give", "up" and "life" are all ordinary. It is
+# recognised as a phrase here so the negation guard can tell a plan apart from
+# its denial — "i want to give up this life" pages, "i don't want to give up
+# this life" does not. Past tense ("gave up") is deliberately excluded: it
+# reads as retrospective resignation ("i gave up on my dreams"), not a plan.
+_GIVE_UP_LIFE_WORDS = frozenset({"life", "buhay"})
+_GIVE_UP_LIFE_LINKERS = frozenset({
+    "up", "on", "sa", "to", "this", "my", "ang", "na", "nang",
+})
+
+
+def _starts_give_up_life(tokens, i) -> bool:
+    """True when tokens[i] begins a "give up ... life/buhay" construction."""
+    if tokens[i] not in ("give", "giving"):
+        return False
+    if i + 1 >= len(tokens) or tokens[i + 1] != "up":
+        return False
+    j = i + 2
+    for _ in range(3):
+        if j >= len(tokens):
+            return False
+        if tokens[j] in _GIVE_UP_LIFE_WORDS:
+            return True
+        if tokens[j] in _GIVE_UP_LIFE_LINKERS:
+            j += 1
+            continue
+        return False
+    return False
+
 
 def _harm_positions(tokens):
     """Indexes of death/harm words, including the "off myself" construction."""
@@ -302,6 +332,8 @@ def _harm_positions(tokens):
         elif tok in ("off", "end") and i + 1 < len(tokens) and tokens[i + 1] in (
             "myself", "self", "my", "it"
         ):
+            positions.append(i)
+        elif _starts_give_up_life(tokens, i):
             positions.append(i)
     return positions
 

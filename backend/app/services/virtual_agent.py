@@ -163,6 +163,21 @@ KEYWORDS = {
         ("want it all to end", 4.0),
         ("end everything", 3.5),
         ("done with life", 4.0),
+        # Surrender with a LIFE object. Distinct from the colloquial give-up
+        # vents ("i give up on everything", guarded in crisis_guards) and from
+        # "i give up on this assignment" (SAFE_PHRASES): the object here is the
+        # speaker's own life, which is a death wish, not a bad homework day.
+        # Enumerated rather than left to fuzzy matching because "give up on
+        # life" is only ~0.6 similar to "give up this life" — the content word
+        # "life" is shared but the window cannot bridge "on" -> "this".
+        ("give up on life", 3.5),
+        ("give up on my life", 3.5),
+        ("give up this life", 3.5),
+        ("give up my life", 3.5),
+        ("giving up on life", 3.5),
+        ("giving up on my life", 3.5),
+        ("give up sa life", 3.5),
+        ("give up sa buhay", 3.5),
         ("i just want it to stop", 3.5),
         ("no point in trying anymore", 3.0),
         ("tired of it all", 3.0),
@@ -414,7 +429,12 @@ EXPLICIT_SELF_HARM_RE = re.compile(
     r"\b(kill(ing|ed|er)?|kms|dying|die|suicid\w*|self[- ]harm\w*|"
     r"off (my )?self|end(ing)? my|hurt myself|harm myself|cut myself|"
     r"wakasan|wawakasan|mamatay|magpakamatay|kamatayan|papatayin|patayin|"
-    r"mawala|tatapusin|tapusin)\b",
+    r"mawala|tatapusin|tapusin|"
+    # "give up (on) (this|my) life" is a death wish phrased as surrender: the
+    # object is the speaker's own life, so it grounds an ML suicidal vote the
+    # same way "end my life" does. The life/buhay object is required — a bare
+    # "i give up" is the soft vent handled by crisis_guards.
+    r"giv(?:e|es|ing|en) up (?:on |sa |to )?(?:this |my )?(?:life|buhay))\b",
     re.IGNORECASE,
 )
 

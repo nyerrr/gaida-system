@@ -41,6 +41,11 @@ ORDINARY_LANGUAGE = [
     "I'm dying of laughter",
     "goodbye, see you next week",
     "I want to sleep",
+    # "give up" + a non-life object is not a death wish. The assignment one is
+    # also in SAFE_PHRASES; the others must not page on the life-object rule.
+    "i give up on this assignment",
+    "i gave up on my dreams",
+    "i just want to give up",
 ]
 
 # Explicit first-person DENIALS of a death/harm wish. Negating a death verb is
@@ -52,6 +57,10 @@ NEGATED_DENIALS = [
     "I'm not going to kill myself",
     "I don't want to hurt myself",
     "im not suicidal",
+    # Negating a "give up ... life" wish is the opposite of wanting to die, so
+    # the phrase must be recognised as harm by the negation guard too.
+    "i don't want to give up this life",
+    "i do not want to give up on life",
 ]
 
 # The other half of the contract: fixing the false positives above must never
@@ -64,6 +73,9 @@ GENUINE_CRISIS = [
     "wala na akong rason para mabuhay",
     "wala nang pag-asa, mamamatay na lang ako",
     "I want to disappear forever",
+    # Surrender phrased with the speaker's own life as the object.
+    "i want to give up this life",
+    "i am ready to give up on life",
     # A negated give-up idiom in one clause must not cancel the plan in the
     # next ("ayoko na" is Tagalog for "I give up", not "I don't want to").
     "ayoko na, lulunukin ko lahat ng gamot",

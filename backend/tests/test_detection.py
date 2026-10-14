@@ -65,6 +65,8 @@ TEST_CASES = [
     ("Indirect Filipino",         "wala na akong dahilan para mabuhay",                        "crisis", True),
     ("Indirect Filipino 2",       "para saan pa mabuhay",                                      "crisis", True),
     ("Indirect done with life",   "I'm done with life",                                        "crisis", True),
+    ("Give up this life",         "i want to give up this life",                               "crisis", True),
+    ("Give up on life",           "i am ready to give up on life",                             "crisis", True),
     ("Indirect want it to stop",  "I just want it all to stop permanently",                    "crisis", True),
     ("Breakup suicidal",          "she broke up with me I don't know if there's a point of living anymore", "crisis", True),
     ("No point anymore",          "there's no point anymore",                                  "crisis", True),

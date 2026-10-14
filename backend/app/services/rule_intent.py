@@ -56,6 +56,16 @@ KEYWORDS: Dict[str, List[tuple]] = {
         ("end everything", 3.5),
         ("i'm done with everything", 3.5),
         ("done with life", 4.0),
+        # Surrender with a LIFE object — a death wish, not the soft vent
+        # "i give up on everything" below (see crisis_guards.SOFT_VENTING_PHRASES).
+        ("give up on life", 4.0),
+        ("give up on my life", 4.0),
+        ("give up this life", 4.0),
+        ("give up my life", 4.0),
+        ("giving up on life", 4.0),
+        ("giving up on my life", 4.0),
+        ("give up sa life", 4.0),
+        ("give up sa buhay", 4.0),
         ("i just want it to stop", 3.5),
         ("i can't do this anymore", 3.0),
         ("i give up on everything", 3.5),
