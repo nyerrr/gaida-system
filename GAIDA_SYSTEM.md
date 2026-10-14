@@ -177,7 +177,7 @@ gaida-system/
 │   │       └── database.py       # Supabase client from env vars
 │   ├── tests/
 │   │   ├── test_services.py      # 3 unit/API tests (auth included)
-│   │   └── test_detection.py     # 30-case intent/severity scenario script
+│   │   └── test_detection.py     # ~50-case intent/severity scenario script
 │   ├── training/
 │   │   ├── anxiety_training.jsonl# labeled training data (text→label)
 │   │   ├── finetune.jsonl        # GPT fine-tuning conversation data
@@ -815,9 +815,16 @@ deploymentTarget = "cloudrun"
 
 ### `backend/tests/test_detection.py` (scenario script — `python test_detection.py`)
 
-Runs ~30 messages through `analyze_intent` and checks the expected severity bucket (Normal/Low/
+Runs ~50 messages through `analyze_intent` and checks the expected severity bucket (Normal/Low/
 Moderate/High/Crisis) and whether an alert should fire. Includes English + Filipino cases, safe
 phrases, jokes, and past-tense contexts.
+
+> **Dry-run mode.** `pytest` and the scenario script run with `GAIDA_DISABLE_PERSISTENCE=1` (set
+> automatically in `backend/tests/conftest.py` and at the top of `test_detection.py`). Detection
+> runs identically, but GAIDA writes **no** session, interaction, or `counselor_alerts` rows to
+> Supabase and sends **no** counselor emails. This is what keeps the shared counselor dashboard free
+> of fake Crisis alerts created by test runs. To exercise real persistence deliberately, set
+> `GAIDA_DISABLE_PERSISTENCE=0`.
 
 ---
 
@@ -929,8 +936,8 @@ npm run dev          # http://localhost:5173  (proxies /api, /audio, /virtual-ag
 
 ```bash
 cd backend
-pytest                              # fast service + auth tests
-python tests/test_detection.py      # 30-case intent/severity scenarios
+pytest                              # fast service + auth tests (dry-run — no DB writes)
+python tests/test_detection.py      # ~50-case intent/severity scenarios (dry-run)
 ```
 
 ### Try it

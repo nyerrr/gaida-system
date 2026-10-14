@@ -6,6 +6,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from app.utils.consent_checker import has_consent
+from app.utils.config import persistence_disabled
 
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 SESSION_STALE_MINUTES = 30  # sessions with no activity in this window are excluded from "active"
@@ -264,6 +265,8 @@ def start_session(user_id: str | None = None, session_id: str | None = None) -> 
             "peak_confidence": 0.3,
         }
     }
+    if persistence_disabled():
+        return sid
     try:
         from app.database.database import supabase
         supabase.table("sessions").insert({
@@ -338,6 +341,8 @@ def _persist_session_data(session_id: str, entry: Dict[str, Any]):
     """Runs in the background executor — consent check, Supabase insert,
     and log file write must never block the chat response."""
     try:
+        if persistence_disabled():
+            return
         if not has_consent(session_id):
             return
 

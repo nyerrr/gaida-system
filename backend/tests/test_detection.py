@@ -1,5 +1,11 @@
 import sys
 import os
+
+# Dry-run: exercise the full detection pipeline without writing sessions,
+# interactions, or counselor alerts to the live database. Without this, every
+# run leaves dozens of fake "pending Crisis" alerts on the counselor dashboard.
+os.environ.setdefault("GAIDA_DISABLE_PERSISTENCE", "1")
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.services.intent_router import analyze_intent

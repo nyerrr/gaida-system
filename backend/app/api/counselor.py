@@ -17,6 +17,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response as FastAPIResponse, StreamingResponse
 from app.utils.auth import get_current_user, require_role
+from app.utils.config import persistence_disabled
 from pydantic import BaseModel
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -458,39 +459,45 @@ def process_alert(
             }
             ALERTS.append(alert_entry)
 
-            try:
-                from app.database.database import supabase
+            # External side effects (DB row + email) are suppressed in
+            # dry-run mode so test harnesses can exercise the full detection
+            # pipeline without polluting the live database or paging a real
+            # counselor. The in-memory alert above is process-local and stays,
+            # so alert-handling logic is still exercised.
+            if not persistence_disabled():
+                try:
+                    from app.database.database import supabase
 
-                supabase.table("counselor_alerts").insert(
-                    {
-                        "session_id": session_id,
-                        "user_id": user_id or session_id,
-                        "intent": intent,
-                        "anxiety_score": anxiety_score,
-                        "severity": severity,
-                        "message": message,
-                        "status": "pending",
-                        "deleted": False,
-                    }
-                ).execute()
-            except Exception as e:
-                print(f"Supabase alert insert error: {e}")
+                    supabase.table("counselor_alerts").insert(
+                        {
+                            "session_id": session_id,
+                            "user_id": user_id or session_id,
+                            "intent": intent,
+                            "anxiety_score": anxiety_score,
+                            "severity": severity,
+                            "message": message,
+                            "status": "pending",
+                            "deleted": False,
+                        }
+                    ).execute()
+                except Exception as e:
+                    print(f"Supabase alert insert error: {e}")
 
-            # Email the counselor(s) on file — best-effort, never raises, and
-            # only fires for a brand-new alert (not on every update to an
-            # existing one) so an ongoing distressed conversation doesn't
-            # spam the inbox. See app/services/notifications.py.
-            try:
-                from app.services.notifications import send_counselor_alert_email
+                # Email the counselor(s) on file — best-effort, never raises,
+                # and only fires for a brand-new alert (not on every update to
+                # an existing one) so an ongoing distressed conversation
+                # doesn't spam the inbox. See app/services/notifications.py.
+                try:
+                    from app.services.notifications import send_counselor_alert_email
 
-                send_counselor_alert_email(
-                    session_id=session_id,
-                    severity=severity,
-                    intent=intent,
-                    message=message,
-                )
-            except Exception as e:
-                print(f"[counselor] alert email dispatch failed: {e}")
+                    send_counselor_alert_email(
+                        session_id=session_id,
+                        severity=severity,
+                        intent=intent,
+                        message=message,
+                    )
+                except Exception as e:
+                    print(f"[counselor] alert email dispatch failed: {e}")
 
         alert_sent = True
 
