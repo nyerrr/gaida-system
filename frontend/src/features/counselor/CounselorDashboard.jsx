@@ -7,6 +7,7 @@ import {
 
 import { BACKEND_URL as BACKEND } from '../../config';
 import apiFetch, { clearSensitiveLocalData } from '../../api';
+import CounselorBottomNav from './CounselorBottomNav';
 
 // ── Shared palette ─────────────────────────────────────────────────────────
 // Same cool-blue / soft-green identity as the student interface. Bright red
@@ -68,9 +69,9 @@ const formatRelative = (ts) => {
   return `${Math.floor(diff / 60)}h ago`;
 };
 
-const formatDuration = (startedAt) => {
+const formatDuration = (startedAt, now = Date.now()) => {
   if (!startedAt) return '—';
-  const diff = Math.floor((Date.now() - new Date(startedAt)) / 1000);
+  const diff = Math.max(0, Math.floor((now - new Date(startedAt)) / 1000));
   const h = Math.floor(diff / 3600);
   const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
   const s = (diff % 60).toString().padStart(2, '0');
@@ -735,6 +736,13 @@ function WelfarePage({ welfare, onViewChat, onMarkChecked }) {
 
 // ── Active Sessions Page ──────────────────────────────────────────────────────
 function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySessions, onViewChat, lastUpdated }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div>
       <div className="mb-6">
@@ -772,28 +780,30 @@ function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySession
               return (
                 <div
                   key={s.session_id}
-                  className="px-5 py-4 flex items-center gap-4"
+                  className="px-4 py-3.5 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4"
                   style={{ borderTop: idx === 0 ? 'none' : `1px solid ${P.panel}` }}
                 >
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: sc.hex }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-semibold" style={{ color: P.textPrimary }}>{s.session_id.slice(0, 16)}...</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white" style={{ background: sc.hex }}>{s.severity}</span>
-                      {s.has_alert && <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: P.redSoft, color: P.red }}>Alert</span>}
-                      {s.assigned_counselor_id && <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: P.accentSoft, color: P.accentDark }}>Assigned</span>}
+                  <div className="flex items-start sm:items-center gap-3 min-w-0">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1 sm:mt-0" style={{ background: sc.hex }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <span className="text-sm font-semibold truncate" style={{ color: P.textPrimary }}>{s.session_id.slice(0, 16)}...</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white flex-shrink-0" style={{ background: sc.hex }}>{s.severity}</span>
+                        {s.has_alert && <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: P.redSoft, color: P.red }}>Alert</span>}
+                        {s.assigned_counselor_id && <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: P.accentSoft, color: P.accentDark }}>Assigned</span>}
+                      </div>
+                      <p className="text-xs truncate" style={{ color: P.textMuted }}>{s.message_count} messages • {formatDuration(s.started_at, now)} • intent: {s.intent}</p>
                     </div>
-                    <p className="text-xs" style={{ color: P.textMuted }}>{s.message_count} messages • {formatDuration(s.started_at)} • intent: {s.intent}</p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="text-right mr-2">
-                      <p className="text-xs" style={{ color: P.textMuted }}>Confidence</p>
-                      <p className="text-sm font-bold" style={{ color: P.textPrimary }}>{(s.confidence * 100).toFixed(0)}%</p>
+                  <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 pl-6 sm:pl-0">
+                    <div className="text-left sm:text-right">
+                      <p className="text-[11px]" style={{ color: P.textMuted }}>Confidence</p>
+                      <p className="text-xs sm:text-sm font-bold" style={{ color: P.textPrimary }}>{(s.confidence * 100).toFixed(0)}%</p>
                     </div>
                     {(s.severity === 'High' || s.severity === 'Crisis' || s.has_alert) && (
                       <button
                         onClick={() => onViewChat(s.session_id)}
-                        className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
+                        className="text-xs px-3 py-1.5 rounded-lg font-medium text-white transition-opacity hover:opacity-90 active:scale-95"
                         style={{ background: P.accent }}
                       >
                         View Chat
@@ -1833,7 +1843,6 @@ export default function CounselorDashboard() {
   const [welfare, setWelfare] = useState([]);
   const [chatSessionId, setChatSessionId] = useState(null);
   const [expanded, setExpanded] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
   const alertsRef = useRef(alerts);
@@ -2097,9 +2106,14 @@ export default function CounselorDashboard() {
     : 'CR';
 
   return (
-    <div className="min-h-screen flex overflow-hidden" style={{ background: P.bg }}>
-      {expanded && <div className="fixed inset-0 z-20 hidden lg:block" style={{ background: 'rgba(34,48,58,0.25)' }} onClick={() => setExpanded(false)} />}
-      {mobileNavOpen && <div className="fixed inset-0 z-20 lg:hidden" style={{ background: 'rgba(34,48,58,0.45)' }} onClick={() => setMobileNavOpen(false)} />}
+    <div className="min-h-screen flex overflow-hidden w-full" style={{ background: P.bg }}>
+      {expanded && (
+        <div
+          className="fixed inset-0 z-20 hidden lg:block"
+          style={{ background: 'rgba(34,48,58,0.25)' }}
+          onClick={() => setExpanded(false)}
+        />
+      )}
 
       {/* Sidebar */}
       <style>{`
@@ -2107,25 +2121,45 @@ export default function CounselorDashboard() {
         .cdash-nav-btn:hover:not(.cdash-active) { background: rgba(255,255,255,0.06); color: #E3EAEE; }
         .cdash-side-btn:hover { background: rgba(255,255,255,0.06); color: #E3EAEE; }
       `}</style>
+
+      {/* Single persistent desktop counselor sidebar. */}
       <aside
         className={`
-          fixed top-0 left-0 h-full z-30 flex-col shadow-lg transition-all duration-300
-          ${mobileNavOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'}
-          lg:flex lg:translate-x-0
-          w-56 ${expanded ? 'lg:w-56' : 'lg:w-16'}
+          hidden lg:flex fixed top-0 left-0 h-full z-30 flex-col shadow-lg transition-all duration-300
+          ${expanded ? 'w-56' : 'w-16'}
         `}
         style={{ background: P.navy }}
       >
-        <div className="h-14 flex items-center justify-center flex-shrink-0" style={{ borderBottom: `1px solid ${P.navyLight}` }}>
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+        {/* Profile Avatar trigger in desktop sidebar */}
+        <div
+          className="h-16 flex items-center justify-center flex-shrink-0 px-3"
+          style={{ borderBottom: `1px solid ${P.navyLight}` }}
+        >
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
             style={{ background: P.accent, boxShadow: `0 0 0 3px ${P.navyLight}` }}
-            title={counselor.name || 'Counselor'}
+            title={`${counselor.name || 'Counselor'} • Open navigation`}
+            aria-label="Open counselor navigation"
           >
             <span className="text-white text-xs font-bold">{initials}</span>
-          </div>
-          {(expanded || mobileNavOpen) && <span className="text-white font-semibold text-sm tracking-wide ml-3 whitespace-nowrap">GAIDA</span>}
+          </button>
+          {expanded && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="ml-3 text-left overflow-hidden focus:outline-none group"
+              title="Open counselor navigation"
+            >
+              <span className="text-white font-semibold text-sm tracking-wide block truncate group-hover:text-[#5E8FBD] transition-colors">
+                {counselor.name || 'Counselor'}
+              </span>
+              <span className="text-[10px] block" style={{ color: '#8FA3AC' }}>Account Drawer →</span>
+            </button>
+          )}
         </div>
+
         <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden space-y-0.5 px-2">
           {NAV.map((navItem) => {
             const active = activePage === navItem.id;
@@ -2135,8 +2169,8 @@ export default function CounselorDashboard() {
             return (
               <button
                 key={navItem.id}
-                onClick={() => { setActivePage(navItem.id); setExpanded(false); setMobileNavOpen(false); }}
-                title={!expanded && !mobileNavOpen ? navItem.label : undefined}
+                onClick={() => { setActivePage(navItem.id); setExpanded(false); }}
+                title={!expanded ? navItem.label : undefined}
                 className={`cdash-nav-btn w-full flex items-center px-3 py-2.5 rounded-lg transition-colors duration-200 relative group ${active ? 'cdash-active' : ''}`}
                 style={active ? { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF', borderLeftColor: P.accent } : { color: '#8FA3AC' }}
               >
@@ -2151,8 +2185,8 @@ export default function CounselorDashboard() {
                     </span>
                   )}
                 </span>
-                {(expanded || mobileNavOpen) && <span className="ml-3 text-sm font-medium whitespace-nowrap">{navItem.label}</span>}
-                {!expanded && !mobileNavOpen && (
+                {expanded && <span className="ml-3 text-sm font-medium whitespace-nowrap">{navItem.label}</span>}
+                {!expanded && (
                   <span
                     className="absolute left-16 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-lg"
                     style={{ background: P.navyLight }}
@@ -2164,6 +2198,7 @@ export default function CounselorDashboard() {
             );
           })}
         </nav>
+
         <div className="flex-shrink-0 px-2 py-2 space-y-0.5" style={{ borderTop: `1px solid ${P.navyLight}` }}>
           <button
             onClick={() => setExpanded(!expanded)}
@@ -2184,7 +2219,7 @@ export default function CounselorDashboard() {
             onClick={logout}
             className="cdash-side-btn w-full flex items-center px-3 py-2.5 rounded-lg transition-colors duration-200"
             style={{ color: '#8FA3AC' }}
-            title={!expanded && !mobileNavOpen ? 'Logout' : undefined}
+            title={!expanded ? 'Logout' : undefined}
           >
             <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -2192,58 +2227,70 @@ export default function CounselorDashboard() {
                 <line x1="12" y1="2" x2="12" y2="12" />
               </svg>
             </span>
-            {(expanded || mobileNavOpen) && <span className="ml-3 text-sm font-medium">Logout</span>}
+            {expanded && <span className="ml-3 text-sm font-medium">Logout</span>}
           </button>
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden lg:ml-16">
+      {/* Main content wrapper */}
+      <div className={`flex-1 flex flex-col min-w-0 w-full overflow-hidden transition-[margin] duration-300 ${expanded ? 'lg:ml-56' : 'lg:ml-16'}`}>
         {/* Mobile top bar */}
-        <div className="flex lg:hidden items-center justify-between px-3 h-14 flex-shrink-0 z-10" style={{ background: P.navy, color: '#FFF' }}>
-          <div className="flex items-center gap-3">
+        <div
+          className="flex lg:hidden items-center justify-between px-3.5 h-14 flex-shrink-0 z-10"
+          style={{ background: P.navy, color: '#FFF' }}
+        >
+          {/* Avatar button opening Account Drawer */}
+          <div className="flex items-center gap-2.5">
             <button
-              onClick={() => { setExpanded(false); setMobileNavOpen(true); }}
-              className="p-2 -ml-1 rounded-lg hover:bg-white/10 transition-colors touch-manipulation"
-              aria-label="Open menu"
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+              style={{ background: P.accent, boxShadow: `0 0 0 2px ${P.navyLight}` }}
+              title="Open counselor navigation"
+              aria-label="Open counselor navigation"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+              <span className="text-white text-xs font-bold">{initials}</span>
             </button>
-            <span className="text-white font-semibold text-sm tracking-wide">GAIDA</span>
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-sm tracking-wide leading-tight">GAIDA</span>
+              <span className="text-[10px] leading-tight" style={{ color: '#8FA3AC' }}>Counselor Portal</span>
+            </div>
           </div>
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
-            style={{
-              background:
-                connectionStatus === 'live' ? 'rgba(76,175,80,0.2)' :
-                connectionStatus === 'connecting' ? 'rgba(99,102,241,0.2)' :
-                connectionStatus === 'polling' ? 'rgba(255,193,7,0.2)' : 'rgba(239,83,80,0.2)',
-              color:
-                connectionStatus === 'live' ? '#81C784' :
-                connectionStatus === 'connecting' ? '#A5B4FC' :
-                connectionStatus === 'polling' ? '#FCD34D' : '#EF5350',
-            }}
-          >
+
+          {/* Connection status badge */}
+          <div className="flex items-center gap-2">
             <div
-              className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'live' || connectionStatus === 'connecting' ? 'animate-pulse' : ''}`}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
               style={{
                 background:
+                  connectionStatus === 'live' ? 'rgba(76,175,80,0.2)' :
+                  connectionStatus === 'connecting' ? 'rgba(99,102,241,0.2)' :
+                  connectionStatus === 'polling' ? 'rgba(255,193,7,0.2)' : 'rgba(239,83,80,0.2)',
+                color:
                   connectionStatus === 'live' ? '#81C784' :
                   connectionStatus === 'connecting' ? '#A5B4FC' :
                   connectionStatus === 'polling' ? '#FCD34D' : '#EF5350',
               }}
-            />
-            <span className="capitalize">
-              {connectionStatus === 'live' ? 'Live' :
-               connectionStatus === 'connecting' ? 'Connecting' :
-               connectionStatus === 'polling' ? 'Polling' : 'Offline'}
-            </span>
+            >
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'live' || connectionStatus === 'connecting' ? 'animate-pulse' : ''}`}
+                style={{
+                  background:
+                    connectionStatus === 'live' ? '#81C784' :
+                    connectionStatus === 'connecting' ? '#A5B4FC' :
+                    connectionStatus === 'polling' ? '#FCD34D' : '#EF5350',
+                }}
+              />
+              <span className="capitalize">
+                {connectionStatus === 'live' ? 'Live' :
+                 connectionStatus === 'connecting' ? 'Connecting' :
+                 connectionStatus === 'polling' ? 'Polling' : 'Offline'}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Desktop top bar with realtime status */}
+        {/* Desktop top bar with realtime status and account trigger */}
         <div
           className="hidden lg:flex items-center justify-between px-6 py-2.5 border-b flex-shrink-0"
           style={{ background: P.surface, borderColor: P.border }}
@@ -2287,10 +2334,35 @@ export default function CounselorDashboard() {
                 Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
+
+            {/* Desktop Account drawer trigger button */}
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="flex items-center gap-2 py-1 px-2.5 rounded-xl border transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+              style={{ borderColor: P.border, background: P.surface }}
+              title="Open counselor navigation"
+              aria-label="Open counselor navigation"
+            >
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                style={{ background: P.accent }}
+              >
+                {initials}
+              </div>
+              <span className="text-xs font-medium" style={{ color: P.textPrimary }}>
+                {counselor.name ? counselor.name.split(' ')[0] : 'Counselor'}
+              </span>
+              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
         </div>
-        <main className="flex-1 overflow-y-auto">
-          <div className="w-full max-w-6xl mx-auto p-4 sm:p-6">
+
+        {/* Scrollable page content - padded at bottom on mobile for fixed bottom nav */}
+        <main className="flex-1 overflow-y-auto pb-24 lg:pb-6">
+          <div className="w-full max-w-6xl mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} />}
             {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} />}
             {activePage === 'welfare'   && <WelfarePage welfare={welfare} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} />}
@@ -2310,6 +2382,16 @@ export default function CounselorDashboard() {
           </div>
         </main>
       </div>
+
+      {/* Counselor Mobile Bottom Navigation (Canvas Student-inspired) */}
+      <CounselorBottomNav
+        activePage={activePage}
+        setActivePage={setActivePage}
+        pendingCount={pendingCount}
+        welfareCount={welfare.length}
+        sessionsCount={sessions.length}
+        onLogout={logout}
+      />
 
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
@@ -2457,55 +2539,59 @@ function ResolvedCasesPage() {
               <Card key={i} className="overflow-hidden">
                 {/* Case header */}
                 <div
-                  className="px-5 py-4 flex items-center gap-4 cursor-pointer transition-colors duration-200"
+                  className="px-4 py-3.5 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 cursor-pointer transition-colors duration-200"
                   onClick={() => setExpanded(isOpen ? null : i)}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       {c.profile ? (
-                        <span className="text-sm font-semibold" style={{ color: P.textPrimary }}>{c.profile.name}</span>
+                        <span className="text-sm font-semibold truncate" style={{ color: P.textPrimary }}>{c.profile.name}</span>
                       ) : (
-                        <span className="text-sm font-semibold" style={{ color: P.textPrimary }}>{c.student_id || 'Unknown'}</span>
+                        <span className="text-sm font-semibold truncate" style={{ color: P.textPrimary }}>{c.student_id || 'Unknown'}</span>
                       )}
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white" style={{ background: sc.hex }}>{c.severity}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white flex-shrink-0" style={{ background: sc.hex }}>{c.severity}</span>
                       {c.note?.outcome && (
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: oc?.bg, color: oc?.color }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: oc?.bg, color: oc?.color }}>
                           {OUTCOME_LABELS[c.note.outcome]}
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-xs" style={{ color: P.textMuted }}>
                       {c.profile && (
-                        <span className="text-xs" style={{ color: P.textMuted }}>
+                        <span>
                           {c.profile.student_id}
                           {c.profile.program && ` · ${c.profile.program}`}
                           {c.profile.year && `, Year ${c.profile.year}`}
                         </span>
                       )}
-                      <span className="text-xs" style={{ color: P.textMuted }}>{formatRelative(c.timestamp)}</span>
-                      <span className="text-xs" style={{ color: P.textMuted }}>{c.transcript?.length || 0} messages</span>
+                      <span>•</span>
+                      <span>{formatRelative(c.timestamp)}</span>
+                      <span>•</span>
+                      <span>{c.transcript?.length || 0} messages</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadSessionPdf(c.session_id);
-                      }}
-                      className="text-xs px-2.5 py-1 rounded-lg transition-colors duration-200"
-                      style={{ background: P.panel, color: P.textSecondary, border: `1px solid ${P.border}` }}
-                    >
-                      Export PDF
-                    </button>
-                    <button
-                      onClick={(e) => handleDelete(c.session_id, e)}
-                      className="text-xs px-2.5 py-1 rounded-lg transition-colors duration-200"
-                      style={{ background: P.redSoft, color: P.red, border: `1px solid ${P.redBorder}` }}
-                    >
-                      Delete
-                    </button>
+                  <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0" style={{ borderColor: P.panel }}>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadSessionPdf(c.session_id);
+                        }}
+                        className="text-xs px-2.5 py-1 rounded-lg transition-colors duration-200"
+                        style={{ background: P.panel, color: P.textSecondary, border: `1px solid ${P.border}` }}
+                      >
+                        Export PDF
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(c.session_id, e)}
+                        className="text-xs px-2.5 py-1 rounded-lg transition-colors duration-200"
+                        style={{ background: P.redSoft, color: P.red, border: `1px solid ${P.redBorder}` }}
+                      >
+                        Delete
+                      </button>
+                    </div>
 
-                    <span className="text-sm" style={{ color: P.textMuted }}>{isOpen ? '▲' : '▼'}</span>
+                    <span className="text-sm ml-2" style={{ color: P.textMuted }}>{isOpen ? '▲' : '▼'}</span>
                   </div>
                 </div>
 
