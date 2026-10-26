@@ -1842,7 +1842,11 @@ export default function CounselorDashboard() {
   const [sessionsError, setSessionsError] = useState(null);
   const [welfare, setWelfare] = useState([]);
   const [chatSessionId, setChatSessionId] = useState(null);
-  const [expanded, setExpanded] = useState(false);
+  // On desktop start with the full panel open so the profile and labels are
+  // visible immediately; phones always start with it closed.
+  const [expanded, setExpanded] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth >= 1024
+  );
   // Phone-only state for the single combined drawer (profile + navigation).
   // On desktop the same panel is a persistent rail, so `expanded` controls
   // its width; on mobile this controls whether it slides in from the left.
@@ -2123,16 +2127,18 @@ export default function CounselorDashboard() {
 
   const closeMobileNav = () => setMobileNavOpen(false);
 
+  // Escape closes the phone drawer (desktop is persistent, so it stays put).
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setMobileNavOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileNavOpen]);
+
   return (
     <div className="h-[100dvh] min-h-0 flex overflow-hidden w-full" style={{ background: P.bg }}>
-      {expanded && (
-        <div
-          className="fixed inset-0 z-20 hidden lg:block"
-          style={{ background: 'rgba(34,48,58,0.25)' }}
-          onClick={() => setExpanded(false)}
-        />
-      )}
-
       {/* Sidebar */}
       <style>{`
         .cdash-nav-btn { border-left: 3px solid transparent; }
@@ -2297,7 +2303,7 @@ export default function CounselorDashboard() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar overscroll-contain">
         <nav className="py-2 space-y-0.5 px-2">
           {NAV.map((navItem) => {
             const active = activePage === navItem.id;
@@ -2307,7 +2313,7 @@ export default function CounselorDashboard() {
             return (
               <button
                 key={navItem.id}
-                onClick={() => { setActivePage(navItem.id); setExpanded(false); closeMobileNav(); }}
+                onClick={() => { setActivePage(navItem.id); closeMobileNav(); }}
                 title={!panelWide ? navItem.label : undefined}
                 className={`cdash-nav-btn w-full flex items-center px-3 py-2.5 rounded-lg transition-colors duration-200 relative group ${active ? 'cdash-active' : ''}`}
                 style={active ? { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF', borderLeftColor: P.accent } : { color: '#8FA3AC' }}
@@ -2477,7 +2483,7 @@ export default function CounselorDashboard() {
         </div>
 
         {/* Scrollable page content - padded at bottom on mobile for fixed bottom nav */}
-        <main className="flex-1 overflow-y-auto pb-24 lg:pb-6">
+        <main className="flex-1 overflow-y-auto pb-24 lg:pb-6 no-scrollbar">
           <div className="w-full max-w-6xl mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} />}
             {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} />}
