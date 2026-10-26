@@ -2106,7 +2106,7 @@ export default function CounselorDashboard() {
     : 'CR';
 
   return (
-    <div className="min-h-screen flex overflow-hidden w-full" style={{ background: P.bg }}>
+    <div className="h-[100dvh] min-h-0 flex overflow-hidden w-full" style={{ background: P.bg }}>
       {expanded && (
         <div
           className="fixed inset-0 z-20 hidden lg:block"

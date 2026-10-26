@@ -140,7 +140,7 @@ export default function CounselorLogin() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center" style={{position:'relative'}}>
+    <div className="min-h-[100dvh] relative overflow-x-hidden overflow-y-auto flex items-center justify-center py-6" style={{position:'relative'}}>
 
       {/* Full bleed UE background */}
       <div

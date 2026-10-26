@@ -208,11 +208,11 @@ export default function ResearchFlow() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-[100dvh] flex items-center justify-center p-3 py-6 sm:p-4 sm:py-8"
       style={{ background: T.bg, color: T.textPrimary }}
     >
       <div
-        className="w-full max-w-xl rounded-2xl p-8"
+        className="w-full max-w-xl rounded-2xl p-5 sm:p-8"
         style={{ background: T.card, border: `1px solid ${T.border}`, boxShadow: '0 1px 3px rgba(46,59,68,0.06)' }}
       >
         <h1 className="text-2xl font-bold mb-1" style={{ color: T.textPrimary }}>
@@ -596,7 +596,7 @@ export default function ResearchFlow() {
               next time). We have no other way to identify your session.
             </p>
             <div
-              className="rounded-lg p-4 text-center text-xl font-mono tracking-widest mb-4"
+              className="rounded-lg p-4 text-center text-base sm:text-xl font-mono tracking-wide sm:tracking-widest mb-4 break-all"
               style={{ background: T.sidebar, border: `1px solid ${T.border}`, color: T.textPrimary }}
             >
               {issuedCode}

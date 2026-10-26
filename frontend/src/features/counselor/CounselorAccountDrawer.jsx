@@ -99,7 +99,7 @@ export default function CounselorAccountDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Counselor Account Menu"
-        className={`fixed inset-y-0 left-0 z-50 w-84 sm:w-96 max-w-[85vw] flex flex-col shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-50 w-[84vw] sm:w-96 max-w-[85vw] flex flex-col shadow-2xl transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         style={{ background: P.surface, borderRight: `1px solid ${P.border}` }}

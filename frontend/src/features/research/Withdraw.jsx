@@ -86,11 +86,11 @@ export default function Withdraw() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-[100dvh] flex items-center justify-center p-3 py-6 sm:p-4 sm:py-8"
       style={{ background: T.bg, color: T.textPrimary }}
     >
       <div
-        className="w-full max-w-md rounded-2xl p-8"
+        className="w-full max-w-md rounded-2xl p-5 sm:p-8"
         style={{ background: T.card, border: `1px solid ${T.border}`, boxShadow: '0 1px 3px rgba(46,59,68,0.06)' }}
       >
         <h1 className="text-2xl font-bold mb-1" style={{ color: T.textPrimary }}>Withdraw From the Study</h1>

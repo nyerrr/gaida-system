@@ -161,7 +161,7 @@ export default function StudentLogin() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-[100dvh] relative overflow-x-hidden overflow-y-auto flex items-center justify-center py-6">
       {/* Full bleed UE background */}
       <div
         className="absolute inset-0 bg-center bg-cover bg-no-repeat"
