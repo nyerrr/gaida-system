@@ -28,7 +28,6 @@ export default function CounselorBottomNav({
   pendingCount = 0,
   welfareCount = 0,
   sessionsCount = 0,
-  onLogout,
 }) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
@@ -42,7 +41,7 @@ export default function CounselorBottomNav({
       id: 'overview',
       label: 'Overview',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1.5" />
           <rect x="14" y="3" width="7" height="7" rx="1.5" />
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
@@ -55,7 +54,7 @@ export default function CounselorBottomNav({
       id: 'alerts',
       label: 'Alerts',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 4L3 20h18L12 4z" />
           <path d="M12 10v4" />
           <circle cx="12" cy="17" r="0.5" fill="currentColor" />
@@ -68,7 +67,7 @@ export default function CounselorBottomNav({
       id: 'sessions',
       label: 'Sessions',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="8" />
           <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
         </svg>
@@ -80,7 +79,7 @@ export default function CounselorBottomNav({
       id: 'welfare',
       label: 'Welfare',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 4c0 8 6 14 14 14l1-4-5-2-2 2c-2.5-1.3-4.7-3.5-6-6l2-2-2-5-4 1z" />
         </svg>
       ),
@@ -95,7 +94,7 @@ export default function CounselorBottomNav({
       label: 'Anxiety Detection',
       sub: 'Multimodal ML thresholds & live classification',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 12h4l2 7 3-14 2 9 2-4h7" />
         </svg>
       ),
@@ -105,7 +104,7 @@ export default function CounselorBottomNav({
       label: 'Reports & Analytics',
       sub: 'Monthly anxiety trends & severity breakdowns',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <line x1="4" y1="7" x2="20" y2="7" />
           <line x1="4" y1="12" x2="20" y2="12" />
           <line x1="4" y1="17" x2="14" y2="17" />
@@ -117,13 +116,21 @@ export default function CounselorBottomNav({
       label: 'Resolved Cases',
       sub: 'Case notes, session history & PDF exports',
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />
           <path d="M8 12.5l2.5 2.5L16 9.5" />
         </svg>
       ),
     },
   ];
+
+  const activeSecondary =
+    SECONDARY_ITEMS.find((item) => item.id === activePage) || null;
+
+  const tap = (callback) => {
+    if (navigator.vibrate) navigator.vibrate(8);
+    callback();
+  };
 
   const handleSelectPrimary = (id) => {
     setActivePage(id);
@@ -165,7 +172,7 @@ export default function CounselorBottomNav({
               </span>
               <button
                 onClick={() => setMoreMenuOpen(false)}
-                className="text-xs p-1 text-gray-500 hover:text-gray-800"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-base text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                 aria-label="Close menu"
               >
                 ✕
@@ -213,23 +220,6 @@ export default function CounselorBottomNav({
               })}
             </div>
 
-            {/* Counselor account actions */}
-            <div className="mt-3 pt-3 border-t flex gap-2" style={{ borderColor: P.border }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setMoreMenuOpen(false);
-                  onLogout?.();
-                }}
-                className="flex-1 py-2.5 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-2"
-                style={{ background: P.panel, color: P.textPrimary, border: `1px solid ${P.border}` }}
-              >
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H9m4 4v1a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v1" />
-                </svg>
-                Logout
-              </button>
-            </div>
           </div>
         </>
       )}
@@ -250,7 +240,7 @@ export default function CounselorBottomNav({
           return (
             <button
               key={item.id}
-              onClick={() => handleSelectPrimary(item.id)}
+              onClick={() => tap(() => handleSelectPrimary(item.id))}
               aria-current={active ? 'page' : undefined}
               className="flex-1 flex flex-col items-center justify-center py-2 px-1 relative transition-transform active:scale-95 touch-manipulation min-h-[54px]"
             >
@@ -291,34 +281,22 @@ export default function CounselorBottomNav({
 
         {/* More button */}
         <button
-          onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+          onClick={() => tap(() => setMoreMenuOpen(!moreMenuOpen))}
           aria-expanded={moreMenuOpen}
-          aria-label="More navigation options"
+          aria-current={isMoreActive ? 'page' : undefined}
+          aria-label={activeSecondary ? `${activeSecondary.label} — open navigation menu` : 'More navigation options'}
           className="flex-1 flex flex-col items-center justify-center py-2 px-1 relative transition-transform active:scale-95 touch-manipulation min-h-[54px]"
         >
-          {isMoreActive && (
-            <span
-              className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-b-full"
-              style={{ background: P.accent }}
-            />
-          )}
-
           <span className="relative flex items-center justify-center">
             <span style={{ color: isMoreActive ? '#FFFFFF' : P.textMuted }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="1.5" />
-                <circle cx="19" cy="12" r="1.5" />
-                <circle cx="5" cy="12" r="1.5" />
-              </svg>
+              {activeSecondary ? activeSecondary.icon : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="1.5" />
+                  <circle cx="19" cy="12" r="1.5" />
+                  <circle cx="5" cy="12" r="1.5" />
+                </svg>
+              )}
             </span>
-
-            {/* Indicator dot when a secondary page is active */}
-            {isMoreActive && (
-              <span
-                className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
-                style={{ background: P.accent }}
-              />
-            )}
           </span>
 
           <span
@@ -327,7 +305,7 @@ export default function CounselorBottomNav({
             }`}
             style={{ color: isMoreActive ? '#FFFFFF' : P.textMuted }}
           >
-            {activePage === 'detection' ? 'Detect' :
+            {activePage === 'detection' ? 'Detection' :
              activePage === 'reports' ? 'Reports' :
              activePage === 'resolved' ? 'Resolved' : 'More'}
           </span>

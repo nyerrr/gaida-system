@@ -28,3 +28,182 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none; /* Chrome, Safari, new Edge */
 }
+
+/* Counselor mobile app shell. These rules are intentionally scoped to the
+   phone breakpoint so the existing desktop workspace remains unchanged. */
+@media (max-width: 1023px) {
+  .counselor-mobile-page {
+    min-height: calc(100dvh - 7rem);
+    padding-bottom: 1.5rem;
+  }
+
+  .counselor-mobile-page button,
+  .counselor-mobile-page a,
+  nav[aria-label="Counselor mobile navigation"] button {
+    min-height: 44px;
+    touch-action: manipulation;
+    transition: transform 200ms ease, opacity 200ms ease, background-color 200ms ease;
+  }
+
+  .counselor-mobile-page button:active,
+  .counselor-mobile-page a:active,
+  nav[aria-label="Counselor mobile navigation"] button:active {
+    transform: scale(0.97);
+  }
+
+  .counselor-mobile-page h1 {
+    font-size: 1.75rem;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+  }
+
+  .counselor-mobile-page p,
+  .counselor-mobile-page input,
+  .counselor-mobile-page select,
+  .counselor-mobile-page button,
+  .counselor-mobile-page a {
+    font-size: 1rem;
+  }
+
+  .counselor-list-row {
+    border-radius: 0.875rem;
+    box-shadow: 0 1px 3px rgb(34 48 58 / 8%);
+  }
+
+  .counselor-filter-controls input,
+  .counselor-filter-controls select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .counselor-icon-button,
+  .counselor-filter-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid #dce7ea;
+    border-radius: 0.75rem;
+    background: #fff;
+    color: #33454f;
+  }
+
+  .counselor-filter-button {
+    padding: 0 1rem;
+    font-weight: 600;
+  }
+
+  .counselor-pull-indicator {
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #5c6f78;
+    font-size: 0.8125rem;
+  }
+
+  .counselor-crisis-banner {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid #f0d2ca;
+    border-radius: 0.875rem;
+    background: #fbedea;
+    color: #8c3a26;
+    text-align: left;
+  }
+
+  .counselor-crisis-banner strong {
+    font-size: 1rem;
+  }
+
+  .counselor-swipe-hint {
+    width: 100%;
+    margin: -0.5rem 0 1rem;
+    padding: 0.75rem;
+    border: 0;
+    border-radius: 0.75rem;
+    background: #eef4f6;
+    color: #5c6f78;
+    text-align: left;
+    font-size: 0.875rem !important;
+  }
+
+  .counselor-swipe-hint span {
+    float: right;
+    color: #4a7699;
+    font-weight: 700;
+  }
+
+  .counselor-threshold-card {
+    display: grid;
+    grid-template-columns: minmax(5rem, 0.7fr) minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.875rem;
+    border: 1px solid #dce7ea;
+    border-left: 0.3rem solid;
+    border-radius: 0.75rem;
+    background: #f7faf9;
+  }
+
+  .counselor-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgb(34 48 58 / 45%);
+  }
+
+  .counselor-bottom-sheet {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid #dce7ea;
+    border-radius: 1.25rem 1.25rem 0 0;
+    background: #fff;
+    box-shadow: 0 -8px 30px rgb(34 48 58 / 18%);
+  }
+
+  .counselor-sheet-handle {
+    width: 2.5rem;
+    height: 0.25rem;
+    margin: 0 auto 1rem;
+    border-radius: 999px;
+    background: #dce7ea;
+  }
+
+  .counselor-bottom-sheet h2 {
+    margin: 0 0 0.5rem;
+    color: #2e3b44;
+    font-size: 1.25rem;
+  }
+
+  .counselor-bottom-sheet button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.75rem 0.25rem;
+    border: 0;
+    border-bottom: 1px solid #eef4f6;
+    background: transparent;
+    color: #2e3b44;
+    text-align: left;
+  }
+
+  .counselor-bottom-sheet button.selected {
+    color: #4a7699;
+    font-weight: 700;
+  }
+}

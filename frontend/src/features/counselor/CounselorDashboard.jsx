@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -158,15 +158,20 @@ const NAV = [
   { id: 'resolved',  label: 'Resolved Cases' },
 ];
 
+// One shared type scale for every sidebar row (nav + utilities).
+const ROW_TEXT = 'text-[13px] font-medium';
+
 // One consistent line-icon set for the sidebar (was a mix of emoji and
 // symbol glyphs that rendered at different weights/sizes across browsers).
-function NavIcon({ id, size = 19 }) {
+function NavIcon({ id, size = 18 }) {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
   switch (id) {
     case 'overview':
       return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>;
     case 'alerts':
       return <svg {...common}><path d="M12 4L3 20h18L12 4z" /><path d="M12 10v4" /><circle cx="12" cy="17" r="0.5" fill="currentColor" /></svg>;
+    case 'bell':
+      return <svg {...common}><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>;
     case 'welfare':
       return <svg {...common}><path d="M6 4c0 8 6 14 14 14l1-4-5-2-2 2c-2.5-1.3-4.7-3.5-6-6l2-2-2-5-4 1z" /></svg>;
     case 'sessions':
@@ -177,9 +182,35 @@ function NavIcon({ id, size = 19 }) {
       return <svg {...common}><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="14" y2="17" /></svg>;
     case 'resolved':
       return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></svg>;
+    case 'hotline':
+      return <svg {...common}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" /></svg>;
+    case 'sound':
+      return <svg {...common}><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M18.36 5.64a9 9 0 0 1 0 12.73" /><path d="M5.59 15H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h1.59l4.7-4.71C10.92 3.66 12 4.11 12 5v14c0 .89-1.08 1.34-1.71.71L5.59 15z" /></svg>;
+    case 'privacy':
+      return <svg {...common}><path d="M9 12l2 2 4-4" /><path d="M12 2.94a11.96 11.96 0 0 1-8.62 3.04A12.02 12.02 0 0 0 3 9c0 5.59 3.82 10.29 9 11.62C17.18 19.29 21 14.59 21 9c0-1.04-.13-2.05-.38-3.02A11.96 11.96 0 0 1 12 2.94z" /></svg>;
+    case 'collapse':
+      return <svg {...common}><polyline points="15 18 9 12 15 6" /></svg>;
+    case 'logout':
+      return <svg {...common}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>;
+    case 'close':
+      return <svg {...common}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>;
+    case 'search':
+      return <svg {...common}><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>;
     default:
       return null;
   }
+}
+
+// Right-side flyout used by every icon-only row in the collapsed rail.
+function RowTooltip({ label }) {
+  return (
+    <span
+      className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+      style={{ background: P.navyLight }}
+    >
+      {label}
+    </span>
+  );
 }
 
 // ── Small shared UI pieces ───────────────────────────────────────────────────
@@ -197,10 +228,51 @@ function Card({ children, className = '', style = {} }) {
 function EmptyState({ icon, title, sub }) {
   return (
     <div className="text-center py-20" style={{ color: P.textMuted }}>
-      <p className="text-4xl mb-3">{icon}</p>
+      {typeof icon === 'string' ? (
+        <p className="text-4xl mb-3">{icon}</p>
+      ) : (
+        <div className="mb-3 flex justify-center">{icon}</div>
+      )}
       <p className="text-sm font-semibold" style={{ color: P.textSecondary }}>{title}</p>
       {sub && <p className="text-xs mt-1">{sub}</p>}
     </div>
+  );
+}
+
+function usePullToRefresh(onRefresh) {
+  const startY = useRef(null);
+  const [pullDistance, setPullDistance] = useState(0);
+
+  const onTouchStart = (event) => {
+    startY.current = event.touches[0].clientY;
+  };
+  const onTouchMove = (event) => {
+    if (startY.current === null) return;
+    const distance = event.touches[0].clientY - startY.current;
+    if (distance > 0) setPullDistance(Math.min(distance, 72));
+  };
+  const onTouchEnd = () => {
+    if (pullDistance > 52) onRefresh?.();
+    startY.current = null;
+    setPullDistance(0);
+  };
+
+  return {
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    style: { transform: `translateY(${pullDistance * 0.18}px)`, transition: pullDistance ? 'none' : 'transform 200ms ease' },
+    indicator: pullDistance > 0 ? (pullDistance > 52 ? 'Release to refresh' : 'Pull to refresh') : '',
+  };
+}
+
+// A neutral, non-error placeholder for chart cards. The page-level banner is
+// the only place that explains a failed request.
+function ChartEmptyState({ label = 'No data available' }) {
+  return (
+    <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>
+      {label}
+    </p>
   );
 }
 
@@ -209,7 +281,7 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
   const [analytics, setAnalytics] = useState(null);
   const [analyticsError, setAnalyticsError] = useState('');
 
-  useEffect(() => {
+  const loadAnalytics = useCallback(() => {
     apiFetch(`${BACKEND}/api/counselor/analytics/overview`)
       .then(r => r.json())
       .then(data => {
@@ -225,6 +297,10 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
         setAnalyticsError('Unable to load analytics right now. Please try again later.');
       });
   }, []);
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
 
   const pending = alerts.filter(a => a.status === 'pending').length;
   const highSessions = sessions.filter(s => s.severity === 'High' || s.severity === 'Crisis').length;
@@ -259,44 +335,60 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
     (m.normal || 0) + (m.low || 0) + (m.moderate || 0) + (m.high || 0) + (m.crisis || 0) > 0
   );
   return (
-    <div>
+    <div className="pb-8 lg:pb-0">
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Counselor Dashboard</h1>
         <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>University of the East - Guidance System Overview</p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {[
-          { label: 'Active Sessions', value: sessions.length, sub: 'right now', color: P.accent },
-          { label: 'Pending Alerts', value: pending, sub: 'need attention', color: pending > 0 ? P.red : P.textMuted },
-          { label: 'High Anxiety', value: highSessions, sub: 'active sessions', color: P.amber },
-          { label: 'Total Alerts', value: analytics?.total_alerts ?? alerts.length, sub: 'all time', color: P.navy },
+          { label: 'Active Sessions', value: sessions.length, sub: 'right now', color: P.accent, icon: 'sessions' },
+          { label: 'Pending Alerts', value: pending, sub: 'need attention', color: pending > 0 ? P.red : P.textMuted, icon: 'alerts' },
+          { label: 'High Anxiety', value: highSessions, sub: 'active sessions', color: P.amber, icon: 'detection' },
+          { label: 'Total Alerts', value: analytics?.total_alerts ?? alerts.length, sub: 'all time', color: P.navy, icon: 'bell' },
         ].map((s) => (
-          <Card key={s.label} className="p-5 flex items-center justify-between">
-            <div>
+          <Card key={s.label} className="p-3.5 sm:p-5 flex items-center justify-between gap-2">
+            <div className="min-w-0">
               <p className="text-xs mb-1" style={{ color: P.textSecondary }}>{s.label}</p>
               <p className="text-2xl font-bold" style={{ color: P.textPrimary }}>{s.value}</p>
               <p className="text-xs mt-0.5" style={{ color: P.textMuted }}>{s.sub}</p>
             </div>
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: s.color }}>
-              <span className="text-white text-lg font-bold">{s.value}</span>
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: s.color, color: '#FFFFFF' }}
+              aria-hidden="true"
+            >
+              <NavIcon id={s.icon} size={20} />
             </div>
           </Card>
         ))}
       </div>
       {analyticsError && (
-        <div className="mb-5 p-3 rounded-xl text-xs" style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}>
-          {analyticsError}
+        <div
+          className="mb-5 flex flex-col items-start gap-2 rounded-xl p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}
+          role="alert"
+        >
+          <span>{analyticsError}</span>
+          <button
+            type="button"
+            onClick={() => { setAnalyticsError(''); loadAnalytics(); }}
+            className="inline-flex min-h-[44px] w-full flex-shrink-0 items-center justify-center rounded-lg px-3 font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] sm:w-auto"
+            style={{ background: P.navy }}
+          >
+            Retry
+          </button>
         </div>
       )}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
         <Card className="p-5">
           <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Anxiety Level Trends</h3>
           {analyticsError ? (
-            <p className="text-xs text-center py-8" style={{ color: P.amber }}>{analyticsError}</p>
+            <ChartEmptyState />
           ) : !analytics ? (
-            <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>Loading trends...</p>
+            <ChartEmptyState label="Loading trends..." />
           ) : !hasTrendData ? (
-            <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>No trend data yet — appears once students have sessions</p>
+            <ChartEmptyState label="No trend data yet — appears once students have sessions" />
           ) : (
             <>
               <ResponsiveContainer width="100%" height={200}>
@@ -431,6 +523,7 @@ const getEscalationState = (a) => {
 // Defined at module scope (not inside AlertsPage) so the 2-second polling
 // re-render doesn't remount every row and drop mid-click button presses.
 function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
+  const touchStart = useRef(null);
   const sc  = severityColor(a.severity);
   const esc = getEscalationState(a);
   const needsAck = a.severity === 'High' || a.severity === 'Crisis';
@@ -461,8 +554,18 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
 
   return (
     <div
-      className="p-4 rounded-r-xl mb-3"
+      className="counselor-list-row p-4 rounded-r-xl mb-3"
       style={{ borderLeft: `4px solid ${borderColor}`, background: bgColor }}
+      onTouchStart={(e) => { touchStart.current = e.touches[0].clientX; }}
+      onTouchEnd={(e) => {
+        if (touchStart.current === null) return;
+        const distance = e.changedTouches[0].clientX - touchStart.current;
+        touchStart.current = null;
+        if (Math.abs(distance) < 70) return;
+        if (navigator.vibrate) navigator.vibrate(12);
+        if (distance > 0 && actionable && needsAck && !a.acknowledged) onAcknowledge(a.session_id);
+        if (distance < 0) onViewChat(a.session_id);
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -563,9 +666,14 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
   );
 }
 
-function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewChat, onUpdateStatus, onAcknowledge }) {
+function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewChat, onUpdateStatus, onAcknowledge, sessions }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [showSwipeHint, setShowSwipeHint] = useState(() => {
+    try { return !localStorage.getItem('gaida:alert-swipe-hint'); } catch { return true; }
+  });
+  const pull = usePullToRefresh(onRetryAlerts);
   // Tick every 30 seconds so escalation badges update without a poll.
   const [, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -590,7 +698,18 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
   const resolved  = filtered.filter(a => a.status !== 'pending' && a.status !== 'escalated');
 
   return (
-    <div>
+    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
+      {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
+      {sessions?.some((session) => session.severity === 'Crisis') && (
+        <button
+          type="button"
+          className="counselor-crisis-banner"
+          onClick={() => onViewChat(sessions.find((session) => session.severity === 'Crisis').session_id)}
+        >
+          <span><strong>Crisis session live</strong><br />Open the session now</span>
+          <span aria-hidden="true">›</span>
+        </button>
+      )}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Alerts</h1>
@@ -598,8 +717,11 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 counselor-filter-controls">
           <label htmlFor="alerts-search-input" className="sr-only">Search alerts</label>
+          <button type="button" className="counselor-icon-button" aria-label="Search alerts" onClick={() => document.getElementById('alerts-search-input')?.focus()}>
+            <NavIcon id="search" size={20} />
+          </button>
           <input
             id="alerts-search-input"
             name="alerts-search-input"
@@ -612,6 +734,9 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
             style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
           />
           <label htmlFor="alerts-severity-filter" className="sr-only">Filter alerts by severity</label>
+          <button type="button" className="counselor-filter-button" onClick={() => setFilterOpen(true)}>
+            Filter{severityFilter !== 'all' ? `: ${severityFilter}` : ''}
+          </button>
           <select
             id="alerts-severity-filter"
             name="alerts-severity-filter"
@@ -630,6 +755,15 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
           </select>
         </div>
       </div>
+      {showSwipeHint && alerts.length > 0 && (
+        <button
+          type="button"
+          className="counselor-swipe-hint"
+          onClick={() => { setShowSwipeHint(false); try { localStorage.setItem('gaida:alert-swipe-hint', '1'); } catch { /* private storage */ } }}
+        >
+          Swipe right to acknowledge · swipe left to open chat <span>Got it</span>
+        </button>
+      )}
 
       {alertsLoading && alerts.length === 0 ? (
         <div className="py-20 text-center">
@@ -682,6 +816,26 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
           )}
         </>
       )}
+      {filterOpen && (
+        <>
+          <div className="counselor-sheet-backdrop" onClick={() => setFilterOpen(false)} aria-hidden="true" />
+          <div className="counselor-bottom-sheet" role="dialog" aria-label="Filter alerts">
+            <div className="counselor-sheet-handle" />
+            <h2>Filter alerts</h2>
+            {['all', 'crisis', 'high', 'moderate', 'low', 'normal'].map((value) => (
+              <button
+                type="button"
+                key={value}
+                className={severityFilter === value ? 'selected' : ''}
+                onClick={() => { setSeverityFilter(value); setFilterOpen(false); }}
+              >
+                {value === 'all' ? 'All severities' : value[0].toUpperCase() + value.slice(1)}
+                <span>{severityFilter === value ? '✓' : '›'}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -692,9 +846,11 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
 // hit a severe reading and then stopped responding, rather than one who
 // calmly ended the session. Backend logic already existed; this page is
 // what actually makes it visible to a counselor.
-function WelfarePage({ welfare, onViewChat, onMarkChecked }) {
+function WelfarePage({ welfare, onViewChat, onMarkChecked, onRefresh }) {
+  const pull = usePullToRefresh(onRefresh);
   return (
-    <div>
+    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
+      {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Welfare Checks</h1>
         <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>
@@ -728,7 +884,11 @@ function WelfarePage({ welfare, onViewChat, onMarkChecked }) {
           );
         })
       ) : (
-        <EmptyState icon="☎" title="No welfare checks needed" sub="Silent High/Crisis sessions will appear here" />
+        <div className="text-center py-20" style={{ color: P.textMuted }}>
+          <div className="mb-3 flex justify-center"><NavIcon id="hotline" size={40} /></div>
+          <p className="text-sm font-semibold" style={{ color: P.textSecondary }}>No welfare checks needed</p>
+          <p className="text-xs mt-1">Silent High/Crisis sessions will appear here</p>
+        </div>
       )}
     </div>
   );
@@ -737,6 +897,7 @@ function WelfarePage({ welfare, onViewChat, onMarkChecked }) {
 // ── Active Sessions Page ──────────────────────────────────────────────────────
 function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySessions, onViewChat, lastUpdated }) {
   const [now, setNow] = useState(() => Date.now());
+  const pull = usePullToRefresh(onRetrySessions);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -744,7 +905,8 @@ function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySession
   }, []);
 
   return (
-    <div>
+    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
+      {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Active Sessions</h1>
         <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Severity levels visible - chat content only shown for flagged sessions</p>
@@ -1333,7 +1495,7 @@ const typingThrottleRef = useRef(null);
               ) : (
                 <>
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   Export
                 </>
@@ -1674,6 +1836,14 @@ const typingThrottleRef = useRef(null);
 
 // ── Detection Page ────────────────────────────────────────────────────────────
 function DetectionPage() {
+  const thresholds = [
+    { level: 'Normal', range: '< 0.45', color: P.textMuted, desc: 'GPT responds freely' },
+    { level: 'Low', range: '0.45 – 0.60', color: P.green, desc: 'Counselor protocol injected' },
+    { level: 'Moderate', range: '0.60 – 0.75', color: P.teal, desc: 'Stronger protocol injected' },
+    { level: 'High', range: '0.75 – 0.98', color: P.amber, desc: 'Counselor alert fired' },
+    { level: 'Crisis', range: '0.99 – 1.00', color: P.red, desc: 'Immediate intervention' },
+  ];
+
   return (
     <div>
       <div className="mb-6">
@@ -1695,16 +1865,27 @@ function DetectionPage() {
           </Card>
         ))}
       </div>
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <h3 className="text-sm font-semibold mb-3" style={{ color: P.textPrimary }}>Anxiety Level Thresholds</h3>
-        <div className="space-y-3">
-          {[
-            { level: 'Normal', range: '< 0.45', color: P.textMuted, desc: 'GPT responds freely' },
-            { level: 'Low', range: '0.45 – 0.60', color: P.green, desc: 'Counselor protocol injected' },
-            { level: 'Moderate', range: '0.60 – 0.75', color: P.teal, desc: 'Stronger protocol injected' },
-            { level: 'High', range: '0.75 – 0.98', color: P.amber, desc: 'Counselor alert fired' },
-            { level: 'Crisis', range: '0.99', color: P.red, desc: 'Immediate intervention' },
-          ].map((t) => (
+
+        {/* Mobile cards keep each threshold readable at one-hand width. */}
+        <div className="sm:hidden">
+          <div className="space-y-2.5">
+            {thresholds.map((t) => (
+              <div key={t.level} className="counselor-threshold-card" style={{ borderLeftColor: t.color }}>
+                <div>
+                  <p className="text-sm font-bold" style={{ color: P.textPrimary }}>{t.level}</p>
+                  <p className="text-xs" style={{ color: P.textMuted }}>{t.range}</p>
+                </div>
+                <p className="min-w-0 break-words text-xs font-medium leading-snug" style={{ color: P.textSecondary }}>{t.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Desktop layout is unchanged. */}
+        <div className="hidden space-y-3 sm:block">
+          {thresholds.map((t) => (
             <div key={t.level} className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: t.color }} />
               <span className="text-xs font-semibold w-16" style={{ color: P.textPrimary }}>{t.level}</span>
@@ -1723,7 +1904,7 @@ function ReportsPage() {
   const [reports, setReports] = useState(null);
   const [reportsError, setReportsError] = useState('');
 
-  useEffect(() => {
+  const loadReports = useCallback(() => {
     apiFetch(`${BACKEND}/api/counselor/analytics/reports`)
       .then(r => r.json())
       .then(data => {
@@ -1740,6 +1921,10 @@ function ReportsPage() {
       });
   }, []);
 
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
+
   const trendData = reports?.monthly_reports || [];
   const hasTrendData = trendData.some(m => (m.sessions || 0) + (m.alerts || 0) > 0);
 
@@ -1750,18 +1935,30 @@ function ReportsPage() {
         <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>System performance and anxiety detection analytics</p>
       </div>
       {reportsError && (
-        <div className="mb-5 p-3 rounded-xl text-xs" style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}>
-          {reportsError}
+        <div
+          className="mb-5 flex flex-col items-start gap-2 rounded-xl p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}
+          role="alert"
+        >
+          <span>{reportsError}</span>
+          <button
+            type="button"
+            onClick={() => { setReportsError(''); loadReports(); }}
+            className="inline-flex min-h-[44px] w-full flex-shrink-0 items-center justify-center rounded-lg px-3 font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] sm:w-auto"
+            style={{ background: P.navy }}
+          >
+            Retry
+          </button>
         </div>
       )}
       <Card className="p-5 mb-5">
         <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Monthly Trends</h3>
         {reportsError ? (
-          <p className="text-xs text-center py-8" style={{ color: P.amber }}>{reportsError}</p>
+          <ChartEmptyState />
         ) : !reports ? (
-          <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>Loading trends...</p>
+          <ChartEmptyState label="Loading trends..." />
         ) : !hasTrendData ? (
-          <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>No report data yet — appears once students have sessions</p>
+          <ChartEmptyState label="No report data yet — appears once students have sessions" />
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={trendData}>
@@ -1778,11 +1975,11 @@ function ReportsPage() {
       <Card className="p-5">
         <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Severity Breakdown by Month</h3>
         {reportsError ? (
-          <p className="text-xs text-center py-8" style={{ color: P.amber }}>{reportsError}</p>
+          <ChartEmptyState />
         ) : !reports ? (
-          <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>Loading breakdown...</p>
+          <ChartEmptyState label="Loading breakdown..." />
         ) : !hasTrendData ? (
-          <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>No breakdown data yet — appears once students have sessions</p>
+          <ChartEmptyState label="No breakdown data yet — appears once students have sessions" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -1833,7 +2030,7 @@ export default function CounselorDashboard() {
       navigate('/counselor-login');
     }
   }, [navigate]);
-  const [activePage, setActivePage] = useState('overview');
+  const [activePage, setActivePage] = useState('alerts');
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [alertsError, setAlertsError] = useState(null);
@@ -1851,12 +2048,15 @@ export default function CounselorDashboard() {
   // On desktop the same panel is a persistent rail, so `expanded` controls
   // its width; on mobile this controls whether it slides in from the left.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState(
-    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
-  );
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
   const alertsRef = useRef(alerts);
+  // Drawer a11y refs: remember what opened the overlay, return focus there on
+  // close, and lock the real scroll container (not just <body>) while open.
+  const mainRef = useRef(null);
+  const menuButtonRef = useRef(null);
+  const sidebarProfileRef = useRef(null);
+  const lastTriggerRef = useRef(null);
   // Mirror latest alerts for the 5-minute reminder check (must happen in an
   // effect — updating a ref during render violates the rules of React).
   useEffect(() => {
@@ -2118,262 +2318,459 @@ export default function CounselorDashboard() {
 
   // True whenever the combined panel is wide enough to show labels/profile.
   const panelWide = expanded || mobileNavOpen;
+  const counselorId = counselor.id || counselor.student_number || 'Faculty';
+  const connection = {
+    live: { color: P.green, label: 'Realtime' },
+    connecting: { color: '#A5B4FC', label: 'Connecting' },
+    polling: { color: P.amber, label: 'Polling' },
+    offline: { color: P.red, label: 'Offline' },
+  }[connectionStatus] || { color: P.red, label: 'Offline' };
 
-  const requestNotifications = async () => {
-    if (typeof Notification === 'undefined') return;
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
+  const openMobileNav = (trigger) => {
+    lastTriggerRef.current = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
+    setMobileNavOpen(true);
   };
 
-  const closeMobileNav = () => setMobileNavOpen(false);
-
-  // Escape closes the phone drawer (desktop is persistent, so it stays put).
-  useEffect(() => {
+  // The same overlay rules apply at any breakpoint: when the panel is open as
+  // an overlay, Escape/backdrop closes it, focus returns to the trigger, and
+  // the page behind it cannot scroll. On desktop it is normally a persistent
+  // rail, so this state is simply never set.
+  const closeMobileNav = useCallback(() => {
+    setMobileNavOpen(false);
+    // Only hand focus back when an overlay was actually open. On desktop the
+    // mobile trigger is hidden, so focusing it would silently lose focus.
     if (!mobileNavOpen) return;
+    window.requestAnimationFrame(() => {
+      // Prefer the element that opened the drawer, then the mobile trigger,
+      // then the sidebar avatar if the viewport crossed into desktop while the
+      // drawer was open (the mobile trigger is display:none there).
+      const target = [lastTriggerRef.current, menuButtonRef.current, sidebarProfileRef.current]
+        .find((el) => el && el.isConnected && el.offsetParent !== null);
+      target?.focus?.();
+    });
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') setMobileNavOpen(false);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeMobileNav();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [mobileNavOpen]);
+
+    // <main> is the actual scroll container in this layout, so lock both it and
+    // the document (the latter covers iOS rubber-banding / any page-level scroll).
+    const main = mainRef.current;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevMainOverflow = main ? main.style.overflowY : '';
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    if (main) main.style.overflowY = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      if (main) main.style.overflowY = prevMainOverflow;
+    };
+  }, [mobileNavOpen, closeMobileNav]);
 
   return (
     <div className="h-[100dvh] min-h-0 flex overflow-hidden w-full" style={{ background: P.bg }}>
-      {/* Sidebar */}
-      <style>{`
-        .cdash-nav-btn { border-left: 3px solid transparent; }
-        .cdash-nav-btn:hover:not(.cdash-active) { background: rgba(255,255,255,0.06); color: #E3EAEE; }
-        .cdash-side-btn:hover { background: rgba(255,255,255,0.06); color: #E3EAEE; }
-      `}</style>
-
       {mobileNavOpen && (
         <div
-          className="fixed inset-0 z-40 lg:hidden"
+          className="fixed inset-0 z-40"
           style={{ background: 'rgba(34,48,58,0.45)', backdropFilter: 'blur(2px)' }}
           onClick={closeMobileNav}
           aria-hidden="true"
         />
       )}
 
-      {/* Single combined drawer: counselor profile + navigation. On phones it
-          slides in from the left; on desktop it stays as a collapsible rail. */}
+      {/* Single combined panel: on phones this is the profile/utility drawer
+          (navigation lives in the bottom bar and its sheet); on desktop it
+          stays as the full collapsible navigation rail. */}
       <aside
         className={`
-          fixed top-0 left-0 h-full z-50 lg:z-30 flex flex-col shadow-lg transition-all duration-300
+          fixed top-0 left-0 h-full z-50 flex flex-col shadow-lg transition-all duration-300
+          ${mobileNavOpen ? '' : 'lg:z-30'}
           w-[84vw] max-w-[320px] ${expanded ? 'lg:w-56' : 'lg:w-16'}
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
         `}
         style={{ background: P.navy }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Identity header */}
+        {/* ── Zone 1: profile ───────────────────────────────────────────── */}
+        {/* Mobile drawer profile: full name, status dot on the avatar corner,
+            and only the counselor ID inside the badge. */}
         <div
-          className="h-16 flex items-center gap-3 flex-shrink-0 px-3"
+          className="flex-shrink-0 px-4 py-4 lg:hidden"
           style={{ borderBottom: `1px solid ${P.navyLight}` }}
         >
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
-            style={{ background: P.accent, boxShadow: `0 0 0 3px ${P.navyLight}` }}
-            title={panelWide ? 'Collapse navigation' : 'Expand navigation'}
-            aria-label="Toggle navigation"
-          >
-            <span className="text-white text-xs font-bold">{initials}</span>
-          </button>
-          {panelWide && (
+          <div className="flex items-start gap-3">
+            <div className="relative flex-shrink-0">
+              <div
+                className="flex h-11 w-11 items-center justify-center rounded-full"
+                style={{ background: P.accent, boxShadow: `0 0 0 3px ${P.navyLight}` }}
+              >
+                <span className="text-xs font-bold text-white">{initials}</span>
+              </div>
+              <span
+                className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2"
+                style={{ background: connection.color, borderColor: P.navy }}
+                title={`Connection: ${connection.label}`}
+                aria-label={`Connection: ${connection.label}`}
+              />
+            </div>
+
             <div className="min-w-0 flex-1">
-              <p className="text-white font-semibold text-sm tracking-wide truncate">
+              <p className="break-words text-sm font-semibold leading-snug text-white">
                 {counselor.name || 'Counselor'}
               </p>
-              <p className="text-[10px] truncate" style={{ color: '#8FA3AC' }}>
-                University of the East • Guidance Office
+              <p className="mt-0.5 text-[11px]" style={{ color: '#8FA3AC' }}>
+                Guidance Counselor
+              </p>
+              <p
+                className="mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={{ background: 'rgba(255,255,255,0.08)', color: '#BBD6EA' }}
+                title={`ID: ${counselorId}`}
+              >
+                ID: {counselorId}
               </p>
             </div>
-          )}
-          {mobileNavOpen && (
-            <button
-              type="button"
-              onClick={closeMobileNav}
-              className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 flex-shrink-0"
-              aria-label="Close navigation"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
 
-        {panelWide && (
-          <div className="px-3 pt-4 pb-2 space-y-3 flex-shrink-0">
-            {/* ID + role badges */}
-            <div className="flex flex-wrap gap-1.5">
-              <span
-                className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                style={{ background: 'rgba(94,143,189,0.22)', color: '#BBD6EA' }}
-              >
-                ID: {counselor.id || counselor.student_number || 'Faculty'}
-              </span>
-              <span
-                className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                style={{ background: 'rgba(107,161,135,0.22)', color: '#BFE0CC' }}
-              >
-                Authorized Counselor
-              </span>
-            </div>
-
-            {/* Live status */}
-            <div className="grid grid-cols-2 gap-2">
-              <div
-                className="p-2 rounded-lg"
-                style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${P.navyLight}` }}
-              >
-                <p className="text-[10px]" style={{ color: '#8FA3AC' }}>Connection</p>
-                <p className="text-[11px] font-semibold text-white capitalize mt-0.5">
-                  {connectionStatus === 'live' ? 'Realtime' :
-                   connectionStatus === 'connecting' ? 'Connecting' :
-                   connectionStatus === 'polling' ? 'Polling' : 'Offline'}
-                </p>
-              </div>
-              <div
-                className="p-2 rounded-lg"
-                style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${P.navyLight}` }}
-              >
-                <p className="text-[10px]" style={{ color: '#8FA3AC' }}>Pending Alerts</p>
-                <p
-                  className="text-[11px] font-semibold mt-0.5"
-                  style={{ color: pendingCount > 0 ? '#FCA5A5' : '#FFFFFF' }}
-                >
-                  {pendingCount}
-                </p>
-              </div>
-            </div>
-
-            {/* Counselor controls */}
-            <div className="space-y-1">
+            {mobileNavOpen && (
               <button
                 type="button"
-                onClick={playAlertSound}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-white/10"
-                style={{ color: '#D6E2E8' }}
+                onClick={closeMobileNav}
+                className="-mr-1 mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+                title="Close menu"
+                aria-label="Close menu"
               >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-                <span className="text-[11px] font-medium">Test Alert Chime</span>
+                <NavIcon id="close" size={18} />
               </button>
-              {notificationPermission !== 'granted' && (
-                <button
-                  type="button"
-                  onClick={requestNotifications}
-                  disabled={notificationPermission === 'unsupported'}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-white/10 disabled:opacity-50"
-                  style={{ color: '#D6E2E8' }}
-                >
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                  <span className="text-[11px] font-medium">Enable System Alerts</span>
-                </button>
-              )}
-              <a
-                href="/privacy"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors hover:bg-white/10"
-                style={{ color: '#D6E2E8' }}
-              >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <span className="text-[11px] font-medium">Privacy & Consent</span>
-              </a>
-            </div>
-
-            {/* Crisis hotline reference */}
-            <div
-              className="rounded-lg px-2.5 py-2"
-              style={{ background: 'rgba(176,71,47,0.18)', border: '1px solid rgba(240,210,202,0.25)' }}
-            >
-              <p className="text-[10px] font-semibold" style={{ color: '#F3B7A7' }}>Crisis Hotlines</p>
-              <p className="text-[10px] mt-0.5" style={{ color: '#E8C9C2' }}>
-                NCMH 1553 • Hopeline (02) 8804-4673
-              </p>
-            </div>
+            )}
           </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar overscroll-contain">
-        <nav className="py-2 space-y-0.5 px-2">
-          {NAV.map((navItem) => {
-            const active = activePage === navItem.id;
-            const isAlerts = navItem.id === 'alerts';
-            const isWelfare = navItem.id === 'welfare';
-            const badgeCount = isAlerts ? pendingCount : isWelfare ? welfare.length : 0;
-            return (
-              <button
-                key={navItem.id}
-                onClick={() => { setActivePage(navItem.id); closeMobileNav(); }}
-                title={!panelWide ? navItem.label : undefined}
-                className={`cdash-nav-btn w-full flex items-center px-3 py-2.5 rounded-lg transition-colors duration-200 relative group ${active ? 'cdash-active' : ''}`}
-                style={active ? { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF', borderLeftColor: P.accent } : { color: '#8FA3AC' }}
-              >
-                <span className="flex-shrink-0 relative flex items-center justify-center" style={{ width: 20, height: 20 }}>
-                  <NavIcon id={navItem.id} />
-                  {badgeCount > 0 && (
-                    <span
-                      className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-white flex items-center justify-center font-semibold"
-                      style={{ fontSize: '9px', background: P.red }}
-                    >
-                      {badgeCount}
-                    </span>
-                  )}
-                </span>
-                {panelWide && <span className="ml-3 text-sm font-medium whitespace-nowrap">{navItem.label}</span>}
-                {!panelWide && (
-                  <span
-                    className="absolute left-16 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-lg"
-                    style={{ background: P.navyLight }}
-                  >
-                    {navItem.label}{badgeCount > 0 && ` (${badgeCount})`}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
         </div>
 
-        <div className="flex-shrink-0 px-2 py-2 space-y-0.5" style={{ borderTop: `1px solid ${P.navyLight}` }}>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="cdash-side-btn hidden lg:flex w-full items-center px-3 py-2.5 rounded-lg transition-colors duration-200"
-            style={{ color: '#8FA3AC' }}
-          >
-            <span
-              className="flex-shrink-0 flex items-center justify-center transition-transform duration-300"
-              style={{ width: 20, height: 20, transform: expanded ? 'rotate(180deg)' : 'none' }}
+        {/* Desktop sidebar profile (layout unchanged). */}
+        <div
+          className="hidden flex-shrink-0 px-3 py-4 lg:block"
+          style={{ borderBottom: `1px solid ${P.navyLight}` }}
+        >
+          <div className={`flex items-start gap-3 ${panelWide ? '' : 'justify-center'}`}>
+            <button
+              ref={sidebarProfileRef}
+              type="button"
+              onClick={() => { if (!mobileNavOpen) setExpanded(!expanded); }}
+              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+              style={{ background: P.accent, boxShadow: `0 0 0 3px ${P.navyLight}` }}
+              title={mobileNavOpen ? `${counselor.name || 'Counselor'} — Guidance Counselor` : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+              aria-label={mobileNavOpen ? 'Counselor profile' : 'Toggle sidebar'}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 6 15 12 9 18" />
-              </svg>
-            </span>
-            {panelWide && <span className="ml-3 text-sm font-medium">Collapse</span>}
-          </button>
-          <button
-            onClick={() => { closeMobileNav(); logout(); }}
-            className="cdash-side-btn w-full flex items-center px-3 py-2.5 rounded-lg transition-colors duration-200"
-            style={{ color: '#8FA3AC' }}
-            title={!panelWide ? 'Logout' : undefined}
-          >
-            <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18.36 6.64a9 9 0 11-12.73 0" />
-                <line x1="12" y1="2" x2="12" y2="12" />
-              </svg>
-            </span>
-            {panelWide && <span className="ml-3 text-sm font-medium">Logout</span>}
-          </button>
+              <span className="text-white text-xs font-bold">{initials}</span>
+            </button>
+
+            {panelWide && (
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p
+                    className="truncate text-sm font-semibold text-white"
+                    title={counselor.name || 'Counselor'}
+                  >
+                    {counselor.name || 'Counselor'}
+                  </p>
+                  <span
+                    className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                    style={{ background: connection.color }}
+                    title={`Connection: ${connection.label}`}
+                    aria-label={`Connection: ${connection.label}`}
+                  />
+                </div>
+                <p
+                  className="mt-0.5 truncate text-[11px]"
+                  style={{ color: '#8FA3AC' }}
+                  title="Guidance Counselor"
+                >
+                  Guidance Counselor
+                </p>
+                <p
+                  className="mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: '#BBD6EA' }}
+                  title={`ID: ${counselorId} · Authorized Counselor`}
+                >
+                  ID: {counselorId} · Authorized Counselor
+                </p>
+              </div>
+            )}
+
+            {mobileNavOpen && (
+              <button
+                type="button"
+                onClick={closeMobileNav}
+                className="-mr-1 mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+                title="Close menu"
+                aria-label="Close menu"
+              >
+                <NavIcon id="close" size={18} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Zone 2: navigation (its own scroll area) ──────────────────── */}
+        <div
+          className={`min-h-0 flex-1 py-3 pl-2 pr-3 overscroll-contain ${
+            panelWide ? 'overflow-y-auto overflow-x-hidden no-scrollbar' : 'overflow-visible'
+          }`}
+        >
+          <nav className="hidden space-y-1 lg:block">
+            {NAV.map((navItem) => {
+              const active = activePage === navItem.id;
+              const badgeCount = navItem.id === 'alerts' ? pendingCount : 0;
+              return (
+                <button
+                  key={navItem.id}
+                  type="button"
+                  onClick={() => { setActivePage(navItem.id); closeMobileNav(); }}
+                  title={!panelWide ? navItem.label : undefined}
+                  aria-current={active ? 'page' : undefined}
+                  className={`group relative flex w-full items-center rounded-lg py-2.5 min-h-[44px] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
+                    panelWide ? 'gap-3 px-3' : 'justify-center px-0'
+                  } ${active ? '' : 'hover:bg-white/[0.06]'}`}
+                  style={active
+                    ? { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }
+                    : { color: '#93A6AE' }}
+                >
+                  {active && (
+                    <span
+                      className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full"
+                      style={{ background: P.accent }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="relative flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                    <NavIcon id={navItem.id} size={18} />
+                    {badgeCount > 0 && (
+                      <span
+                        className="absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 font-semibold text-white"
+                        style={{ fontSize: '9px', lineHeight: 1, background: P.red }}
+                      >
+                        {badgeCount}
+                      </span>
+                    )}
+                  </span>
+                  {panelWide && (
+                    <span className={`${ROW_TEXT} whitespace-nowrap`}>{navItem.label}</span>
+                  )}
+                  {!panelWide && (
+                    <RowTooltip label={`${navItem.label}${badgeCount > 0 ? ` (${badgeCount})` : ''}`} />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* ── Zone 3a: desktop pinned utilities (unchanged) ────────────── */}
+        <div
+          className="hidden flex-shrink-0 border-t px-2 py-2 lg:block"
+          style={{
+            borderColor: P.navyLight,
+            paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+          }}
+        >
+          <div className="space-y-0.5">
+            {/* Crisis hotlines */}
+            <div
+              className={`group relative flex w-full min-h-[44px] items-center rounded-lg ${
+                panelWide ? 'gap-3 px-3 py-2' : 'justify-center px-0 py-2'
+              }`}
+              title={!panelWide ? 'Crisis Hotlines — NCMH 1553 · Hopeline (02) 8804-4673' : undefined}
+            >
+              <span
+                className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center"
+                style={{ color: '#93A6AE' }}
+              >
+                <NavIcon id="hotline" size={18} />
+              </span>
+              {panelWide && (
+                <div className="min-w-0">
+                  <p className={ROW_TEXT} style={{ color: '#93A6AE' }}>Crisis Hotlines</p>
+                  <p className={`${ROW_TEXT} mt-0.5`} style={{ color: '#7F949D' }}>
+                    NCMH 1553 · Hopeline (02) 8804-4673
+                  </p>
+                </div>
+              )}
+              {!panelWide && <RowTooltip label="Crisis Hotlines — NCMH 1553 · Hopeline (02) 8804-4673" />}
+            </div>
+
+            {/* Test alert chime */}
+            <button
+              type="button"
+              onClick={playAlertSound}
+              title={!panelWide ? 'Test Alert Chime' : undefined}
+              className={`group relative flex w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
+                panelWide ? 'gap-3 px-3' : 'justify-center px-0'
+              }`}
+              style={{ color: '#93A6AE' }}
+            >
+              <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                <NavIcon id="sound" size={18} />
+              </span>
+              {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>Test Alert Chime</span>}
+              {!panelWide && <RowTooltip label="Test Alert Chime" />}
+            </button>
+
+            {/* Privacy & Consent */}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              title={!panelWide ? 'Privacy & Consent' : undefined}
+              className={`group relative flex w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
+                panelWide ? 'gap-3 px-3' : 'justify-center px-0'
+              }`}
+              style={{ color: '#93A6AE' }}
+            >
+              <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                <NavIcon id="privacy" size={18} />
+              </span>
+              {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>Privacy & Consent</span>}
+              {!panelWide && <RowTooltip label="Privacy & Consent" />}
+            </a>
+
+            {/* Collapse (desktop only) */}
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              title={!panelWide ? 'Expand sidebar' : undefined}
+              className={`group relative hidden w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] lg:flex ${
+                panelWide ? 'gap-3 px-3' : 'justify-center px-0'
+              }`}
+              style={{ color: '#93A6AE' }}
+            >
+              <span
+                className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center transition-transform duration-300"
+                style={{ transform: expanded ? 'none' : 'rotate(180deg)' }}
+              >
+                <NavIcon id="collapse" size={18} />
+              </span>
+              {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>Collapse</span>}
+              {!panelWide && <RowTooltip label="Expand sidebar" />}
+            </button>
+
+            <div className="border-t" style={{ borderColor: P.navyLight }} />
+
+            {/* Logout */}
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to log out?')) {
+                  closeMobileNav();
+                  logout();
+                }
+              }}
+              title={!panelWide ? 'Logout' : undefined}
+              className={`group relative flex w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
+                panelWide ? 'gap-3 px-3' : 'justify-center px-0'
+              }`}
+              style={{ color: '#93A6AE' }}
+            >
+              <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                <NavIcon id="logout" size={18} />
+              </span>
+              {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>Logout</span>}
+              {!panelWide && <RowTooltip label="Logout" />}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Zone 3b: mobile drawer utilities (pinned to the bottom) ──── */}
+        <div
+          className="flex-shrink-0 border-t px-3 py-2 lg:hidden"
+          style={{
+            borderColor: P.navyLight,
+            paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+          }}
+        >
+          <div className="flex flex-col gap-1">
+            {/* Crisis hotlines: red-tinted card, title on the first line,
+                each number on its own line. */}
+            <div
+              className="flex items-start gap-2.5 rounded-xl px-3 py-2.5"
+              style={{
+                background: 'rgba(176,71,47,0.18)',
+                border: '1px solid rgba(240,210,202,0.22)',
+              }}
+            >
+              <span
+                className="mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center"
+                style={{ color: '#F3B7A7' }}
+              >
+                <NavIcon id="hotline" size={18} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold" style={{ color: '#F3C4B8' }}>
+                  Crisis Hotlines
+                </p>
+                <p className="mt-1 text-[13px] leading-snug" style={{ color: '#F7D7CF' }}>
+                  <a href="tel:1553" className="block">NCMH 1553</a>
+                </p>
+                <p className="text-[13px] leading-snug" style={{ color: '#F7D7CF' }}>
+                  <a href="tel:+63288044673" className="block">Hopeline (02) 8804-4673</a>
+                </p>
+              </div>
+            </div>
+
+            {/* Smaller, quieter utilities. */}
+            <button
+              type="button"
+              onClick={playAlertSound}
+              className="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+              style={{ color: '#7F949D' }}
+            >
+              <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                <NavIcon id="sound" size={16} />
+              </span>
+              <span>Test Alert Chime</span>
+            </button>
+
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+              style={{ color: '#7F949D' }}
+            >
+              <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                <NavIcon id="privacy" size={16} />
+              </span>
+              <span>Privacy &amp; Consent</span>
+            </a>
+
+            <div className="border-t" style={{ borderColor: P.navyLight }} />
+
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to log out?')) {
+                  closeMobileNav();
+                  logout();
+                }
+              }}
+              className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+              style={{ color: '#93A6AE' }}
+            >
+              <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                <NavIcon id="logout" size={18} />
+              </span>
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -2384,15 +2781,17 @@ export default function CounselorDashboard() {
           className="flex lg:hidden items-center justify-between px-3.5 h-14 flex-shrink-0 z-10"
           style={{ background: P.navy, color: '#FFF' }}
         >
-          {/* Avatar button opening the combined profile + navigation drawer */}
+          {/* Avatar button opening the profile/utility drawer */}
           <div className="flex items-center gap-2.5">
             <button
+              ref={menuButtonRef}
               type="button"
-              onClick={() => setMobileNavOpen(true)}
-              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+              onClick={(e) => openMobileNav(e.currentTarget)}
+              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ background: P.accent, boxShadow: `0 0 0 2px ${P.navyLight}` }}
-              title="Open profile and navigation"
-              aria-label="Open profile and navigation"
+              title="Open profile and utilities"
+              aria-label="Open profile and utilities"
+              aria-expanded={mobileNavOpen}
             >
               <span className="text-white text-xs font-bold">{initials}</span>
             </button>
@@ -2483,11 +2882,11 @@ export default function CounselorDashboard() {
         </div>
 
         {/* Scrollable page content - padded at bottom on mobile for fixed bottom nav */}
-        <main className="flex-1 overflow-y-auto pb-24 lg:pb-6 no-scrollbar">
+        <main ref={mainRef} className="flex-1 overflow-y-auto pb-32 lg:pb-6 no-scrollbar">
           <div className="w-full max-w-6xl mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} />}
-            {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} />}
-            {activePage === 'welfare'   && <WelfarePage welfare={welfare} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} />}
+            {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} />}
+            {activePage === 'welfare'   && <WelfarePage welfare={welfare} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} onRefresh={fetchWelfare} />}
             {activePage === 'sessions' && (
               <SessionsPage
                 sessions={sessions}
@@ -2512,7 +2911,6 @@ export default function CounselorDashboard() {
         pendingCount={pendingCount}
         welfareCount={welfare.length}
         sessionsCount={sessions.length}
-        onLogout={logout}
       />
 
       {chatSessionId && (
