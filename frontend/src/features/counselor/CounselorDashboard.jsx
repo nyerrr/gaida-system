@@ -8,7 +8,6 @@ import {
 import { BACKEND_URL as BACKEND } from '../../config';
 import apiFetch, { clearSensitiveLocalData } from '../../api';
 import CounselorBottomNav from './CounselorBottomNav';
-import CounselorAccountDrawer from './CounselorAccountDrawer';
 
 // ── Shared palette ─────────────────────────────────────────────────────────
 // Same cool-blue / soft-green identity as the student interface. Bright red
@@ -1844,10 +1843,13 @@ export default function CounselorDashboard() {
   const [welfare, setWelfare] = useState([]);
   const [chatSessionId, setChatSessionId] = useState(null);
   const [expanded, setExpanded] = useState(false);
-  // Mobile-first profile drawer. Kept separate from `expanded` (which only
-  // widens the desktop-only sidebar) so tapping the avatar on a phone actually
-  // opens something — previously it toggled a sidebar that's hidden below `lg`.
-  const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
+  // Phone-only state for the single combined drawer (profile + navigation).
+  // On desktop the same panel is a persistent rail, so `expanded` controls
+  // its width; on mobile this controls whether it slides in from the left.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
   const alertsRef = useRef(alerts);
@@ -2110,6 +2112,17 @@ export default function CounselorDashboard() {
     ? counselor.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : 'CR';
 
+  // True whenever the combined panel is wide enough to show labels/profile.
+  const panelWide = expanded || mobileNavOpen;
+
+  const requestNotifications = async () => {
+    if (typeof Notification === 'undefined') return;
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+  };
+
+  const closeMobileNav = () => setMobileNavOpen(false);
+
   return (
     <div className="h-[100dvh] min-h-0 flex overflow-hidden w-full" style={{ background: P.bg }}>
       {expanded && (
@@ -2127,45 +2140,165 @@ export default function CounselorDashboard() {
         .cdash-side-btn:hover { background: rgba(255,255,255,0.06); color: #E3EAEE; }
       `}</style>
 
-      {/* Single persistent desktop counselor sidebar. */}
+      {mobileNavOpen && (
+        <div
+          className="fixed inset-0 z-40 lg:hidden"
+          style={{ background: 'rgba(34,48,58,0.45)', backdropFilter: 'blur(2px)' }}
+          onClick={closeMobileNav}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Single combined drawer: counselor profile + navigation. On phones it
+          slides in from the left; on desktop it stays as a collapsible rail. */}
       <aside
         className={`
-          hidden lg:flex fixed top-0 left-0 h-full z-30 flex-col shadow-lg transition-all duration-300
-          ${expanded ? 'w-56' : 'w-16'}
+          fixed top-0 left-0 h-full z-50 lg:z-30 flex flex-col shadow-lg transition-all duration-300
+          w-[84vw] max-w-[320px] ${expanded ? 'lg:w-56' : 'lg:w-16'}
+          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
         `}
         style={{ background: P.navy }}
       >
-        {/* Profile Avatar trigger in desktop sidebar */}
+        {/* Identity header */}
         <div
-          className="h-16 flex items-center justify-center flex-shrink-0 px-3"
+          className="h-16 flex items-center gap-3 flex-shrink-0 px-3"
           style={{ borderBottom: `1px solid ${P.navyLight}` }}
         >
           <button
             type="button"
-            onClick={() => setAccountDrawerOpen(true)}
+            onClick={() => setExpanded(!expanded)}
             className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
             style={{ background: P.accent, boxShadow: `0 0 0 3px ${P.navyLight}` }}
-            title={`${counselor.name || 'Counselor'} • Open profile`}
-            aria-label="Open counselor profile"
+            title={panelWide ? 'Collapse navigation' : 'Expand navigation'}
+            aria-label="Toggle navigation"
           >
             <span className="text-white text-xs font-bold">{initials}</span>
           </button>
-          {expanded && (
+          {panelWide && (
+            <div className="min-w-0 flex-1">
+              <p className="text-white font-semibold text-sm tracking-wide truncate">
+                {counselor.name || 'Counselor'}
+              </p>
+              <p className="text-[10px] truncate" style={{ color: '#8FA3AC' }}>
+                University of the East • Guidance Office
+              </p>
+            </div>
+          )}
+          {mobileNavOpen && (
             <button
               type="button"
-              onClick={() => setAccountDrawerOpen(true)}
-              className="ml-3 text-left overflow-hidden focus:outline-none group"
-              title="Open counselor profile"
+              onClick={closeMobileNav}
+              className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 flex-shrink-0"
+              aria-label="Close navigation"
             >
-              <span className="text-white font-semibold text-sm tracking-wide block truncate group-hover:text-[#5E8FBD] transition-colors">
-                {counselor.name || 'Counselor'}
-              </span>
-              <span className="text-[10px] block" style={{ color: '#8FA3AC' }}>Account Drawer →</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           )}
         </div>
 
-        <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden space-y-0.5 px-2">
+        {panelWide && (
+          <div className="px-3 pt-4 pb-2 space-y-3 flex-shrink-0">
+            {/* ID + role badges */}
+            <div className="flex flex-wrap gap-1.5">
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                style={{ background: 'rgba(94,143,189,0.22)', color: '#BBD6EA' }}
+              >
+                ID: {counselor.id || counselor.student_number || 'Faculty'}
+              </span>
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                style={{ background: 'rgba(107,161,135,0.22)', color: '#BFE0CC' }}
+              >
+                Authorized Counselor
+              </span>
+            </div>
+
+            {/* Live status */}
+            <div className="grid grid-cols-2 gap-2">
+              <div
+                className="p-2 rounded-lg"
+                style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${P.navyLight}` }}
+              >
+                <p className="text-[10px]" style={{ color: '#8FA3AC' }}>Connection</p>
+                <p className="text-[11px] font-semibold text-white capitalize mt-0.5">
+                  {connectionStatus === 'live' ? 'Realtime' :
+                   connectionStatus === 'connecting' ? 'Connecting' :
+                   connectionStatus === 'polling' ? 'Polling' : 'Offline'}
+                </p>
+              </div>
+              <div
+                className="p-2 rounded-lg"
+                style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${P.navyLight}` }}
+              >
+                <p className="text-[10px]" style={{ color: '#8FA3AC' }}>Pending Alerts</p>
+                <p
+                  className="text-[11px] font-semibold mt-0.5"
+                  style={{ color: pendingCount > 0 ? '#FCA5A5' : '#FFFFFF' }}
+                >
+                  {pendingCount}
+                </p>
+              </div>
+            </div>
+
+            {/* Counselor controls */}
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={playAlertSound}
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-white/10"
+                style={{ color: '#D6E2E8' }}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+                <span className="text-[11px] font-medium">Test Alert Chime</span>
+              </button>
+              {notificationPermission !== 'granted' && (
+                <button
+                  type="button"
+                  onClick={requestNotifications}
+                  disabled={notificationPermission === 'unsupported'}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-white/10 disabled:opacity-50"
+                  style={{ color: '#D6E2E8' }}
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  <span className="text-[11px] font-medium">Enable System Alerts</span>
+                </button>
+              )}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors hover:bg-white/10"
+                style={{ color: '#D6E2E8' }}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span className="text-[11px] font-medium">Privacy & Consent</span>
+              </a>
+            </div>
+
+            {/* Crisis hotline reference */}
+            <div
+              className="rounded-lg px-2.5 py-2"
+              style={{ background: 'rgba(176,71,47,0.18)', border: '1px solid rgba(240,210,202,0.25)' }}
+            >
+              <p className="text-[10px] font-semibold" style={{ color: '#F3B7A7' }}>Crisis Hotlines</p>
+              <p className="text-[10px] mt-0.5" style={{ color: '#E8C9C2' }}>
+                NCMH 1553 • Hopeline (02) 8804-4673
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <nav className="py-2 space-y-0.5 px-2">
           {NAV.map((navItem) => {
             const active = activePage === navItem.id;
             const isAlerts = navItem.id === 'alerts';
@@ -2174,8 +2307,8 @@ export default function CounselorDashboard() {
             return (
               <button
                 key={navItem.id}
-                onClick={() => { setActivePage(navItem.id); setExpanded(false); }}
-                title={!expanded ? navItem.label : undefined}
+                onClick={() => { setActivePage(navItem.id); setExpanded(false); closeMobileNav(); }}
+                title={!panelWide ? navItem.label : undefined}
                 className={`cdash-nav-btn w-full flex items-center px-3 py-2.5 rounded-lg transition-colors duration-200 relative group ${active ? 'cdash-active' : ''}`}
                 style={active ? { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF', borderLeftColor: P.accent } : { color: '#8FA3AC' }}
               >
@@ -2190,8 +2323,8 @@ export default function CounselorDashboard() {
                     </span>
                   )}
                 </span>
-                {expanded && <span className="ml-3 text-sm font-medium whitespace-nowrap">{navItem.label}</span>}
-                {!expanded && (
+                {panelWide && <span className="ml-3 text-sm font-medium whitespace-nowrap">{navItem.label}</span>}
+                {!panelWide && (
                   <span
                     className="absolute left-16 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-lg"
                     style={{ background: P.navyLight }}
@@ -2203,6 +2336,7 @@ export default function CounselorDashboard() {
             );
           })}
         </nav>
+        </div>
 
         <div className="flex-shrink-0 px-2 py-2 space-y-0.5" style={{ borderTop: `1px solid ${P.navyLight}` }}>
           <button
@@ -2218,13 +2352,13 @@ export default function CounselorDashboard() {
                 <polyline points="9 6 15 12 9 18" />
               </svg>
             </span>
-            {expanded && <span className="ml-3 text-sm font-medium">Collapse</span>}
+            {panelWide && <span className="ml-3 text-sm font-medium">Collapse</span>}
           </button>
           <button
-            onClick={logout}
+            onClick={() => { closeMobileNav(); logout(); }}
             className="cdash-side-btn w-full flex items-center px-3 py-2.5 rounded-lg transition-colors duration-200"
             style={{ color: '#8FA3AC' }}
-            title={!expanded ? 'Logout' : undefined}
+            title={!panelWide ? 'Logout' : undefined}
           >
             <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -2232,7 +2366,7 @@ export default function CounselorDashboard() {
                 <line x1="12" y1="2" x2="12" y2="12" />
               </svg>
             </span>
-            {expanded && <span className="ml-3 text-sm font-medium">Logout</span>}
+            {panelWide && <span className="ml-3 text-sm font-medium">Logout</span>}
           </button>
         </div>
       </aside>
@@ -2244,15 +2378,15 @@ export default function CounselorDashboard() {
           className="flex lg:hidden items-center justify-between px-3.5 h-14 flex-shrink-0 z-10"
           style={{ background: P.navy, color: '#FFF' }}
         >
-          {/* Avatar button opening Account Drawer */}
+          {/* Avatar button opening the combined profile + navigation drawer */}
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={() => setAccountDrawerOpen(true)}
+              onClick={() => setMobileNavOpen(true)}
               className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ background: P.accent, boxShadow: `0 0 0 2px ${P.navyLight}` }}
-              title="Open counselor profile"
-              aria-label="Open counselor profile"
+              title="Open profile and navigation"
+              aria-label="Open profile and navigation"
             >
               <span className="text-white text-xs font-bold">{initials}</span>
             </button>
@@ -2295,7 +2429,7 @@ export default function CounselorDashboard() {
           </div>
         </div>
 
-        {/* Desktop top bar with realtime status and account trigger */}
+        {/* Desktop top bar with realtime status */}
         <div
           className="hidden lg:flex items-center justify-between px-6 py-2.5 border-b flex-shrink-0"
           style={{ background: P.surface, borderColor: P.border }}
@@ -2339,29 +2473,6 @@ export default function CounselorDashboard() {
                 Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
-
-            {/* Desktop Account drawer trigger button */}
-            <button
-              type="button"
-              onClick={() => setAccountDrawerOpen(true)}
-              className="flex items-center gap-2 py-1 px-2.5 rounded-xl border transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
-              style={{ borderColor: P.border, background: P.surface }}
-              title="Open counselor profile"
-              aria-label="Open counselor profile"
-            >
-              <div
-                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                style={{ background: P.accent }}
-              >
-                {initials}
-              </div>
-              <span className="text-xs font-medium" style={{ color: P.textPrimary }}>
-                {counselor.name ? counselor.name.split(' ')[0] : 'Counselor'}
-              </span>
-              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
           </div>
         </div>
 
@@ -2401,17 +2512,6 @@ export default function CounselorDashboard() {
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
       )}
-
-      <CounselorAccountDrawer
-        isOpen={accountDrawerOpen}
-        onClose={() => setAccountDrawerOpen(false)}
-        counselor={counselor}
-        initials={initials}
-        connectionStatus={connectionStatus}
-        pendingCount={pendingCount}
-        onLogout={logout}
-        onPlayTestSound={playAlertSound}
-      />
     </div>
   );
 }
