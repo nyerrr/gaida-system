@@ -1404,7 +1404,7 @@ const typingThrottleRef = useRef(null);
                 .map((m, i) => (
                   <div key={i} className={`flex ${m.sender === 'student' || m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className="max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed"
+                      className="max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed break-words [overflow-wrap:anywhere]"
                       style={
                         m.sender === 'student' || m.sender === 'user'
                           ? { background: P.navy, color: '#FFFFFF', borderTopRightRadius: '4px' }
@@ -2615,7 +2615,7 @@ function ResolvedCasesPage() {
                         c.transcript?.map((m, j) => (
                           <div key={j} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div
-                              className="max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed"
+                              className="max-w-[75%] px-3 py-2 rounded-xl text-xs leading-relaxed break-words [overflow-wrap:anywhere]"
                               style={
                                 m.sender === 'user'
                                   ? { background: P.navy, color: '#FFFFFF', borderTopRightRadius: '4px' }

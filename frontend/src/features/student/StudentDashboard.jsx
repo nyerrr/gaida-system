@@ -283,7 +283,7 @@ function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlay
 
   return (
     <div className={`flex flex-col gap-1 max-w-[85%] sm:max-w-[72%] lg:max-w-[65%] ${role === 'user' ? 'items-end' : 'items-start'}`}>
-      <div className="px-4 py-3 sm:px-5 sm:py-3.5 text-[15px] sm:text-sm leading-relaxed shadow-sm" style={{ ...bubbleStyle, lineHeight: 1.65 }}>
+      <div className="px-4 py-3 sm:px-5 sm:py-3.5 text-[15px] sm:text-sm leading-relaxed shadow-sm break-words [overflow-wrap:anywhere]" style={{ ...bubbleStyle, lineHeight: 1.65 }}>
         {isVoice && (
           <div className="flex items-center gap-1.5 mb-1.5" style={{ opacity: 0.65 }}>
             <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
