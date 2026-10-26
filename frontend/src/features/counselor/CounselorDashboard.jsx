@@ -8,6 +8,7 @@ import {
 import { BACKEND_URL as BACKEND } from '../../config';
 import apiFetch, { clearSensitiveLocalData } from '../../api';
 import CounselorBottomNav from './CounselorBottomNav';
+import CounselorAccountDrawer from './CounselorAccountDrawer';
 
 // ── Shared palette ─────────────────────────────────────────────────────────
 // Same cool-blue / soft-green identity as the student interface. Bright red
@@ -1843,6 +1844,10 @@ export default function CounselorDashboard() {
   const [welfare, setWelfare] = useState([]);
   const [chatSessionId, setChatSessionId] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  // Mobile-first profile drawer. Kept separate from `expanded` (which only
+  // widens the desktop-only sidebar) so tapping the avatar on a phone actually
+  // opens something — previously it toggled a sidebar that's hidden below `lg`.
+  const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
   const alertsRef = useRef(alerts);
@@ -2137,20 +2142,20 @@ export default function CounselorDashboard() {
         >
           <button
             type="button"
-            onClick={() => setExpanded(true)}
+            onClick={() => setAccountDrawerOpen(true)}
             className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
             style={{ background: P.accent, boxShadow: `0 0 0 3px ${P.navyLight}` }}
-            title={`${counselor.name || 'Counselor'} • Open navigation`}
-            aria-label="Open counselor navigation"
+            title={`${counselor.name || 'Counselor'} • Open profile`}
+            aria-label="Open counselor profile"
           >
             <span className="text-white text-xs font-bold">{initials}</span>
           </button>
           {expanded && (
             <button
               type="button"
-              onClick={() => setExpanded(true)}
+              onClick={() => setAccountDrawerOpen(true)}
               className="ml-3 text-left overflow-hidden focus:outline-none group"
-              title="Open counselor navigation"
+              title="Open counselor profile"
             >
               <span className="text-white font-semibold text-sm tracking-wide block truncate group-hover:text-[#5E8FBD] transition-colors">
                 {counselor.name || 'Counselor'}
@@ -2243,11 +2248,11 @@ export default function CounselorDashboard() {
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={() => setExpanded(true)}
+              onClick={() => setAccountDrawerOpen(true)}
               className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ background: P.accent, boxShadow: `0 0 0 2px ${P.navyLight}` }}
-              title="Open counselor navigation"
-              aria-label="Open counselor navigation"
+              title="Open counselor profile"
+              aria-label="Open counselor profile"
             >
               <span className="text-white text-xs font-bold">{initials}</span>
             </button>
@@ -2338,11 +2343,11 @@ export default function CounselorDashboard() {
             {/* Desktop Account drawer trigger button */}
             <button
               type="button"
-              onClick={() => setExpanded(true)}
+              onClick={() => setAccountDrawerOpen(true)}
               className="flex items-center gap-2 py-1 px-2.5 rounded-xl border transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ borderColor: P.border, background: P.surface }}
-              title="Open counselor navigation"
-              aria-label="Open counselor navigation"
+              title="Open counselor profile"
+              aria-label="Open counselor profile"
             >
               <div
                 className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
@@ -2396,6 +2401,17 @@ export default function CounselorDashboard() {
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
       )}
+
+      <CounselorAccountDrawer
+        isOpen={accountDrawerOpen}
+        onClose={() => setAccountDrawerOpen(false)}
+        counselor={counselor}
+        initials={initials}
+        connectionStatus={connectionStatus}
+        pendingCount={pendingCount}
+        onLogout={logout}
+        onPlayTestSound={playAlertSound}
+      />
     </div>
   );
 }
