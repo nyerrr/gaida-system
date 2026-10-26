@@ -41,23 +41,23 @@ export default function PrivacyPolicy() {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-6 sm:p-8 w-full max-w-2xl">
+      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 md:p-8 w-full max-w-2xl max-h-[95dvh] overflow-y-auto">
         {/* Header */}
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Privacy & Consent</h1>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-6">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Privacy & Consent</h1>
             <p className="text-xs text-gray-500 mt-1">Please review the guidelines below before beginning your session</p>
           </div>
-          <div className="text-right flex-shrink-0">
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-              University of the East — Guidance & Counseling
+          <div className="sm:text-right flex-shrink-0">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200 inline-block">
+              Researcher
             </span>
           </div>
         </div>
 
         {/* Consent Content - Scrollable (scrollbar visually hidden, keyboard/mouse scrollable) */}
         <div
-          className="bg-gray-50 rounded-lg p-6 mb-6 max-h-96 overflow-y-auto no-scrollbar border border-gray-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#608AB6]"
+          className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[50dvh] sm:max-h-96 overflow-y-auto no-scrollbar border border-gray-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#608AB6]"
           tabIndex={0}
           role="region"
           aria-label="Privacy and consent content"
@@ -186,7 +186,7 @@ export default function PrivacyPolicy() {
           <button
             type="button"
             onClick={handleBack}
-            className="flex-1 py-3 px-6 rounded-xl font-semibold transition-all duration-200 text-white shadow-md hover:shadow-lg active:scale-[0.98] bg-[#608AB6] hover:bg-[#52769c] focus:outline-none focus:ring-2 focus:ring-[#52769c]"
+            className="flex-1 py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl font-semibold transition-all duration-200 text-white shadow-md hover:shadow-lg active:scale-[0.98] bg-[#608AB6] hover:bg-[#52769c] focus:outline-none focus:ring-2 focus:ring-[#52769c] text-sm sm:text-base"
           >
             I Understand
           </button>

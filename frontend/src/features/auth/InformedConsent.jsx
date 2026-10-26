@@ -44,11 +44,11 @@ const handleAccept = async (e) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 p-3 sm:p-4 relative overflow-y-auto">
       {/* Decorative Background Pattern */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
-        <div className="absolute top-20 left-20 w-96 h-96 border-4 border-red-200 rotate-45 rounded-3xl"></div>
-        <div className="absolute bottom-20 right-20 w-80 h-80 border-4 border-red-100 rotate-12 rounded-3xl"></div>
+        <div className="absolute top-10 sm:top-20 left-10 sm:left-20 w-64 sm:w-96 h-64 sm:h-96 border-4 border-red-200 rotate-45 rounded-3xl"></div>
+        <div className="absolute bottom-10 sm:bottom-20 right-10 sm:right-20 w-56 sm:w-80 h-56 sm:h-80 border-4 border-red-100 rotate-12 rounded-3xl"></div>
       </div>
 
       {/* Grid Pattern Overlay */}
@@ -64,7 +64,7 @@ const handleAccept = async (e) => {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-6 sm:p-8 w-full max-w-2xl">
+      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 md:p-8 w-full max-w-2xl my-4 max-h-[95dvh] overflow-y-auto">
         {/* Top Back Navigation */}
         <div className="mb-4">
           <button
@@ -80,22 +80,25 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Header */}
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Informed Consent</h1>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-6">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Informed Consent</h1>
             <p className="text-xs text-gray-500 mt-1">Please review the guidelines below before beginning your session</p>
           </div>
-          {localStorage.getItem('student_id') && (
-            <div className="text-right flex-shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+              Researcher
+            </span>
+            {localStorage.getItem('student_id') && (
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
                 {localStorage.getItem('student_id')}
               </span>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Consent Content - Scrollable */}
-        <div className="bg-gray-50 rounded-lg p-6 mb-6 max-h-96 overflow-y-auto border border-gray-200">
+        <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[40dvh] sm:max-h-96 overflow-y-auto border border-gray-200">
           <div className="space-y-4 text-sm text-gray-700">
             {/* Purpose */}
             <div>
@@ -232,12 +235,12 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
             type="button"
             onClick={handleAccept}
             disabled={!isChecked}
-            className={`flex-1 py-3 px-6 rounded-xl font-semibold transition-all duration-200 ${
+            className={`flex-1 py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl font-semibold transition-all duration-200 text-sm sm:text-base ${
               isChecked
                 ? 'text-white shadow-md hover:shadow-lg active:scale-[0.98] bg-[#608AB6] hover:bg-[#52769c]'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -248,7 +251,7 @@ const handleAccept = async (e) => {
           <button
             type="button"
             onClick={handleDecline}
-            className="flex-1 py-3 px-6 rounded-xl font-semibold border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 active:scale-[0.98]"
+            className="flex-1 py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl font-semibold border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 active:scale-[0.98] text-sm sm:text-base"
           >
             Decline & Logout
           </button>
