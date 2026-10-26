@@ -2385,7 +2385,7 @@ export default function CounselorDashboard() {
         <div
           className="fixed inset-0 z-40"
           style={{ background: 'rgba(34,48,58,0.45)', backdropFilter: 'blur(2px)' }}
-          onClick={closeMobileNav}
+          onPointerDown={closeMobileNav}
           aria-hidden="true"
         />
       )}
