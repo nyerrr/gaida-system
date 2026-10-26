@@ -10,6 +10,9 @@ export default function CounselorLogin() {
   const [antibot, setAntibot] = useState('');
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaImage, setCaptchaImage] = useState('');
+  // True while a challenge is being fetched, so a second submit cannot reuse
+  // the token that the failed attempt already burned server-side.
+  const [captchaLoading, setCaptchaLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,7 +23,13 @@ export default function CounselorLogin() {
 
   // The verification image is drawn and checked by the server; the browser
   // only shows it and sends back the typed code with the signed token.
-  const loadCaptcha = async () => {
+  //
+  // `keepError` is for the refresh that runs after a failed login: if that
+  // fetch fails too, replacing "Invalid credentials" with a captcha message
+  // would hide the reason the attempt failed. The submit guard below already
+  // reports a missing image, so the login error is the one worth keeping.
+  const loadCaptcha = async ({ keepError = false } = {}) => {
+    setCaptchaLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/auth/captcha`, { cache: 'no-store' });
       if (!res.ok) throw new Error(String(res.status));
@@ -30,12 +39,16 @@ export default function CounselorLogin() {
     } catch {
       setCaptchaToken('');
       setCaptchaImage('');
-      setError('Could not load the verification image. Please press refresh.');
+      if (!keepError) {
+        setError('Could not load the verification image. Please press refresh.');
+      }
+    } finally {
+      setCaptchaLoading(false);
     }
   };
 
-  const handleRefreshCaptcha = () => {
-    loadCaptcha();
+  const handleRefreshCaptcha = (options) => {
+    loadCaptcha(options);
     setAntibot('');
   };
 
@@ -84,6 +97,13 @@ export default function CounselorLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    // A challenge fetched after a failed attempt is still in flight; sending
+    // the previous (already consumed) token would only earn a confusing
+    // "Incorrect or expired verification code".
+    if (captchaLoading) {
+      setError('Getting a new verification code. One moment…');
+      return;
+    }
     if (!captchaToken) {
       setError('Verification image not loaded. Please press refresh.');
       return;
@@ -109,7 +129,7 @@ export default function CounselorLogin() {
         navigate('/counselor-dashboard');
       } else {
         setError(data.detail || 'Invalid credentials. Please check your faculty ID and password.');
-        handleRefreshCaptcha();
+        handleRefreshCaptcha({ keepError: true });
         setLoading(false);
       }
     } catch (err) {
@@ -211,8 +231,8 @@ export default function CounselorLogin() {
                 )}
                 <button
                   type="button"
-                  onClick={handleRefreshCaptcha}
-                  disabled={loading}
+                  onClick={() => handleRefreshCaptcha()}
+                  disabled={loading || captchaLoading}
                   className="flex items-center gap-1.5 text-gray-400 hover:text-red-600 text-xs transition-colors"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,7 +254,7 @@ export default function CounselorLogin() {
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || captchaLoading}
               className="flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 text-sm rounded-xl transition-colors duration-200 shadow"
             >
               {loading ? 'Signing in...' : 'Log In'}
