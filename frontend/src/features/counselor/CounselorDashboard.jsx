@@ -30,6 +30,8 @@ const P = {
   amberSoft: '#F5E9D6',
   teal: '#4C8F8F',
   tealSoft: '#DCEFEF',
+  gold: '#9A7B0A',
+  goldSoft: '#F8F0C8',
   red: '#B0472F',
   redSoft: '#FBEDEA',
   redBorder: '#F0D2CA',
@@ -56,10 +58,21 @@ const severityColor = (s) => {
   if (s === 'Crisis') return { bg: `bg-[${P.red}]`, text: 'text-white', dot: `bg-[${P.red}]`, border: `border-[${P.redBorder}]`, light: `bg-[${P.redSoft}]`, hex: P.red };
   if (s === 'High') return { bg: `bg-[${P.amber}]`, text: 'text-white', dot: `bg-[${P.amber}]`, border: `border-[${P.amberSoft}]`, light: `bg-[${P.amberSoft}]`, hex: P.amber };
   if (s === 'Requested') return { bg: `bg-[${P.accent}]`, text: 'text-white', dot: `bg-[${P.accent}]`, border: `border-[${P.accentSoft}]`, light: `bg-[${P.accentSoft}]`, hex: P.accent };
-  if (s === 'Moderate') return { bg: `bg-[${P.teal}]`, text: 'text-white', dot: `bg-[${P.teal}]`, border: `border-[${P.tealSoft}]`, light: `bg-[${P.tealSoft}]`, hex: P.teal };
+  if (s === 'Moderate') return { bg: `bg-[${P.gold}]`, text: 'text-white', dot: `bg-[${P.gold}]`, border: `border-[${P.goldSoft}]`, light: `bg-[${P.goldSoft}]`, hex: P.gold };
   if (s === 'Low') return { bg: `bg-[${P.green}]`, text: 'text-white', dot: `bg-[${P.green}]`, border: `border-[${P.greenSoft}]`, light: `bg-[${P.greenSoft}]`, hex: P.green };
   return { bg: `bg-[${P.textMuted}]`, text: 'text-white', dot: `bg-[${P.textMuted}]`, border: `border-[${P.border}]`, light: `bg-[${P.panel}]`, hex: P.textMuted };
 };
+
+// Alerts tab order: Crisis first, then High, then a student's own request for a
+// counselor, then Moderate. Newest first within a level. The backend sorts the
+// same way; this keeps the list correct if the order ever changes in transit.
+const ALERT_SEVERITY_RANK = { Crisis: 4, High: 3, Requested: 2, Moderate: 1 };
+const sortAlertsBySeverity = (list) =>
+  [...list].sort((a, b) => {
+    const byRank = (ALERT_SEVERITY_RANK[b.severity] || 0) - (ALERT_SEVERITY_RANK[a.severity] || 0);
+    if (byRank !== 0) return byRank;
+    return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+  });
 
 const formatRelative = (ts) => {
   if (!ts) return '';
@@ -541,6 +554,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     a.severity === 'Crisis' ? P.red :
     a.severity === 'High'   ? P.amber :
     a.severity === 'Requested' ? P.accent :
+    a.severity === 'Moderate' ? P.gold :
     P.amber;
 
   const bgColor =
@@ -550,6 +564,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     a.severity === 'Crisis' ? P.redSoft :
     a.severity === 'High'   ? P.amberSoft :
     a.severity === 'Requested' ? P.accentSoft :
+    a.severity === 'Moderate' ? P.goldSoft :
     P.amberSoft;
 
   return (
@@ -693,9 +708,9 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
   });
 
   // Three honest states: pending (needs attention), escalated (counselor active) and reviewed/resolved.
-  const pending   = filtered.filter(a => a.status === 'pending');
-  const escalated = filtered.filter(a => a.status === 'escalated');
-  const resolved  = filtered.filter(a => a.status !== 'pending' && a.status !== 'escalated');
+  const pending   = sortAlertsBySeverity(filtered.filter(a => a.status === 'pending'));
+  const escalated = sortAlertsBySeverity(filtered.filter(a => a.status === 'escalated'));
+  const resolved  = sortAlertsBySeverity(filtered.filter(a => a.status !== 'pending' && a.status !== 'escalated'));
 
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
@@ -755,6 +770,12 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
           </select>
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-xs" style={{ color: P.textSecondary }} aria-label="Alert color legend">
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.red }} />Crisis</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.amber }} />High</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.gold }} />Moderate</span>
+        <span style={{ color: P.textMuted }}>Listed highest risk first</span>
+      </div>
       {showSwipeHint && alerts.length > 0 && (
         <button
           type="button"
@@ -810,7 +831,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
               {resolved.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
             </div>
           )}
-          {alerts.length === 0 && <EmptyState icon="✓" title="No alerts yet" sub="High and Crisis sessions will appear here" />}
+          {alerts.length === 0 && <EmptyState icon="✓" title="No alerts yet" sub="Moderate, High and Crisis sessions will appear here" />}
           {alerts.length > 0 && filtered.length === 0 && (
             <EmptyState icon="🔍" title="No matching alerts" sub="Try changing your search or filter criteria" />
           )}
@@ -2050,6 +2071,9 @@ export default function CounselorDashboard() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
+  // Pending alerts that have already rung the dashboard (everything except Moderate),
+  // so a Moderate alert that later turns High still rings once.
+  const prevLoudIdsRef = useRef(new Set());
   const alertsRef = useRef(alerts);
   // Drawer a11y refs: remember what opened the overlay, return focus there on
   // close, and lock the real scroll container (not just <body>) while open.
@@ -2087,17 +2111,21 @@ export default function CounselorDashboard() {
         // effect ran on every 2s fetch).
         const pendingNow = data.alerts.filter(a => a.status === 'pending');
         const pendingNowIds = pendingNow.map(a => a.session_id);
-        const freshIds = pendingNowIds.filter(id => !prevPendingIdsRef.current.has(id));
-        if (freshIds.length > 0) {
+        // Moderate alerts are listed silently; only High, Crisis and a student's
+        // own counselor request ring the dashboard.
+        const loudNow = pendingNow.filter(a => a.severity !== 'Moderate');
+        const freshLoud = loudNow.filter(a => !prevLoudIdsRef.current.has(a.session_id));
+        if (freshLoud.length > 0) {
           playAlertSound();
           if (Notification.permission === 'granted') {
             new Notification('GAIDA Alert', {
-              body: `${freshIds.length} new alert${freshIds.length > 1 ? 's' : ''} need attention`,
+              body: `${freshLoud.length} new alert${freshLoud.length > 1 ? 's' : ''} need attention`,
               icon: '/favicon.ico',
             });
           }
         }
         prevPendingIdsRef.current = new Set(pendingNowIds);
+        prevLoudIdsRef.current = new Set(loudNow.map(a => a.session_id));
         setAlerts(data.alerts);
       }
     } catch (err) {

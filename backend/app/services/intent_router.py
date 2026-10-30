@@ -480,6 +480,67 @@ def _crisis_hold_message(user_message: str) -> str:
     return base
 
 
+# ---------------------------------------------------------------------------
+# Face-to-face counseling requests -> UE Student Portal
+# ---------------------------------------------------------------------------
+# GAIDA does not schedule appointments. UE already has a scheduling flow in the
+# Student Portal (Guidance Services -> Counseling), so a student who asks to
+# meet a counselor in person is pointed there instead of GAIDA building a
+# second booking system. A message must (1) say it wants something, (2) refer
+# to counseling or the guidance office, and (3) refer to meeting / booking.
+# That keeps "I met my counselor yesterday" and "I need a counselor right now"
+# out of this path: the latter goes to the normal reply and the alert flow.
+_F2F_WANT_RE = re.compile(
+    r"\bwant\b|\bwish\b|\bwould like\b|\b[iI]['’]?d like\b|\bneed\b|\bcan i\b|\bcould i\b|\bmay i\b|"
+    r"\bhow (?:do|can|would) i\b|\bhow to\b|\blooking to\b|\bplan(?:ning)? to\b|"
+    r"\bgusto\b|\bnais\b|\bpwede\b|\bpuwede\b|\bpaano\b",
+    re.IGNORECASE,
+)
+_F2F_TARGET_RE = re.compile(
+    r"counsel|guidance|psycholog|therap|appointment|\bsession\b|consultation",
+    re.IGNORECASE,
+)
+_F2F_ACTION_RE = re.compile(
+    r"face[\s-]*to[\s-]*face|in[\s-]*person|appointment|schedul|\bbook(?:ing)?\b|"
+    r"\bmeet\b|\bvisit\b|\bsee\b|set\s*up|makipagkita|magpa-?sched|"
+    r"nang personal|sa personal|personal na|puntahan|pumunta",
+    re.IGNORECASE,
+)
+
+PORTAL_REDIRECT_EN = (
+    "If you'd like to meet a guidance counselor in person, you can book a session "
+    "through the UE Student Portal: open Guidance Services, then choose Counseling. "
+    "A counselor will take it from there. I'm still here to talk in the meantime if you'd like."
+)
+PORTAL_REDIRECT_FIL = (
+    "Kung gusto mong makipagkita nang personal sa isang guidance counselor, puwede kang "
+    "mag-book ng session sa UE Student Portal: buksan ang Guidance Services, tapos piliin ang "
+    "Counseling. Ang counselor na ang bahala mula roon. Nandito pa rin ako kung gusto mong "
+    "magkuwento muna."
+)
+
+
+def wants_face_to_face_session(user_message: str) -> bool:
+    text = user_message or ""
+    return bool(
+        _F2F_WANT_RE.search(text)
+        and _F2F_TARGET_RE.search(text)
+        and _F2F_ACTION_RE.search(text)
+    )
+
+
+def _portal_redirect_reply(turn: Dict[str, Any], user_message: str) -> str | None:
+    """Fixed reply pointing to the portal, or None to use the normal reply.
+    Never used at High or Crisis: a student in distress gets the normal
+    supportive reply and the counselor alert, not a booking instruction."""
+    if turn["severity"] not in ("Normal", "Low", "Moderate"):
+        return None
+    if not wants_face_to_face_session(user_message):
+        return None
+    from app.services.gpt_agent import _uses_filipino
+    return PORTAL_REDIRECT_FIL if _uses_filipino(user_message) else PORTAL_REDIRECT_EN
+
+
 def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, method: str, escalate: bool, fire_alert: bool = True) -> Dict[str, Any]:
     """Steps 8–9 shared by both paths: record interactions, fire alerts,
     track covered themes, and return the canonical result dict."""
@@ -539,8 +600,10 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
             session["meta"]["covered_themes"].append(closing_line)
             session["meta"]["covered_themes"] = session["meta"]["covered_themes"][-5:]
 
-    # --- Step 8: Fire counselor alert for HIGH and CRISIS ---
-    if escalate and fire_alert:
+    # --- Step 8: Fire counselor alert for MODERATE, HIGH and CRISIS ---
+    # process_alert decides what each level does (Moderate is listed silently;
+    # High and Crisis also email and escalate).
+    if (escalate or severity in ("Moderate", "High", "Crisis")) and fire_alert:
         try:
             process_alert(
                 session_id=session_id,
@@ -581,6 +644,11 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         return _finalize_turn(turn, user_message, _crisis_hold_message(user_message), "crisis_hold", True)
     if hold == "continue":
         return _finalize_turn(turn, user_message, "", "crisis_hold", True, fire_alert=False)
+
+    # --- Step 6c: Asked for a face-to-face session — point to the UE portal ---
+    portal_reply = _portal_redirect_reply(turn, user_message)
+    if portal_reply:
+        return _finalize_turn(turn, user_message, portal_reply, "portal_redirect", False)
 
     # --- Step 7: GPT response (only when counselor is NOT active) ---
     gpt_protocol = turn["counselor_protocol"]
@@ -634,6 +702,13 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
         return
     if hold == "continue":
         yield {"type": "done", "result": _finalize_turn(turn, user_message, "", "crisis_hold", True, fire_alert=False)}
+        return
+
+    # --- Step 6c: Asked for a face-to-face session — point to the UE portal ---
+    portal_reply = _portal_redirect_reply(turn, user_message)
+    if portal_reply:
+        yield {"type": "delta", "text": portal_reply}
+        yield {"type": "done", "result": _finalize_turn(turn, user_message, portal_reply, "portal_redirect", False)}
         return
 
     # --- Step 7: Stream GPT response ---
