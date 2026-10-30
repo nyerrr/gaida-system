@@ -52,6 +52,21 @@ Do not act as if everything is fine, do not drop the urgent tone, and do not rep
 crisis resources unless they ask. Stay present and patient.
 """
 
+# Vague disclosures ("i give up", "i just want it all to stop") are warning signs
+# but not a stated intent to die. The detection layer alerts at HIGH and marks
+# the turn with clarify=True; this protocol turns that alert into a conversation
+# instead of a crisis script the student never asked for. If the answer names
+# death or self-harm, the next turn takes the normal crisis path.
+CLARIFY_PROTOCOL = """
+The student used a vague phrase like "I give up" or "I just want it all to stop."
+Do not assume they mean self-harm, and do not jump to a crisis script. First
+acknowledge the feeling plainly, then ask ONE gentle clarifying question about what
+"giving up" means for them right now (for example: "When you say you want to give
+up, do you mean the schoolwork, or something bigger?"). Listen to the answer before
+deciding what to do next. If they name death or self-harm, follow the crisis
+protocol immediately.
+"""
+
 # Explicit safety confirmations — a clear verbal/typed "I am safe / okay now" that
 # merits ending the de-escalation hold. Short affirmative replies (yes/opo) only
 # count once the session is already marked needs_clearance (i.e., GAIDA just asked
@@ -134,6 +149,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     detected_intent = detection["intent"]
     raw_confidence = detection["confidence"]
     crisis_resources = detection["crisis_resources"]
+    clarify = bool(detection.get("clarify"))
 
     # Attachment/relationship-loss sub-signals, kept for the conversation
     # rather than just this turn: which of "still wants them back" / "checking
@@ -182,6 +198,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
             "is_venting": is_venting,
             "counselor_active": False,
             "loss_flags": loss_flags if detected_intent == "loss" else None,
+            "clarify": clarify,
         }
 
     # --- Normal path: crisis bypass / running confidence / priority ---
@@ -355,6 +372,15 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
         final_detection["crisis_resources"] = None
     else:
         final_detection = _build_result(intent, running_confidence, post_crisis=post_crisis)
+
+    # Carry the soft-give-up clarification flag through to the response layer.
+    # A clearance hold outranks it (the safety question already is the prompt),
+    # and a true Crisis never asks a clarifying question instead of acting.
+    final_detection["clarify"] = bool(
+        clarify
+        and not holding_clearance
+        and final_detection.get("anxiety_level") != "crisis"
+    )
     anxiety_level = final_detection["anxiety_level"]
     severity = final_detection["severity"]
     counselor_protocol = final_detection["counselor_protocol"]
@@ -408,6 +434,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
         "is_venting": is_venting,
         "counselor_active": counselor_active,
         "loss_flags": loss_flags if intent == "loss" else None,
+        "clarify": bool(final_detection.get("clarify")),
     }
 
 
@@ -564,6 +591,7 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
                 "intensity": anxiety_score,
                 "severity": severity,
                 "escalate": escalate,
+                "clarify": bool(turn.get("clarify")),
                 "segments": analyze_text_segments(user_message),
                 # Which grief sub-signals fired, so a counselor reading the
                 # dashboard can tell "sad" from "still wants them back and
@@ -627,6 +655,7 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
         "counselor_active": method == "counselor",
         "crisis_hold": bool(session.get("meta", {}).get("crisis_hold")) and method != "counselor",
         "method": method,
+        "clarify": bool(turn.get("clarify")),
     }
 
 
@@ -635,7 +664,7 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
 
     # --- Step 6: If counselor is active — skip GPT, still return full analysis ---
     if turn["counselor_active"]:
-        escalate = turn["anxiety_level"] in ("high", "crisis") or turn["running_confidence"] >= 0.99
+        escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
         return _finalize_turn(turn, user_message, "", "counselor", escalate, fire_alert=False)
 
     # --- Step 6b: Crisis hold — fixed message once, then silence ---
@@ -654,6 +683,8 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
     gpt_protocol = turn["counselor_protocol"]
     if turn["crisis_resources"]:
         gpt_protocol = f"{turn['crisis_resources']}\n\n{turn['counselor_protocol'] or ''}"
+    if turn.get("clarify"):
+        gpt_protocol = f"{gpt_protocol or ''}\n\n{CLARIFY_PROTOCOL}"
 
     gpt_result = generate_response_with_gpt(
         user_message=user_message,
@@ -672,7 +703,7 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         response_text = "I'm here with you. Can you tell me more about how you're feeling?"
         method = "fallback"
 
-    escalate = turn["anxiety_level"] in ("high", "crisis") or turn["running_confidence"] >= 0.99
+    escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
 
     return _finalize_turn(turn, user_message, response_text, method, escalate)
 
@@ -689,7 +720,7 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
 
     # --- Step 6: Counselor active — no GPT, immediately done ---
     if turn["counselor_active"]:
-        escalate = turn["anxiety_level"] in ("high", "crisis") or turn["running_confidence"] >= 0.99
+        escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
         yield {"type": "done", "result": _finalize_turn(turn, user_message, "", "counselor", escalate, fire_alert=False)}
         return
 
@@ -715,6 +746,8 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
     gpt_protocol = turn["counselor_protocol"]
     if turn["crisis_resources"]:
         gpt_protocol = f"{turn['crisis_resources']}\n\n{turn['counselor_protocol'] or ''}"
+    if turn.get("clarify"):
+        gpt_protocol = f"{gpt_protocol or ''}\n\n{CLARIFY_PROTOCOL}"
 
     response_text = ""
     got_tokens = False
@@ -740,7 +773,7 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
         yield {"type": "delta", "text": response_text}
 
     method = "gpt" if got_tokens else "fallback"
-    escalate = turn["anxiety_level"] in ("high", "crisis") or turn["running_confidence"] >= 0.99
+    escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
 
     result = _finalize_turn(turn, user_message, response_text, method, escalate)
     yield {"type": "done", "result": result}

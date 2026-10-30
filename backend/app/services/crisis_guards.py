@@ -8,11 +8,17 @@ and virtual_agent.py (hard crisis path) so the whole pipeline agrees.
 Guards:
     1. SOFT_VENTING_PHRASES  — colloquial "I give up" phrases. These are only
        treated as suicidal when NO school/work context surrounds them. With
-       school/work context they are venting → reclassified as stress.
+       school/work context they are venting → reclassified as stress. With no
+       such context they still alert, but at HIGH (not Crisis) and with a
+       `clarify` flag so GAIDA asks what "giving up" means before assuming the
+       worst. A negated give-up ("I don't want to give up") is not a risk at all.
     2. FICTION_CONTEXT       — essays, movies, songs, stories, poems. The death
        talk is about content, not the speaker → tone down, no auto-alert.
     3. HYPOTHETICAL_CONTEXT  — hedged/conditional musing ("what if", "kung").
        Still concerning, but not yet an active plan → keep alert at HIGH.
+
+Explicit death/harm statements ("I want to die", "kill myself") bypass the
+soft-give-up path entirely and remain a full Crisis.
 """
 
 import re
@@ -21,6 +27,10 @@ import re
 SOFT_VENTING_PHRASES = {
     "i can't do this anymore",
     "cant do this anymore",
+    "i give up",
+    "give up",
+    "i just want to give up",
+    "i want to give up",
     "i give up on everything",
     "i'm done with everything",
     "im done with everything",
@@ -377,6 +387,25 @@ def contains_harm_keyword(keyword: str) -> bool:
     return bool(_harm_positions(_WORD_RE.findall((keyword or "").lower())))
 
 
+# The negation guard above only covers death/harm words. A bare "give up" is not
+# harm vocabulary, so "i don't want to give up" would otherwise match the soft
+# give-up phrase and alert. That sentence is the opposite of surrender — it is
+# the student saying they are still trying — so it must stay neutral.
+_NEGATED_SOFT_RE = re.compile(
+    r"\b(?:i\s+)?(?:do\s*n[o']?t|don'?t|didn'?t|won'?t|wouldn'?t|never|not)\b"
+    r"[^.?!]{0,30}\b(?:give|giving)\s+up\b"
+    r"|"
+    r"\b(?:hindi|di)\s+(?:ako\s+)?(?:susuko|sumusuko|mag-?give\s*up)\b",
+    re.IGNORECASE,
+)
+
+
+def negated_soft_give_up(text: str) -> bool:
+    """True when the message denies giving up ("I don't want to give up").
+    Such a message is coping, not risk, and must not raise an alert."""
+    return bool(_NEGATED_SOFT_RE.search(text or ""))
+
+
 def resolve_crisis_level(matched_keywords, text: str) -> dict:
     """Decide the crisis verdict from the matched suicidal keywords + message
     context. This is the ONE place that converts a suicidal-string match into a
@@ -391,15 +420,18 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
       6. soft give-up phrase + venting context → stress (false-positive guard)
       7. fiction context → angry fiction (no alert; low risk)
       8. hypothetical/hedged → HIGH (still real, but not a plan)
-      9. soft give-up phrase with no venting context → crisis
+      9. negated soft give-up ("i don't want to give up") → neutral
+     10. soft give-up phrase with no venting context → HIGH + clarify
 
-    Step 9 is deliberately safety-first and is NOT the MODERATE alert an earlier
-    version of this docstring described: a give-up phrase with nothing in the
-    message to blunt it ("I just want it all to stop permanently") is escalated
-    to the full crisis path. That is what tests/test_detection.py locks in. It
-    does mean common vents with no school/work context ("I'm tired of it all")
-    also reach crisis — a known false positive, kept because the alternative
-    risks silencing a real one. See SOFT_VENTING_PHRASES above.
+    Step 10 used to escalate a bare give-up phrase to a full Crisis. That
+    over-reacted to ambiguous language: "i just want to give up" is a genuine
+    warning sign, but not the same as a stated intent to die. It now alerts at
+    HIGH and asks a clarifying question, while an explicit death statement
+    ("i want to die") still takes step 1 and remains Crisis.
+
+    The counselor decision behind this: prefer a false alert over a missed
+    student, but do not let a vague phrase collapse the conversation into a
+    crisis script the student never asked for.
     """
     text = text or ""
 
@@ -437,10 +469,13 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
     if has_fiction_context(text):
         return {"intent": "anger", "confidence": 0.55}
 
+    if negated_soft_give_up(text):
+        return {"intent": "neutral", "confidence": 0.3}
+
     if has_hypothetical_context(text):
         return {"intent": "suicidal", "confidence": 0.88}
 
-    return {"intent": "suicidal", "confidence": 0.99}
+    return {"intent": "suicidal", "confidence": 0.88, "clarify": True}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

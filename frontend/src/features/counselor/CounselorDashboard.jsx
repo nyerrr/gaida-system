@@ -28,6 +28,8 @@ const P = {
   greenSoft: '#E2F0E4',
   amber: '#C98B3D',
   amberSoft: '#F5E9D6',
+  high: '#C25E3A',
+  highSoft: '#F6E3DC',
   teal: '#4C8F8F',
   tealSoft: '#DCEFEF',
   gold: '#9A7B0A',
@@ -51,14 +53,25 @@ const QUICK_RESPONSES = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// Crisis and overdue/urgent escalation are the only states that use the
-// reserved emergency red. High is a strong amber so it still reads as
-// distinct and important without pulling the alarm color.
+// Severity ranking for the alert queue. Crisis is always first, then High,
+// then Moderate, then a student-requested check-in. High uses a red-orange so
+// it stays visibly below Crisis but above Moderate's orange; Crisis keeps the
+// reserved emergency red.
+const ALERT_SEVERITIES = ['Crisis', 'High', 'Moderate', 'Requested'];
+const SEVERITY_RANK = { Crisis: 4, High: 3, Moderate: 2, Requested: 1 };
+
+const severityRank = (s) => SEVERITY_RANK[s] || 0;
+const sortBySeverity = (list) => [...list].sort((a, b) => {
+  const diff = severityRank(b.severity) - severityRank(a.severity);
+  if (diff !== 0) return diff;
+  return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+});
+
 const severityColor = (s) => {
   if (s === 'Crisis') return { bg: `bg-[${P.red}]`, text: 'text-white', dot: `bg-[${P.red}]`, border: `border-[${P.redBorder}]`, light: `bg-[${P.redSoft}]`, hex: P.red };
-  if (s === 'High') return { bg: `bg-[${P.amber}]`, text: 'text-white', dot: `bg-[${P.amber}]`, border: `border-[${P.amberSoft}]`, light: `bg-[${P.amberSoft}]`, hex: P.amber };
+  if (s === 'High') return { bg: `bg-[${P.high}]`, text: 'text-white', dot: `bg-[${P.high}]`, border: `border-[${P.highSoft}]`, light: `bg-[${P.highSoft}]`, hex: P.high };
   if (s === 'Requested') return { bg: `bg-[${P.accent}]`, text: 'text-white', dot: `bg-[${P.accent}]`, border: `border-[${P.accentSoft}]`, light: `bg-[${P.accentSoft}]`, hex: P.accent };
-  if (s === 'Moderate') return { bg: `bg-[${P.gold}]`, text: 'text-white', dot: `bg-[${P.gold}]`, border: `border-[${P.goldSoft}]`, light: `bg-[${P.goldSoft}]`, hex: P.gold };
+  if (s === 'Moderate') return { bg: `bg-[${P.amber}]`, text: 'text-white', dot: `bg-[${P.amber}]`, border: `border-[${P.amberSoft}]`, light: `bg-[${P.amberSoft}]`, hex: P.amber };
   if (s === 'Low') return { bg: `bg-[${P.green}]`, text: 'text-white', dot: `bg-[${P.green}]`, border: `border-[${P.greenSoft}]`, light: `bg-[${P.greenSoft}]`, hex: P.green };
   return { bg: `bg-[${P.textMuted}]`, text: 'text-white', dot: `bg-[${P.textMuted}]`, border: `border-[${P.border}]`, light: `bg-[${P.panel}]`, hex: P.textMuted };
 };
@@ -316,12 +329,12 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
   }, [loadAnalytics]);
 
   const pending = alerts.filter(a => a.status === 'pending').length;
-  const highSessions = sessions.filter(s => s.severity === 'High' || s.severity === 'Crisis').length;
+  const highSessions = sessions.filter(s => ['Moderate', 'High', 'Crisis'].includes(s.severity)).length;
 
   const DISTRIBUTION_COLORS = {
     Low: P.green,
-    Moderate: P.teal,
-    High: P.amber,
+    Moderate: P.amber,
+    High: P.high,
     Normal: P.textMuted,
     Crisis: P.red,
   };
@@ -331,8 +344,8 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
     color: DISTRIBUTION_COLORS[d.name] || P.textMuted,
   })) || [
     { name: 'Low', value: 0, color: P.green },
-    { name: 'Moderate', value: 0, color: P.teal },
-    { name: 'High', value: 0, color: P.amber },
+    { name: 'Moderate', value: 0, color: P.amber },
+    { name: 'High', value: 0, color: P.high },
     { name: 'Normal', value: 0, color: P.textMuted },
     { name: 'Crisis', value: 0, color: P.red },
   ];
@@ -357,7 +370,7 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
         {[
           { label: 'Active Sessions', value: sessions.length, sub: 'right now', color: P.accent, icon: 'sessions' },
           { label: 'Pending Alerts', value: pending, sub: 'need attention', color: pending > 0 ? P.red : P.textMuted, icon: 'alerts' },
-          { label: 'High Anxiety', value: highSessions, sub: 'active sessions', color: P.amber, icon: 'detection' },
+          { label: 'At-Risk Sessions', value: highSessions, sub: 'Moderate and above', color: P.high, icon: 'detection' },
           { label: 'Total Alerts', value: analytics?.total_alerts ?? alerts.length, sub: 'all time', color: P.navy, icon: 'bell' },
         ].map((s) => (
           <Card key={s.label} className="p-3.5 sm:p-5 flex items-center justify-between gap-2">
@@ -412,8 +425,8 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
                   <Tooltip />
                   <Line type="monotone" dataKey="normal" stroke={P.textMuted} strokeWidth={2} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="low" stroke={P.green} strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="moderate" stroke={P.teal} strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="high" stroke={P.amber} strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="moderate" stroke={P.amber} strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="high" stroke={P.high} strokeWidth={2} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="crisis" stroke={P.red} strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -421,8 +434,8 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
                 {[
                   { label: 'Normal',  color: P.textMuted },
                   { label: 'Low',     color: P.green },
-                  { label: 'Moderate', color: P.teal },
-                  { label: 'High',    color: P.amber },
+                  { label: 'Moderate', color: P.amber },
+                  { label: 'High',    color: P.high },
                   { label: 'Crisis',  color: P.red },
                 ].map(l => (
                   <div key={l.label} className="flex items-center gap-1">
@@ -552,7 +565,8 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     esc.level === 'urgent'  ? P.red :
     esc.level === 'warning' ? P.amber :
     a.severity === 'Crisis' ? P.red :
-    a.severity === 'High'   ? P.amber :
+    a.severity === 'High'   ? P.high :
+    a.severity === 'Moderate' ? P.amber :
     a.severity === 'Requested' ? P.accent :
     a.severity === 'Moderate' ? P.gold :
     P.amber;
@@ -562,7 +576,8 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     esc.level === 'urgent'  ? P.redSoft :
     esc.level === 'warning' ? P.amberSoft :
     a.severity === 'Crisis' ? P.redSoft :
-    a.severity === 'High'   ? P.amberSoft :
+    a.severity === 'High'   ? P.highSoft :
+    a.severity === 'Moderate' ? P.amberSoft :
     a.severity === 'Requested' ? P.accentSoft :
     a.severity === 'Moderate' ? P.goldSoft :
     P.amberSoft;
@@ -696,7 +711,9 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
     return () => clearInterval(interval);
   }, []);
 
-  const filtered = alerts.filter(a => {
+  const visibleAlerts = alerts.filter(a => ALERT_SEVERITIES.includes(a.severity));
+
+  const filtered = visibleAlerts.filter(a => {
     const term = searchTerm.toLowerCase().trim();
     const matchTerm = !term ||
       (a.student_id && a.student_id.toLowerCase().includes(term)) ||
@@ -728,7 +745,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Alerts</h1>
-          <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>High and Crisis level sessions requiring attention</p>
+          <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Moderate, High and Crisis sessions requiring attention</p>
         </div>
 
         {/* Search & Filter Bar */}
@@ -765,8 +782,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
             <option value="crisis">Crisis only</option>
             <option value="high">High only</option>
             <option value="moderate">Moderate only</option>
-            <option value="low">Low only</option>
-            <option value="normal">Normal only</option>
+            <option value="requested">Requested only</option>
           </select>
         </div>
       </div>
@@ -831,8 +847,8 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
               {resolved.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
             </div>
           )}
-          {alerts.length === 0 && <EmptyState icon="✓" title="No alerts yet" sub="Moderate, High and Crisis sessions will appear here" />}
-          {alerts.length > 0 && filtered.length === 0 && (
+          {visibleAlerts.length === 0 && <EmptyState icon="✓" title="No alerts yet" sub="Moderate, High and Crisis sessions will appear here" />}
+          {visibleAlerts.length > 0 && filtered.length === 0 && (
             <EmptyState icon="🔍" title="No matching alerts" sub="Try changing your search or filter criteria" />
           )}
         </>
@@ -843,7 +859,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
           <div className="counselor-bottom-sheet" role="dialog" aria-label="Filter alerts">
             <div className="counselor-sheet-handle" />
             <h2>Filter alerts</h2>
-            {['all', 'crisis', 'high', 'moderate', 'low', 'normal'].map((value) => (
+            {['all', 'crisis', 'high', 'moderate', 'requested'].map((value) => (
               <button
                 type="button"
                 key={value}
@@ -1426,7 +1442,7 @@ const typingThrottleRef = useRef(null);
 
   const CustomDot = (props) => {
     const { cx, cy, payload } = props;
-    const colors = { Crisis: P.red, High: P.amber, Moderate: P.teal, Low: P.green, Normal: P.textMuted };
+    const colors = { Crisis: P.red, High: P.high, Moderate: P.amber, Low: P.green, Normal: P.textMuted };
     return <circle cx={cx} cy={cy} r={4} fill={colors[payload.severity] || P.textMuted} stroke="white" strokeWidth={1.5} />;
   };
 

@@ -156,7 +156,7 @@ const handleAccept = async (e) => {
               <p>
                 GAIDA is an assistive tool and does not replace professional mental health care. It is designed 
                 to support early anxiety detection and facilitate counselor intervention, not provide medical 
-                diagnosis or treatment. If you are experiencing a mental health emergency, please contact your 
+                diagnosis or treatment. Language support is currently restricted to English, Tagalog, and Taglish; detection accuracy may decrease with other regional Philippine dialects. If you are experiencing a mental health emergency, please contact your 
                 university counseling center immediately or call emergency services.
               </p>
             </div>

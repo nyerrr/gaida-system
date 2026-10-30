@@ -18,6 +18,7 @@ from app.services.crisis_guards import (
     is_third_party_death_wish,
     is_other_persons_anger,
     negated_death_wish,
+    negated_soft_give_up,
     resolve_crisis_level,
 )
 from app.services.loss_detector import detect_loss
@@ -182,6 +183,13 @@ KEYWORDS = {
         ("no point in trying anymore", 3.0),
         ("tired of it all", 3.0),
         ("make everything stop", 3.0),
+        # Bare give-up phrasing. Soft on its own — it alerts at HIGH with a
+        # clarifying question, not Crisis — but it must be matchable, otherwise
+        # "i give up" scores as an ordinary frustration and never pages anyone.
+        ("i give up on everything", 3.0),
+        ("i just want to give up", 3.0),
+        ("i give up", 3.0),
+        ("give up", 2.5),
         ("let it crumble", 3.0),
         ("there is no point anymore", 3.5),
         ("there's no point anymore", 3.5),
@@ -596,7 +604,10 @@ def _match_suicidal_keyword(txt: str, tokens: set, raw_text: str | None = None):
             continue
         if negated_harm and contains_harm_keyword(kw):
             continue
-        if not is_soft_venting_phrase(kw):
+        soft = is_soft_venting_phrase(kw)
+        if soft and negated_soft_give_up(raw_text if raw_text is not None else txt):
+            continue
+        if not soft:
             return kw
         if found_soft is None:
             found_soft = kw
@@ -653,8 +664,18 @@ def detect_intent_and_level(text: str) -> dict:
     crisis_kw = _match_suicidal_keyword(txt, tokens, text)
 
     if crisis_kw:
+        # A known frustration phrase ("i give up on this assignment") is not a
+        # crisis even though the new bare "give up" keyword matches it. Checked
+        # here because the crisis path deliberately runs before the safe-phrase
+        # mask so a real crisis can never be hidden by a vent.
+        if is_soft_venting_phrase(crisis_kw) and _is_safe_phrase(txt):
+            return _build_result("neutral", 0.3)
         verdict = resolve_crisis_level([crisis_kw], txt)
-        return _build_result(verdict["intent"], verdict["confidence"])
+        return _build_result(
+            verdict["intent"],
+            verdict["confidence"],
+            clarify=bool(verdict.get("clarify")),
+        )
 
     # ── Step 2b: Attachment / relationship loss ────────────────────────────
     # Runs after the crisis hard path (so a real crisis always wins) and
@@ -903,6 +924,7 @@ def _build_result(
     confidence: float,
     post_crisis: bool = False,
     loss_result: dict | None = None,
+    clarify: bool = False,
 ) -> dict:
     # Anger is a valid emotion but an angry rant is not inherently an anxiety
     # crisis — cap its severity so it can never reach "high"/alert level.
@@ -926,6 +948,7 @@ def _build_result(
             "counselor_protocol": COUNSELOR_PROTOCOLS["crisis"],
             "crisis_resources": CRISIS_RESOURCES,
             "anxiety_score": 5,
+            "clarify": clarify,
         }
 
     if confidence >= 0.75:
@@ -977,4 +1000,5 @@ def _build_result(
         "crisis_resources": None,
         "anxiety_score": anxiety_score,
         "loss_flags": (loss_result or {}).get("flags") if intent == "loss" else None,
+        "clarify": clarify,
     }

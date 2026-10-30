@@ -43,6 +43,42 @@ SEVERITY_MAP = {
     5: "High",
 }
 
+# Alerts are raised from Moderate upward. Normal/Low stay out of the counselor
+# alert queue so the list only contains cases a human may need to act on.
+ALERT_SEVERITIES = ("Moderate", "High", "Crisis")
+
+# Used for ranking/upgrading an existing alert. "Requested" sits below a
+# clinical Moderate alert so a later Moderate classification upgrades it.
+SEVERITY_RANK = {
+    "Normal": 0,
+    "Low": 1,
+    "Requested": 2,
+    "Moderate": 3,
+    "High": 4,
+    "Crisis": 5,
+}
+
+
+def _severity_rank(severity: Optional[str]) -> int:
+    return SEVERITY_RANK.get(severity or "", 0)
+
+
+def _is_alert_visible(alert: dict) -> bool:
+    return alert.get("severity") in ALERT_SEVERITIES or alert.get("severity") == "Requested"
+
+
+def _sort_alerts(alerts: list[dict]) -> list[dict]:
+    """Most severe first, then newest. A Crisis alert must never sit below a
+    Moderate one just because it arrived later."""
+    return sorted(
+        alerts,
+        key=lambda a: (
+            _severity_rank(a.get("severity")),
+            str(a.get("timestamp") or ""),
+        ),
+        reverse=True,
+    )
+
 # ---------------------------------------------------------------------------
 # In-memory stores
 #
@@ -416,9 +452,41 @@ def sort_alerts_by_severity(alerts: list) -> list:
     return sorted(newest_first, key=lambda a: -ALERT_SEVERITY_RANK.get(a.get("severity"), 0))
 
 
-def _send_alert_email(session_id: str, severity: str, intent: str, message: str) -> None:
-    """Email the counselor(s) on file — best-effort, never raises. Only called
-    for urgent (High/Crisis) alerts, see URGENT_SEVERITIES."""
+_sort_alerts = sort_alerts_by_severity
+
+
+def _persist_alert_update(alert: dict, extra: Optional[dict] = None):
+    """Best-effort sync of a changed in-memory alert to Supabase. Never raises:
+    the live dashboard reads the in-memory copy first."""
+    if persistence_disabled():
+        return
+    try:
+        from app.database.database import supabase
+
+        row = {
+            "intent": alert.get("intent"),
+            "anxiety_score": alert.get("anxiety_score") or 0,
+            "severity": alert.get("severity"),
+            "message": alert.get("message") or alert.get("last_message") or "",
+            "status": alert.get("status") or "pending",
+        }
+        if extra:
+            row.update(extra)
+        supabase.table("counselor_alerts").update(row).eq(
+            "session_id", alert["session_id"]
+        ).execute()
+    except Exception as e:
+        print(f"[counselor] alert update persist error: {e}")
+
+
+def _send_alert_email(
+    session_id: str,
+    severity: str,
+    intent: str,
+    message: str,
+) -> bool:
+    """Best-effort counselor email for a new or revived alert. Never raises:
+    a missing/broken SMTP config must not break the chat pipeline."""
     try:
         from app.services.notifications import send_counselor_alert_email
 
@@ -428,8 +496,10 @@ def _send_alert_email(session_id: str, severity: str, intent: str, message: str)
             intent=intent,
             message=message,
         )
+        return True
     except Exception as e:
         print(f"[counselor] alert email dispatch failed: {e}")
+        return False
 
 
 def require_session_owner(session_id: str, user: dict):
@@ -471,6 +541,10 @@ def process_alert(
                 ALERTS.append(existing)
 
         if existing:
+            previous_severity = existing.get("severity")
+            previous_rank = _severity_rank(previous_severity)
+            new_rank = _severity_rank(severity)
+
             existing["last_message"] = message
             existing["timestamp"] = datetime.utcnow().isoformat() + "Z"
             existing["intent"] = intent
@@ -499,6 +573,36 @@ def process_alert(
             # Keep the original age anchor (do NOT let new messages reset the
             # escalation deadline).
             existing.setdefault("first_alerted_at", existing["timestamp"])
+
+            # Never downgrade: once a High/Crisis alert exists, a later calm or
+            # Moderate turn must not make it disappear. Keep the highest
+            # severity and anxiety score seen for this session.
+            if new_rank >= previous_rank:
+                existing["severity"] = severity
+                existing["anxiety_score"] = max(
+                    int(existing.get("anxiety_score") or 0), int(anxiety_score or 0)
+                )
+
+            revived = False
+            # A reviewed/resolved alert is reopened only when the student's
+            # risk has genuinely escalated. This means a new Crisis after an
+            # earlier Moderate review still pages a counselor.
+            if (
+                new_rank > previous_rank
+                and severity in ("High", "Crisis")
+                and existing.get("status") not in ("pending", "escalated")
+            ):
+                existing["status"] = "pending"
+                existing["acknowledged"] = False
+                existing["acknowledged_at"] = None
+                existing["acknowledged_by"] = None
+                existing.pop("resolved_at", None)
+                revived = True
+
+            _persist_alert_update(existing)
+            if revived:
+                _send_alert_email(session_id, severity, intent, message)
+                alert_sent = True
         else:
             alert_entry = {
                 "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -542,15 +646,10 @@ def process_alert(
                 except Exception as e:
                     print(f"Supabase alert insert error: {e}")
 
-                # Email the counselor(s) on file — only for a brand-new urgent
-                # (High/Crisis) alert, not on every update to an existing one
-                # and not for Moderate, so an ongoing distressed conversation
-                # or a stressed student doesn't spam the inbox. See
-                # app/services/notifications.py.
                 if severity in URGENT_SEVERITIES:
                     _send_alert_email(session_id, severity, intent, message)
 
-        alert_sent = True
+            alert_sent = True
 
     return {
         "severity": severity,
@@ -611,7 +710,9 @@ def rate_session(payload: SessionRating, user: dict = Depends(get_current_user))
 @router.get("/alerts")
 def get_alerts(user: dict = Depends(require_role("counselor"))):
     _hydrate_alerts()
-    visible = sort_alerts_by_severity([a for a in ALERTS if not a.get("deleted")])
+    visible = sort_alerts_by_severity(
+        [a for a in ALERTS if not a.get("deleted") and _is_alert_visible(a)]
+    )
     return {"alerts": visible, "count": len(visible)}
 
 
@@ -619,7 +720,13 @@ def get_alerts(user: dict = Depends(require_role("counselor"))):
 def get_pending_alerts(user: dict = Depends(require_role("counselor"))):
     _hydrate_alerts()
     pending = sort_alerts_by_severity(
-        [a for a in ALERTS if a.get("status") == "pending" and not a.get("deleted")]
+        [
+            a
+            for a in ALERTS
+            if a.get("status") == "pending"
+            and not a.get("deleted")
+            and _is_alert_visible(a)
+        ]
     )
     return {"alerts": pending, "count": len(pending)}
 
@@ -736,6 +843,13 @@ def request_counselor(payload: CounselorRequest, user: dict = Depends(get_curren
                 ).execute()
             except Exception as e:
                 print(f"Supabase alert insert error: {e}")
+
+            # A student explicitly asking for a counselor should reach the RGCs
+            # the same way an automatic Moderate+ alert does, rather than only
+            # appearing in the dashboard queue.
+            _send_alert_email(
+                payload.session_id, "Requested", "student_requested", payload.message
+            )
 
         return {"ok": True}
     except Exception as e:

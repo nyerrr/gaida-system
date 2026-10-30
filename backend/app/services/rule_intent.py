@@ -69,6 +69,9 @@ KEYWORDS: Dict[str, List[tuple]] = {
         ("i just want it to stop", 3.5),
         ("i can't do this anymore", 3.0),
         ("i give up on everything", 3.5),
+        ("i just want to give up", 3.0),
+        ("i give up", 3.0),
+        ("give up", 2.5),
         ("no point in trying anymore", 3.0),
 
         # Filipino indirect expressions
