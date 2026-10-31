@@ -13,12 +13,16 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 def require_session_owner(session_id: str, user: dict):
     """403 unless the authenticated user owns the given session (or the
     session has no recorded owner). Counselors are excluded from this check."""
+    if user.get("role") == "counselor":
+        return
     session = get_session(session_id)
     if session and session.get("user_id") and session["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="Session does not belong to this user")
 
 
 class SessionCreate(BaseModel):
+    # Deprecated: the session owner is taken from the bearer token, not the
+    # body. Kept so existing clients that still send user_id do not break.
     user_id: str | None = None
 
 
@@ -41,12 +45,23 @@ def start_session(payload: SessionCreate, user: dict = Depends(get_current_user)
     # svc_start() already creates the correct sessions row (keyed by
     # session_token = sid) via session_manager. The old manual insert here
     # wrote a second, mismatched row and is unused by the frontend — removed.
-    sid = svc_start(payload.user_id)
+    # The owner comes from the validated token; payload.user_id is ignored so
+    # a caller cannot create a session attributed to another student.
+    sid = svc_start(user["user_id"])
     return {"session_id": sid}
 
 
 @router.post("/message")
 def post_message(payload: MessagePayload, user: dict = Depends(get_current_user)):
+    # Check ownership BEFORE recording anything. Without this, any authenticated
+    # user who knows another student's session_id could inject messages into it.
+    require_session_owner(payload.session_id, user)
+
+    # Students must not be able to write entries that appear to come from a
+    # counselor; only a counselor token may post with that sender.
+    if payload.sender == "counselor" and user.get("role") != "counselor":
+        raise HTTPException(status_code=403, detail="Only counselors may post as a counselor")
+
     # Analyze user text when sender is 'user'
     analysis = None
     if payload.sender == 'user':

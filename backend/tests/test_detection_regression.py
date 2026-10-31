@@ -45,7 +45,10 @@ ORDINARY_LANGUAGE = [
     # also in SAFE_PHRASES; the others must not page on the life-object rule.
     "i give up on this assignment",
     "i gave up on my dreams",
-    "i just want to give up",
+    # NOTE: a bare "i just want to give up" is intentionally NOT listed here.
+    # Since the October 2026 counselor interviews it is a HIGH warning sign with
+    # clarify=True (not Crisis). That contract is pinned in
+    # test_give_up_handling.py::test_vague_give_up_through_full_pipeline.
 ]
 
 # Explicit first-person DENIALS of a death/harm wish. Negating a death verb is

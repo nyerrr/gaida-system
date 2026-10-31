@@ -45,6 +45,10 @@ class ConsentRequest(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     credential: str
+    # NOTE: `role` is only an intent hint ("I clicked the counselor button").
+    # It can never grant a role: the issued token's role is derived from the
+    # verified email via resolve_google_role(). A counselor intent on an email
+    # that is not allowlisted is rejected rather than silently downgraded.
     role: str = "student"
 
 
@@ -70,6 +74,33 @@ def _counselor_credentials(faculty_id: str) -> dict | None:
 
 def validate_email_domain(email: str) -> bool:
     return email.strip().lower().endswith(ALLOWED_DOMAIN)
+
+
+def _counselor_emails() -> set[str]:
+    """The emails allowed to receive a counselor role via Google sign-in.
+
+    Counselor identity is derived server-side only. Entries tagged
+    role="counselor" in TEST_CREDENTIALS are picked up automatically (when they
+    are real @ue.edu.ph addresses), and COUNSELOR_EMAILS — a comma-separated
+    env var — lets staff be onboarded without a code change.
+    """
+    emails = {
+        entry.strip().lower()
+        for entry in os.getenv("COUNSELOR_EMAILS", "").split(",")
+        if entry.strip()
+    }
+    for creds in TEST_CREDENTIALS.values():
+        if creds.get("role") != "counselor":
+            continue
+        email = str(creds.get("email", "")).strip().lower()
+        if email.endswith(ALLOWED_DOMAIN):
+            emails.add(email)
+    return emails
+
+
+def resolve_google_role(email: str) -> str:
+    """Map a verified Google email to a role. Never trusts the client."""
+    return "counselor" if email.strip().lower() in _counselor_emails() else "student"
 
 
 @router.get("/captcha")
@@ -146,9 +177,18 @@ def google_login(payload: GoogleLoginRequest):
 
     check_rate_limit(email)
 
-    role = (payload.role.strip().lower() or "student")
-    if role not in ("student", "counselor"):
+    # Derive the role from the verified email. The old code used payload.role
+    # as the issued role, which let any @ue.edu.ph account mint itself a
+    # counselor token. Now the hint can only cause a rejection, never a grant.
+    requested_role = (payload.role or "student").strip().lower()
+    if requested_role not in ("student", "counselor"):
         raise HTTPException(status_code=400, detail="Invalid role")
+    role = resolve_google_role(email)
+    if requested_role == "counselor" and role != "counselor":
+        raise HTTPException(
+            status_code=403,
+            detail="This account is not authorized for counselor access",
+        )
 
     user_id = email
     for sid, creds in TEST_CREDENTIALS.items():

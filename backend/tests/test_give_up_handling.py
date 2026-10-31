@@ -60,3 +60,15 @@ def test_giving_up_on_schoolwork_is_stress_not_a_crisis():
     verdict = resolve_crisis_level(["i give up"], "i give up on this assignment")
     assert verdict["intent"] == "stress"
     assert verdict["confidence"] < 0.75
+
+
+def test_vague_give_up_through_full_pipeline():
+    """The end-to-end detector (not just resolve_crisis_level) must return
+    HIGH + clarify for a bare "give up", and must not reach Crisis."""
+    from app.services.virtual_agent import detect_intent_and_level
+
+    result = detect_intent_and_level("i just want to give up")
+    assert result["intent"] == "suicidal"
+    assert result["severity"] == "High"
+    assert result["anxiety_level"] == "high"
+    assert result["clarify"] is True
