@@ -86,6 +86,67 @@ def test_alert_upgrades_when_the_session_gets_worse_and_never_downgrades():
     assert counselor.ALERTS[0]["severity"] == "Crisis"
 
 
+def test_a_students_own_request_sits_below_moderate_in_the_list():
+    alerts = [
+        {"session_id": "req", "severity": "Requested", "timestamp": "2026-10-30T09:00:00Z"},
+        {"session_id": "mod", "severity": "Moderate", "timestamp": "2026-10-30T01:00:00Z"},
+        {"session_id": "high", "severity": "High", "timestamp": "2026-10-30T02:00:00Z"},
+    ]
+    order = [a["session_id"] for a in sort_alerts_by_severity(alerts)]
+    assert order == ["high", "mod", "req"]
+
+
+def test_a_later_moderate_message_upgrades_a_students_request():
+    counselor.ALERTS.append(
+        {
+            "session_id": "s1",
+            "severity": "Requested",
+            "status": "pending",
+            "timestamp": "2026-10-30T01:00:00Z",
+            "anxiety_score": 0,
+        }
+    )
+    process_alert("s1", "u1", "anxiety", 3, "stressed", "Moderate")
+    assert counselor.ALERTS[0]["severity"] == "Moderate"
+
+
+# --- Counselor emails: one per escalation, never two ----------------------
+
+
+@pytest.fixture
+def emails(monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        counselor,
+        "_send_alert_email",
+        lambda session_id, severity, intent, message: sent.append((session_id, severity)),
+    )
+    return sent
+
+
+def test_pending_moderate_reaching_high_sends_exactly_one_email(emails):
+    process_alert("s1", "u1", "anxiety", 3, "stressed", "Moderate")
+    process_alert("s1", "u1", "anxiety", 5, "much worse", "High")
+    process_alert("s1", "u1", "anxiety", 5, "still bad", "High")
+    assert emails == [("s1", "High")]
+
+
+def test_reviewed_moderate_reopened_by_high_sends_exactly_one_email(emails):
+    process_alert("s1", "u1", "anxiety", 3, "stressed", "Moderate")
+    counselor.ALERTS[0]["status"] = "reviewed"
+    result = process_alert("s1", "u1", "anxiety", 5, "much worse", "High")
+    assert emails == [("s1", "High")]
+    assert counselor.ALERTS[0]["status"] == "pending"
+    assert counselor.ALERTS[0]["acknowledged"] is False
+    assert result["alert_sent"] is True
+
+
+def test_repeated_moderate_messages_never_email(emails):
+    process_alert("s1", "u1", "anxiety", 3, "stressed", "Moderate")
+    process_alert("s1", "u1", "anxiety", 3, "still stressed", "Moderate")
+    assert emails == []
+
+
 # --- Face-to-face request -> UE Student Portal -------------------------------
 
 from app.services.intent_router import (  # noqa: E402

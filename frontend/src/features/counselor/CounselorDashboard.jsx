@@ -32,8 +32,6 @@ const P = {
   highSoft: '#F6E3DC',
   teal: '#4C8F8F',
   tealSoft: '#DCEFEF',
-  gold: '#9A7B0A',
-  goldSoft: '#F8F0C8',
   red: '#B0472F',
   redSoft: '#FBEDEA',
   redBorder: '#F0D2CA',
@@ -75,17 +73,6 @@ const severityColor = (s) => {
   if (s === 'Low') return { bg: `bg-[${P.green}]`, text: 'text-white', dot: `bg-[${P.green}]`, border: `border-[${P.greenSoft}]`, light: `bg-[${P.greenSoft}]`, hex: P.green };
   return { bg: `bg-[${P.textMuted}]`, text: 'text-white', dot: `bg-[${P.textMuted}]`, border: `border-[${P.border}]`, light: `bg-[${P.panel}]`, hex: P.textMuted };
 };
-
-// Alerts tab order: Crisis first, then High, then a student's own request for a
-// counselor, then Moderate. Newest first within a level. The backend sorts the
-// same way; this keeps the list correct if the order ever changes in transit.
-const ALERT_SEVERITY_RANK = { Crisis: 4, High: 3, Requested: 2, Moderate: 1 };
-const sortAlertsBySeverity = (list) =>
-  [...list].sort((a, b) => {
-    const byRank = (ALERT_SEVERITY_RANK[b.severity] || 0) - (ALERT_SEVERITY_RANK[a.severity] || 0);
-    if (byRank !== 0) return byRank;
-    return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
-  });
 
 const formatRelative = (ts) => {
   if (!ts) return '';
@@ -568,7 +555,6 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     a.severity === 'High'   ? P.high :
     a.severity === 'Moderate' ? P.amber :
     a.severity === 'Requested' ? P.accent :
-    a.severity === 'Moderate' ? P.gold :
     P.amber;
 
   const bgColor =
@@ -579,7 +565,6 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     a.severity === 'High'   ? P.highSoft :
     a.severity === 'Moderate' ? P.amberSoft :
     a.severity === 'Requested' ? P.accentSoft :
-    a.severity === 'Moderate' ? P.goldSoft :
     P.amberSoft;
 
   return (
@@ -725,9 +710,9 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
   });
 
   // Three honest states: pending (needs attention), escalated (counselor active) and reviewed/resolved.
-  const pending   = sortAlertsBySeverity(filtered.filter(a => a.status === 'pending'));
-  const escalated = sortAlertsBySeverity(filtered.filter(a => a.status === 'escalated'));
-  const resolved  = sortAlertsBySeverity(filtered.filter(a => a.status !== 'pending' && a.status !== 'escalated'));
+  const pending   = sortBySeverity(filtered.filter(a => a.status === 'pending'));
+  const escalated = sortBySeverity(filtered.filter(a => a.status === 'escalated'));
+  const resolved  = sortBySeverity(filtered.filter(a => a.status !== 'pending' && a.status !== 'escalated'));
 
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
@@ -788,8 +773,8 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-xs" style={{ color: P.textSecondary }} aria-label="Alert color legend">
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.red }} />Crisis</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.amber }} />High</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.gold }} />Moderate</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.high }} />High</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.amber }} />Moderate</span>
         <span style={{ color: P.textMuted }}>Listed highest risk first</span>
       </div>
       {showSwipeHint && alerts.length > 0 && (

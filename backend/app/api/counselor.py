@@ -67,18 +67,6 @@ def _is_alert_visible(alert: dict) -> bool:
     return alert.get("severity") in ALERT_SEVERITIES or alert.get("severity") == "Requested"
 
 
-def _sort_alerts(alerts: list[dict]) -> list[dict]:
-    """Most severe first, then newest. A Crisis alert must never sit below a
-    Moderate one just because it arrived later."""
-    return sorted(
-        alerts,
-        key=lambda a: (
-            _severity_rank(a.get("severity")),
-            str(a.get("timestamp") or ""),
-        ),
-        reverse=True,
-    )
-
 # ---------------------------------------------------------------------------
 # In-memory stores
 #
@@ -436,9 +424,11 @@ ALERT_SEVERITIES = ("Moderate", "High", "Crisis")
 # busy counselor is not paged for every stressed student.
 URGENT_SEVERITIES = ("High", "Crisis")
 
-# Display order on the Alerts tab: Crisis first, then High, then a student's own
-# request for a counselor, then Moderate.
-ALERT_SEVERITY_RANK = {"Crisis": 4, "High": 3, "Requested": 2, "Moderate": 1}
+# Display order on the Alerts tab: Crisis first, then High, then Moderate, then a
+# student's own request for a counselor. One table (SEVERITY_RANK) is used for
+# both sorting and upgrading so the two can never disagree. The dashboard uses
+# the same order.
+ALERT_SEVERITY_RANK = SEVERITY_RANK
 
 
 def should_alert_counselor(severity: str) -> bool:
@@ -446,13 +436,10 @@ def should_alert_counselor(severity: str) -> bool:
 
 
 def sort_alerts_by_severity(alerts: list) -> list:
-    """Crisis first, then High, then Requested, then Moderate. Newest first
+    """Crisis first, then High, then Moderate, then Requested. Newest first
     within the same level. Enforced here so every client sees the same order."""
     newest_first = sorted(alerts, key=lambda a: str(a.get("timestamp") or ""), reverse=True)
     return sorted(newest_first, key=lambda a: -ALERT_SEVERITY_RANK.get(a.get("severity"), 0))
-
-
-_sort_alerts = sort_alerts_by_severity
 
 
 def _persist_alert_update(alert: dict, extra: Optional[dict] = None):
@@ -486,7 +473,10 @@ def _send_alert_email(
     message: str,
 ) -> bool:
     """Best-effort counselor email for a new or revived alert. Never raises:
-    a missing/broken SMTP config must not break the chat pipeline."""
+    a missing/broken SMTP config must not break the chat pipeline. Dry-run mode
+    (GAIDA_DISABLE_PERSISTENCE) never emails anyone."""
+    if persistence_disabled():
+        return False
     try:
         from app.services.notifications import send_counselor_alert_email
 
@@ -548,28 +538,16 @@ def process_alert(
             existing["last_message"] = message
             existing["timestamp"] = datetime.utcnow().isoformat() + "Z"
             existing["intent"] = intent
-            # A later, more serious message upgrades the alert. Without this a
-            # session that first alerted at Moderate would stay Moderate even
-            # after it reached High or Crisis. The alert never goes down.
-            previous = existing.get("severity")
-            if ALERT_SEVERITY_RANK.get(severity, 0) > ALERT_SEVERITY_RANK.get(previous, 0):
-                existing["severity"] = severity
-                existing["anxiety_score"] = anxiety_score
-                newly_urgent = severity in URGENT_SEVERITIES and previous not in URGENT_SEVERITIES
-                if newly_urgent:
-                    # The escalation clock starts when the alert becomes urgent.
-                    existing["first_alerted_at"] = existing["timestamp"]
-                if not persistence_disabled():
-                    try:
-                        from app.database.database import supabase
-
-                        supabase.table("counselor_alerts").update(
-                            {"severity": severity, "anxiety_score": anxiety_score}
-                        ).eq("session_id", session_id).eq("status", "pending").execute()
-                    except Exception as e:
-                        print(f"Supabase alert severity update error: {e}")
-                    if newly_urgent:
-                        _send_alert_email(session_id, severity, intent, message)
+            # An alert that first appeared at Moderate (or as a student request)
+            # and then reaches High or Crisis becomes urgent now: the escalation
+            # clock starts at this moment and a counselor is emailed once.
+            newly_urgent = (
+                new_rank > previous_rank
+                and severity in URGENT_SEVERITIES
+                and previous_severity not in URGENT_SEVERITIES
+            )
+            if newly_urgent:
+                existing["first_alerted_at"] = existing["timestamp"]
             # Keep the original age anchor (do NOT let new messages reset the
             # escalation deadline).
             existing.setdefault("first_alerted_at", existing["timestamp"])
@@ -600,7 +578,10 @@ def process_alert(
                 revived = True
 
             _persist_alert_update(existing)
-            if revived:
+            # One email per escalation, whether the alert was still pending
+            # (newly_urgent) or had already been reviewed and was reopened
+            # (revived). Both can be true at once, and must still send one.
+            if newly_urgent or revived:
                 _send_alert_email(session_id, severity, intent, message)
                 alert_sent = True
         else:
