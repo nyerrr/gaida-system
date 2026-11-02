@@ -135,3 +135,96 @@ def phrase_fuzzy_match(
         if SequenceMatcher(None, keyword, " ".join(window)).ratio() >= threshold:
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Typo-tolerant CRISIS phrase matching
+# ---------------------------------------------------------------------------
+# The fuzzy matchers above refuse short words on purpose (sad/said, mad/made),
+# which also means a crisis phrase with a typo in a short word is invisible:
+# "i want to dei" and "i wamt to dei" came back neutral with no alert, because
+# "die" is 3 letters and "want" is 4.
+#
+# This matcher is narrower than similarity scoring, so it can afford to accept
+# short words:
+#   * it only runs against the crisis keyword list, never against emotion words
+#   * EVERY word of the phrase must line up with a word of the message, in
+#     order; the only thing allowed to differ is a single slip inside a word
+#     (two adjacent letters swapped, or one letter replaced by a neighbouring
+#     key on the keyboard)
+#   * a variant that is itself a real word ("dye", "dear", "kilo") is refused
+#   * a negator inside or just before the window ("i dont want to dei")
+#     rejects the match, because the negation guard in crisis_guards cannot
+#     read a misspelled harm word
+_KEY_NEIGHBOURS = {
+    "q": "wa", "w": "qes", "e": "wrd", "r": "etf", "t": "ryg", "y": "tuh",
+    "u": "yij", "i": "uok", "o": "ipl", "p": "ol", "a": "qsz", "s": "adwx",
+    "d": "sfec", "f": "dgrv", "g": "fhtb", "h": "gjyn", "j": "hkum",
+    "k": "jlio", "l": "kop", "z": "ax", "x": "zcs", "c": "xvd", "v": "cbf",
+    "b": "vng", "n": "bmh", "m": "nj",
+}
+
+# Real words that a one-slip variant of a crisis word can land on.
+_REAL_WORD_VARIANTS = frozenset({
+    "dye", "did", "dig", "dim", "dip", "dis", "dear", "dean", "deed", "deal",
+    "deaf", "dad", "lie", "ill", "kilo", "jill", "will", "wine", "want",
+    "wane", "wand", "wang", "walt", "wast", "life", "line", "lice", "lift",
+    "life", "mys", "mine", "stop", "step", "ends", "send", "bed", "red",
+})
+
+_NEGATORS = frozenset({
+    "dont", "don't", "do", "not", "never", "no", "wont", "won't", "cant",
+    "can't", "cannot", "didnt", "didn't", "wouldnt", "wouldn't", "hindi",
+    "di", "ayaw", "wag", "huwag", "walang", "wala",
+})
+
+
+def typo_variants(word: str) -> set:
+    """One-slip variants of `word`: an adjacent swap, or (words of 4+ letters)
+    one letter replaced by a neighbouring key."""
+    out = set()
+    n = len(word)
+    if n < 3 or not word.isalpha():
+        return out
+    for i in range(n - 1):
+        if word[i] != word[i + 1]:
+            out.add(word[:i] + word[i + 1] + word[i] + word[i + 2:])
+    if n >= 4:
+        for i, ch in enumerate(word):
+            for r in _KEY_NEIGHBOURS.get(ch, ""):
+                out.add(word[:i] + r + word[i + 1:])
+    out.discard(word)
+    return out - _REAL_WORD_VARIANTS
+
+
+def typo_phrase_match(keyword: str, text: str) -> bool:
+    """True when `text` contains `keyword` with at least one single-slip typo
+    and no other differences. See the block comment above."""
+    kt = keyword.split()
+    n = len(kt)
+    if n < 2:
+        return False
+    tt = (text or "").split()
+    if len(tt) < n:
+        return False
+    for i in range(len(tt) - n + 1):
+        window = tt[i:i + n]
+        typos = 0
+        ok = True
+        for k, w in zip(kt, window):
+            if k in FUNCTION_WORDS:
+                continue
+            if k == w:
+                continue
+            if w in typo_variants(k):
+                typos += 1
+                continue
+            ok = False
+            break
+        if not ok or typos == 0:
+            continue
+        before = tt[max(0, i - 3):i]
+        if any(t in _NEGATORS for t in window + before):
+            continue
+        return True
+    return False

@@ -15,3 +15,5 @@ read at call time in ``app.utils.config.persistence_disabled``.
 import os
 
 os.environ.setdefault("GAIDA_DISABLE_PERSISTENCE", "1")
+# Counselor-login tests use the demo counselors (see app/constants.py).
+os.environ.setdefault("GAIDA_ALLOW_DEMO_COUNSELORS", "1")

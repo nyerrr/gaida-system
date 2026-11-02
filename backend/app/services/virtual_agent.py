@@ -5,6 +5,7 @@ from app.services.fuzzy_match import (
     TOKEN_FUZZY_THRESHOLD,
     phrase_fuzzy_match,
     token_fuzzy_match,
+    typo_phrase_match,
 )
 from app.services.crisis_guards import (
     contains_harm_keyword,
@@ -319,6 +320,16 @@ KEYWORDS = {
         ("top of the building", 4.0),
         ("rooftop", 4.0),
         ("hang myself", 4.0),
+        # Strangling / choking oneself was missing: a counselor flagged
+        # "Strangling myself to stop is what it feels like" as suicidal and
+        # GAIDA read it as ordinary anxiety with no alert.
+        ("strangle myself", 4.0),
+        ("strangling myself", 4.0),
+        ("strangled myself", 4.0),
+        ("choke myself", 4.0),
+        ("choking myself", 4.0),
+        ("suffocate myself", 4.0),
+        ("suffocating myself", 4.0),
         ("hanged myself", 4.0),
         ("noose", 4.0),
         ("goodbye letter", 4.0),
@@ -436,6 +447,7 @@ METHOD_OBJECT_PAIRS = (
 EXPLICIT_SELF_HARM_RE = re.compile(
     r"\b(kill(ing|ed|er)?|kms|dying|die|suicid\w*|self[- ]harm\w*|"
     r"off (my )?self|end(ing)? my|hurt myself|harm myself|cut myself|"
+    r"strangl\w* myself|chok\w* myself|suffocat\w* myself|hang(ing|ed)? myself|"
     r"wakasan|wawakasan|mamatay|magpakamatay|kamatayan|papatayin|patayin|"
     r"mawala|tatapusin|tapusin|"
     # "give up (on) (this|my) life" is a death wish phrased as surrender: the
@@ -589,7 +601,8 @@ def _match_suicidal_keyword(txt: str, tokens: set, raw_text: str | None = None):
         matched = False
         if ' ' in kw:
             if re.search(r"\b" + re.escape(kw) + r"\b", txt) or \
-               _windowed_fuzzy(kw, txt):
+               _windowed_fuzzy(kw, txt) or \
+               typo_phrase_match(kw, txt):
                 matched = True
         else:
             if kw in tokens:

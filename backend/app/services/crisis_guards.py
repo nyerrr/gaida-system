@@ -91,6 +91,22 @@ def is_give_up_on_everyday_thing(text: str) -> bool:
     return bool(GIVE_UP_OBJECT_RE.search(text or ""))
 
 
+# A school/work word normally means "I'm venting", but not when the same message
+# also names a loss or despair. "I just try to focus on my studies... loss of
+# family members... I just really want to give up" mentions studies and is not
+# a vent; one counselor rated it suicidal and another asked for a follow-up.
+LOSS_OR_DESPAIR_RE = re.compile(
+    r"\b(loss of|lost (?:my|a|our|someone|both)|passed away|pass away|died|"
+    r"death of|namatay|pumanaw|hopeless|worthless|burden|family problems?|"
+    r"no reason to)\b",
+    re.IGNORECASE,
+)
+
+
+def has_loss_or_despair_context(text: str) -> bool:
+    return bool(LOSS_OR_DESPAIR_RE.search(text or ""))
+
+
 def has_venting_context(text: str) -> bool:
     """True when the message is clearly about school/work (a known FP vector
     for colloquial give-up phrases)."""
@@ -482,7 +498,7 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
             return {"intent": "suicidal", "confidence": 0.88}
         return {"intent": "suicidal", "confidence": 0.99}
 
-    if has_venting_context(text):
+    if has_venting_context(text) and not has_loss_or_despair_context(text):
         return {"intent": "stress", "confidence": 0.60}
 
     m = GIVE_UP_OBJECT_RE.search(text)
@@ -536,6 +552,8 @@ DISTRESS_SIGNAL_RE = re.compile(
     r"stress|stressed|burnout|"
     r"sad|sadness|lonely|alone|empty|hopeless|hopelessness|"
     r"cry|crying|umiiyak|iiyak|tears|lungkot|malungkot|"
+    r"feel(?:ing)? (?:so |a little |really |very |kinda )?(?:down|low|blue)|"
+    r"a little down|losing interest|lose interest|"
     r"hurt|hurts|sakit|broken|heartbroken|"
     r"worthless|failure|ashamed|disappointed|meaningless|numb|"
     r"no energy|no motivation|exhausted|drained|"
