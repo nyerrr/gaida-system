@@ -227,7 +227,13 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Voice analysis failed.");
+      if (!res.ok) {
+        // Surface the server's reason (e.g. "Transcription failed: ...") instead of a
+        // generic message, so a failure can be diagnosed from the screen.
+        let reason = "";
+        try { reason = (await res.json())?.detail || ""; } catch { /* non-JSON error body */ }
+        throw new Error(reason ? `Voice analysis failed: ${reason}` : `Voice analysis failed (${res.status}).`);
+      }
       const data = await res.json();
       if (!data.transcript) throw new Error("No speech detected.");
 
