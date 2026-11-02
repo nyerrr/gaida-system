@@ -72,3 +72,39 @@ def test_vague_give_up_through_full_pipeline():
     assert result["severity"] == "High"
     assert result["anxiety_level"] == "high"
     assert result["clarify"] is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "should i give up my scholarship",
+        "i want to give up smoking",
+        "i'm trying to give up coffee",
+        "i want to give up vaping",
+    ],
+)
+def test_giving_up_an_everyday_thing_is_not_a_risk(text):
+    verdict = resolve_crisis_level(["i want to give up"], text)
+    assert verdict["confidence"] < 0.75
+    assert not verdict.get("clarify")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "i want to give up drinking and i feel hopeless",
+        "i give up on everything",
+        "i just want to give up",
+    ],
+)
+def test_giving_up_without_a_named_everyday_thing_still_alerts(text):
+    verdict = resolve_crisis_level(["i want to give up"], text)
+    assert verdict["confidence"] >= 0.88
+    assert verdict.get("clarify") is True
+
+
+def test_death_talk_next_to_a_habit_is_still_a_crisis():
+    verdict = resolve_crisis_level(
+        ["i want to die"], "i want to give up smoking and i want to die"
+    )
+    assert verdict["confidence"] >= 0.99

@@ -4,7 +4,7 @@ counselor takeover/handoff, session notes, analytics, and PDF export.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import json
 from typing import Optional
@@ -94,8 +94,18 @@ _ESCALATION_MONITOR_STARTED = False  # background deadline thread started?
 _ESCALATION_STATE_PERSISTED: set = set()  # (session_id, level, needs_supervisor) already synced
 
 
+# Guidance office hours are Philippine time (UTC+8, no daylight saving). The
+# server clock is UTC, so reading `now.hour` directly treated 4pm Manila as
+# "off hours" and 1am Manila as "work hours". A fixed offset is used rather
+# than ZoneInfo because Windows installs often lack the tzdata package.
+MANILA_TZ = timezone(timedelta(hours=8))
+
+
 def _is_off_hours(now: datetime) -> bool:
-    return now.hour < 8 or now.hour >= 17 or now.weekday() >= 5
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    local = now.astimezone(MANILA_TZ)
+    return local.hour < 8 or local.hour >= 17 or local.weekday() >= 5
 
 
 def _parse_utc(value):

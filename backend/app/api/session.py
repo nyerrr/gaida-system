@@ -3,9 +3,9 @@ from pydantic import BaseModel
 from typing import Dict, Any
 from datetime import datetime
 import asyncio
-from app.services.session_manager import start_session as svc_start, get_session, list_active_sessions, record_interaction, end_session, set_main_loop
+from app.services.session_manager import start_session as svc_start, get_session, record_interaction, end_session, set_main_loop
 from app.services.rule_intent import analyze_with_rules
-from app.utils.auth import get_current_user, validate_token, require_role
+from app.utils.auth import get_current_user, validate_token
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -116,9 +116,9 @@ def get_session_state(session_id: str, user: dict = Depends(get_current_user)):
     return s
 
 
-@router.get("/active")
-def active_sessions(user: dict = Depends(require_role("counselor"))):
-    return list_active_sessions()
+# NOTE: the old GET /api/session/active was removed. It was declared after
+# GET /{session_id}, so FastAPI matched "active" as a session id and it never
+# ran; the dashboard uses GET /api/counselor/sessions/active instead.
 
 
 @router.post("/{session_id}/end")
@@ -208,8 +208,12 @@ async def session_ws(websocket: WebSocket, session_id: str, token: str = Query("
     await manager.connect(session_id, websocket)
     try:
         while True:
-            data = await websocket.receive_json()
-            # Accept messages from counselor client and broadcast to others if needed
-            await manager.broadcast(session_id, data)
+            # The socket is server-push only: every real event reaches clients
+            # through record_interaction()/broadcast_to_session(), and neither
+            # dashboard sends anything over it. Rebroadcasting client frames
+            # would let a student forge counselor messages to everyone in the
+            # session, so incoming frames are read (to keep the connection
+            # alive and detect disconnects) and discarded.
+            await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(session_id, websocket)

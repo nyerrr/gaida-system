@@ -99,3 +99,25 @@ def test_counselor_can_write_into_a_students_session(client):
         headers=_headers(counselor),
     )
     assert r.status_code == 200, r.text
+
+
+def test_websocket_does_not_rebroadcast_client_frames(client, monkeypatch):
+    """The socket is server-push only. Rebroadcasting client frames would let a
+    student forge counselor messages to everyone connected to the session."""
+    from app.api import session as session_api
+
+    token = create_session_token("2024001", role="student")
+    sid = _start(client, token)
+
+    broadcasts = []
+
+    async def fake_broadcast(session_id, message):
+        broadcasts.append(message)
+
+    monkeypatch.setattr(session_api.manager, "broadcast", fake_broadcast)
+
+    with client.websocket_connect(f"/api/session/ws/{sid}?token={token}") as ws:
+        ws.send_text('{"sender": "counselor", "text": "forged"}')
+
+    assert not any("forged" in str(m) for m in broadcasts)
+

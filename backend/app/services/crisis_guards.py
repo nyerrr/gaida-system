@@ -72,6 +72,25 @@ TONING_CONTEXT_RE = re.compile(
 )
 
 
+# "give up" followed by an everyday thing to quit or let go of ("give up
+# smoking", "should I give up my scholarship"). The object is named explicitly,
+# so this is a decision or a habit, not hopelessness. Kept to an explicit
+# object list on purpose: "give up drinking" or "give up on everything" must
+# still reach the clarifying-question path.
+GIVE_UP_OBJECT_RE = re.compile(
+    r"\bgiv(?:e|ing|en) up (?:on )?(?:my |the |this |that |our |his |her )?"
+    r"(smoking|smoke|vaping|vape|sugar|sweets|soda|coffee|caffeine|junk food|"
+    r"fast food|milk tea|chocolate|diet|gym|workout|gaming|games|scholarship|"
+    r"yosi|sigarilyo)\b",
+    re.IGNORECASE,
+)
+
+
+def is_give_up_on_everyday_thing(text: str) -> bool:
+    """True for "give up smoking" / "give up my scholarship" style messages."""
+    return bool(GIVE_UP_OBJECT_RE.search(text or ""))
+
+
 def has_venting_context(text: str) -> bool:
     """True when the message is clearly about school/work (a known FP vector
     for colloquial give-up phrases)."""
@@ -465,6 +484,14 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
 
     if has_venting_context(text):
         return {"intent": "stress", "confidence": 0.60}
+
+    m = GIVE_UP_OBJECT_RE.search(text)
+    if m:
+        # A decision about a named thing, not hopelessness. A scholarship is a
+        # real stressor; a habit ("give up smoking") is just a topic.
+        if m.group(1).lower() == "scholarship":
+            return {"intent": "stress", "confidence": 0.60}
+        return {"intent": "neutral", "confidence": 0.30}
 
     if has_fiction_context(text):
         return {"intent": "anger", "confidence": 0.55}
