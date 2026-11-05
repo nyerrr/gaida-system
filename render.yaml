@@ -17,6 +17,21 @@ services:
         generateValue: true
       - key: PARTICIPANT_TOKEN_SECRET
         generateValue: true
+      # Counselor ID/password logins. Without COUNSELOR_ACCOUNTS the deployed
+      # service has no password counselors and /api/auth/counselor-login
+      # returns 401. Set it in the Render dashboard (or sync this blueprint and
+      # enter the value when prompted) as a JSON list, for example:
+      #   [{"id":"COUNSELOR01","password":"<long-random>",
+      #     "name":"Dr. Jane Cruz","email":"jane.cruz@ue.edu.ph"}]
+      # COUNSELOR_EMAILS is the comma-separated allow-list for Google sign-in
+      # counselor accounts.
+      # For a temporary pilot-only fallback, add GAIDA_ALLOW_DEMO_COUNSELORS=1
+      # instead; that enables the public demo passwords and must not be used
+      # for real participant data.
+      - key: COUNSELOR_ACCOUNTS
+        sync: false
+      - key: COUNSELOR_EMAILS
+        sync: false
       - key: WHISPER_MODEL
         value: medium
       - key: SMTP_HOST
