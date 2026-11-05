@@ -2,8 +2,8 @@
 
 The anonymous participant credential used to be a plain code looked up in the
 database. It is now a signed token, so a raw or tampered code is rejected
-before any lookup. These tests pin the token format, the legacy-code upgrade
-path, and the endpoint wiring for start/check/withdraw.
+before any lookup. These tests pin the token format and the endpoint wiring
+for start/check/withdraw, including rejection of guessable legacy codes.
 """
 import os
 import sys
@@ -186,16 +186,11 @@ def test_resolver_accepts_a_signed_token():
     )
 
 
-def test_resolver_accepts_a_legacy_code_for_upgrade():
-    participant_id, code, used_signed = research._resolve_participant_id(
-        True, None, "0123456789", None
-    )
+def test_resolver_rejects_a_legacy_code():
+    with pytest.raises(HTTPException) as error:
+        research._resolve_participant_id(True, None, "0123456789", None)
 
-    assert (participant_id, code, used_signed) == (
-        "anon_0123456789",
-        "0123456789",
-        False,
-    )
+    assert error.value.status_code == 400
 
 
 def test_resolver_rejects_a_tampered_token():
@@ -243,19 +238,16 @@ def test_returning_participant_is_not_asked_to_save_the_same_token(client, monke
     assert body["participant_token_issued"] is False
 
 
-def test_legacy_code_is_upgraded_to_a_signed_token(client, monkeypatch):
-    _prepare_start(monkeypatch, existing={"year_level": "2"})
+def test_start_rejects_a_legacy_code_before_touching_the_database(client, monkeypatch):
+    fake = _prepare_start(monkeypatch, existing={"year_level": "2"})
 
     response = client.post(
         "/api/research/start",
         json={"anonymous": True, "participant_code": "0123456789"},
     )
 
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["participant_id"] == "anon_0123456789"
-    assert body["participant_token_issued"] is True
-    assert verify_participant_token(body["participant_token"])["code"] == "0123456789"
+    assert response.status_code == 400
+    assert fake.calls == []
 
 
 def test_start_rejects_a_tampered_token_before_touching_the_database(client, monkeypatch):

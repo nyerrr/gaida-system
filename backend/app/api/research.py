@@ -119,12 +119,6 @@ def _validate_student_number(value: str) -> None:
         )
 
 
-# Codes issued before signed participant tokens were introduced. They remain
-# accepted so an existing participant can still withdraw or resume; a start
-# upgrades them to a signed token. New participants never receive a raw code.
-_LEGACY_CODE_RE = re.compile(r"^[0-9a-f]{10}$")
-
-
 def _resolve_participant_id(
     anonymous: bool,
     student_number: str | None,
@@ -133,16 +127,11 @@ def _resolve_participant_id(
 ) -> tuple[str, str | None, bool]:
     """Returns (participant_id, code_used, used_signed_token).
 
-    For the anonymous path, a signed participant token is authoritative. The
-    legacy ``participant_code`` field (and a raw code sent in
-    ``participant_token``) is still accepted so participants who joined before
-    the token change can withdraw or resume; the caller can then hand them a
-    signed token. A brand-new anonymous participant gets a fresh code.
+    For the anonymous path, only a signed participant token can resume an
+    existing participant. Raw participant codes are not credentials. A
+    brand-new anonymous participant gets a fresh code.
     """
     if anonymous:
-        # New clients send the saved credential in participant_token. Older
-        # clients may send a raw code there or in participant_code, so treat a
-        # non-token value in either field as legacy rather than rejecting it.
         credential = (participant_token or "").strip()
         if looks_like_participant_token(credential):
             claims = verify_participant_token(credential)
@@ -156,14 +145,8 @@ def _resolve_participant_id(
                 )
             return claims["participant_id"], claims["code"], True
 
-        legacy_code = (credential or (participant_code or "")).strip().lower()
-        if legacy_code:
-            if not _LEGACY_CODE_RE.fullmatch(legacy_code):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid participant token.",
-                )
-            return f"anon_{legacy_code}", legacy_code, False
+        if credential or (participant_code or "").strip():
+            raise HTTPException(status_code=400, detail="A valid participant token is required.")
 
         code = secrets.token_hex(5)
         return f"anon_{code}", code, False
@@ -226,7 +209,12 @@ def check_participant(
     """
     check_rate_limit(f"research_check:{_client_ip(request)}", limit=20, window=60)
 
-    if payload.anonymous and not (payload.participant_token or payload.participant_code):
+    if not payload.anonymous:
+        # Student numbers are identifiers, not proof of ownership. Never
+        # reveal whether an identified participant has previously enrolled.
+        return ParticipantCheckResponse(is_returning=False)
+
+    if not payload.participant_token and not payload.participant_code:
         return ParticipantCheckResponse(is_returning=False)
 
     participant_id, _, _ = _resolve_participant_id(
@@ -365,13 +353,14 @@ class Gad7Response(BaseModel):
 
 # ---------------------------------------------------------------------------
 # Withdraw — delete all data tied to an anonymous participant
-# (This is the "delete my data" promise the research consent makes; the signed
-# participant token is the credential, and legacy codes still work.)
+# (This is the "delete my data" promise the research consent makes; a signed
+# participant token is required to identify the participant.)
 # ---------------------------------------------------------------------------
 class WithdrawRequest(BaseModel):
     # Preferred: the signed participant token.
     participant_token: str | None = Field(default=None, max_length=512)
-    # Legacy raw code from before signed tokens.
+    # Deprecated compatibility field. Values here are rejected; a raw code
+    # is guessable and cannot authorize access to another participant's data.
     participant_code: str | None = Field(default=None, max_length=32)
 
 
@@ -412,8 +401,8 @@ def withdraw_anonymous_code(
 
     Requires a CAPTCHA-gated research access token (POST /api/research/access),
     so the destructive lookup is not reachable by an unauthenticated script.
-    The signed participant token is the participant's own credential; a legacy
-    raw code is still accepted for participants who joined before tokens.
+    A signed participant token is required. Raw codes are not accepted because
+    they are enumerable and do not prove control of a participant credential.
     """
     # Stricter than the default 5/min: this endpoint hard-deletes data on a
     # single credential, so brute-forcing or mass-triggering it needs to be far
