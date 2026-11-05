@@ -6,14 +6,31 @@ import { BACKEND_URL } from '../../config';
 export default function InformedConsent() {
   const navigate = useNavigate();
   const [isChecked, setIsChecked] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [consentError, setConsentError] = useState('');
+
+  const createSessionId = () => {
+    const cryptoApi = globalThis.crypto;
+    if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+    if (cryptoApi?.getRandomValues) {
+      const bytes = cryptoApi.getRandomValues(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    return `gaida-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  };
 
 const handleAccept = async (e) => {
   e.preventDefault();
-  if (!isChecked) return;
+  if (!isChecked || isSubmitting) return;
+  setIsSubmitting(true);
+  setConsentError('');
 
   try {
     // Get session_id from localStorage (set during login)
-    const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
+    const sessionId = localStorage.getItem('session_id') || createSessionId();
 
     // apiFetch attaches the student's bearer token. The consent endpoint is
     // authenticated: without it the backend rejects the request with 401.
@@ -34,7 +51,9 @@ const handleAccept = async (e) => {
 
   } catch (error) {
     console.error('Consent error:', error);
-    alert('Failed to record consent. Please try again.');
+    setConsentError('We could not save your consent. Check your connection and try again.');
+  } finally {
+    setIsSubmitting(false);
   }
 };
 
@@ -100,7 +119,7 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Consent Content - Scrollable */}
-        <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[40dvh] sm:max-h-96 overflow-y-auto border border-gray-200">
+        <div role="region" aria-label="Consent terms" tabIndex={0} className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[40dvh] sm:max-h-96 overflow-y-auto border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#608AB6]">
           <div className="space-y-4 text-sm text-gray-700">
             {/* Purpose */}
             <div>
@@ -237,18 +256,19 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Action Buttons */}
+        {consentError && <p role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{consentError}</p>}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
             type="button"
             onClick={handleAccept}
-            disabled={!isChecked}
+            disabled={!isChecked || isSubmitting}
             className={`flex-1 py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl font-semibold transition-all duration-200 text-sm sm:text-base ${
               isChecked
                 ? 'text-white shadow-md hover:shadow-lg active:scale-[0.98] bg-[#608AB6] hover:bg-[#52769c]'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            I Accept - Start Session
+            {isSubmitting ? 'Saving consent…' : 'I Accept - Start Session'}
           </button>
           <button
             type="button"

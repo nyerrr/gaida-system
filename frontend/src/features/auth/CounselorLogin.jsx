@@ -1,51 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
+import { useCaptcha } from '../../hooks/useCaptcha';
+import { clearAuth } from '../../api';
 
 export default function CounselorLogin() {
   const navigate = useNavigate();
   const [facultyId, setFacultyId] = useState('');
   const [password, setPassword] = useState('');
   const [antibot, setAntibot] = useState('');
-  const [captchaToken, setCaptchaToken] = useState('');
-  const [captchaImage, setCaptchaImage] = useState('');
-  // True while a challenge is being fetched, so a second submit cannot reuse
-  // the token that the failed attempt already burned server-side.
-  const [captchaLoading, setCaptchaLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    loadCaptcha();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- single mount-time load
-  }, []);
-
-  // The verification image is drawn and checked by the server; the browser
-  // only shows it and sends back the typed code with the signed token.
-  //
-  // `keepError` is for the refresh that runs after a failed login: if that
-  // fetch fails too, replacing "Invalid credentials" with a captcha message
-  // would hide the reason the attempt failed. The submit guard below already
-  // reports a missing image, so the login error is the one worth keeping.
-  const loadCaptcha = async ({ keepError = false } = {}) => {
-    setCaptchaLoading(true);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/captcha`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(String(res.status));
-      const data = await res.json();
-      setCaptchaToken(data.token);
-      setCaptchaImage(data.image);
-    } catch {
-      setCaptchaToken('');
-      setCaptchaImage('');
-      if (!keepError) {
-        setError('Could not load the verification image. Please press refresh.');
-      }
-    } finally {
-      setCaptchaLoading(false);
-    }
-  };
+  const { captchaToken, captchaImage, captchaLoading, loadCaptcha } = useCaptcha(setError);
 
   const handleRefreshCaptcha = (options) => {
     loadCaptcha(options);
@@ -65,9 +32,7 @@ export default function CounselorLogin() {
       const data = await response.json();
       if (response.ok) {
         const name = decodeGoogleName(credential);
-        // A stale student session_token shadows the counselor token in
-        // apiFetch's getAuthToken() and silently 403s every counselor request.
-        localStorage.removeItem('session_token');
+        clearAuth();
         localStorage.setItem('counselor_token', data.session_token);
         localStorage.setItem('counselorData', JSON.stringify({
           id: data.student_id,
@@ -117,9 +82,7 @@ export default function CounselorLogin() {
       });
       const data = await response.json();
       if (response.ok) {
-        // A stale student session_token shadows the counselor token in
-        // apiFetch's getAuthToken() and silently 403s every counselor request.
-        localStorage.removeItem('session_token');
+        clearAuth();
         localStorage.setItem('counselor_token', data.session_token);
         localStorage.setItem('counselorData', JSON.stringify({
           id: data.student_id,

@@ -73,10 +73,19 @@ export async function clearSensitiveLocalData() {
 }
 
 export function clearAuth() {
-  localStorage.removeItem('session_token')
-  localStorage.removeItem('counselor_token')
-  localStorage.removeItem('counselorData')
-  localStorage.removeItem('student_id')
+  // Clear all GAIDA localStorage state for both portals, including preferences,
+  // so a shared browser profile starts clean for its next user.
+  [
+    'session_token',
+    'counselor_token',
+    'counselorData',
+    'student_id',
+    'session_id',
+    'consent_given',
+    'is_research_session',
+    'gaida_theme',
+    'gaida:alert-swipe-hint',
+  ].forEach((key) => localStorage.removeItem(key))
   clearSensitiveLocalData()
 }
 

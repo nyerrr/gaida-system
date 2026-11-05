@@ -1,14 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
+import { useCaptcha } from '../../hooks/useCaptcha';
+import { clearAuth } from '../../api';
 
 export default function StudentLogin() {
-  const [captchaToken, setCaptchaToken] = useState('');
-  const [captchaImage, setCaptchaImage] = useState('');
-  // True while a challenge is being fetched, so a second submit cannot reuse
-  // the token that the failed attempt already burned server-side.
-  const [captchaLoading, setCaptchaLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
@@ -21,13 +18,7 @@ export default function StudentLogin() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
-
-  // Generate captcha immediately when the page loads. Mount-only on purpose:
-  // re-running on every re-render would reset the captcha mid-typing.
-  useEffect(() => {
-    loadCaptcha();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadCaptcha is recreated each render; we want a single mount-time load
-  }, []);
+  const { captchaToken, captchaImage, captchaLoading, loadCaptcha } = useCaptcha(setError);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -39,32 +30,6 @@ export default function StudentLogin() {
 
   const validateEmail = (email) => {
     return email.trim().toLowerCase().endsWith('@ue.edu.ph');
-  };
-
-  // The verification image is drawn and checked by the server; the browser
-  // only shows it and sends back the typed code with the signed token.
-  //
-  // `keepError` is for the refresh that runs after a failed login: if that
-  // fetch fails too, replacing "Invalid credentials" with a captcha message
-  // would hide the reason the attempt failed. The submit guard below already
-  // reports a missing image, so the login error is the one worth keeping.
-  const loadCaptcha = async ({ keepError = false } = {}) => {
-    setCaptchaLoading(true);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/captcha`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(String(res.status));
-      const data = await res.json();
-      setCaptchaToken(data.token);
-      setCaptchaImage(data.image);
-    } catch {
-      setCaptchaToken('');
-      setCaptchaImage('');
-      if (!keepError) {
-        setError('Could not load the verification image. Please press refresh.');
-      }
-    } finally {
-      setCaptchaLoading(false);
-    }
   };
 
   const handleRefreshCaptcha = (options) => {
@@ -106,10 +71,7 @@ export default function StudentLogin() {
       });
       const data = await response.json();
       if (response.ok) {
-        // A stale counselor_token on a shared device would keep counselor
-        // requests alive past student login; drop it so the student token is
-        // the only one in play.
-        localStorage.removeItem('counselor_token');
+        clearAuth();
         localStorage.setItem('session_token', data.session_token);
         localStorage.setItem('student_id', data.student_id);
         navigate('/consent');
@@ -137,7 +99,7 @@ export default function StudentLogin() {
       });
       const data = await response.json();
       if (response.ok) {
-        localStorage.removeItem('counselor_token');
+        clearAuth();
         localStorage.setItem('session_token', data.session_token);
         localStorage.setItem('student_id', data.student_id);
         navigate('/consent');

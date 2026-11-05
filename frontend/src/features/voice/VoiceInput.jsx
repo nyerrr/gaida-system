@@ -81,7 +81,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
       onTranscript?.(text);
     }
 
-    if (mediaRecorderRef.current?.state !== "inactive") {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     } else if (!text) {
       setError("No speech detected. Try again.");
@@ -192,7 +192,12 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
         pushStatus(final || interim || "Listening...");
       };
 
-      recognition.onerror = () => {};
+      recognition.onerror = (event) => {
+        const reason = event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
+          ? 'Live transcription permission was denied. You can still submit the recording for transcription.'
+          : 'Live transcription is unavailable. Your recording can still be submitted.';
+        setError(reason);
+      };
       try { recognition.start(); } catch { /* already started or recognition unavailable */ }
     }
 

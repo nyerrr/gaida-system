@@ -276,7 +276,10 @@ export default function ResearchFlow() {
         {step === STEP.CONSENT && (
           <div>
             <div
-              className="rounded-lg p-4 max-h-80 overflow-y-auto text-sm space-y-3"
+              role="region"
+              aria-label="Research consent terms"
+              tabIndex={0}
+              className="rounded-lg p-4 max-h-80 overflow-y-auto text-sm space-y-3 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ background: T.sidebar, border: `1px solid ${T.border}`, color: T.textSecondary }}
             >
               <p>
@@ -589,7 +592,7 @@ export default function ResearchFlow() {
               Over the last 2 weeks, how often have you been bothered by the following?
             </p>
 
-            <div className="space-y-5 max-h-96 overflow-y-auto pr-1">
+            <div role="region" aria-label="GAD-7 questions" tabIndex={0} className="space-y-5 max-h-96 overflow-y-auto pr-1 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]">
               {GAD7_QUESTIONS.map((q, i) => (
                 <div key={i}>
                   <p className="text-sm mb-2" style={{ color: T.textPrimary }}>{i + 1}. {q}</p>

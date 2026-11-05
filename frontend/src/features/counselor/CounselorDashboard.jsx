@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 
 import { BACKEND_URL as BACKEND } from '../../config';
-import apiFetch, { clearSensitiveLocalData } from '../../api';
+import apiFetch, { clearAuth } from '../../api';
 import CounselorBottomNav from './CounselorBottomNav';
 
 // ── Shared palette ─────────────────────────────────────────────────────────
@@ -136,6 +136,12 @@ const getCounselorId = () => {
   }
 };
 
+const notifyDashboard = (message) => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('gaida:counselor-notice', { detail: message }));
+  }
+};
+
 // Authenticated PDF export fallback for the Resolved Cases page — a bare
 // window.open() can't carry the Bearer token, so it always got a 401.
 const downloadSessionPdf = async (sessionId) => {
@@ -156,7 +162,7 @@ const downloadSessionPdf = async (sessionId) => {
     window.URL.revokeObjectURL(url);
     return true;
   } catch (err) {
-    alert(err.message || 'Could not export PDF.');
+    notifyDashboard(err.message || 'Could not export PDF.');
     return false;
   }
 };
@@ -868,7 +874,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
 // hit a severe reading and then stopped responding, rather than one who
 // calmly ended the session. Backend logic already existed; this page is
 // what actually makes it visible to a counselor.
-function WelfarePage({ welfare, onViewChat, onMarkChecked, onRefresh }) {
+function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMarkChecked, onRefresh }) {
   const pull = usePullToRefresh(onRefresh);
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
@@ -879,7 +885,15 @@ function WelfarePage({ welfare, onViewChat, onMarkChecked, onRefresh }) {
           High/Crisis sessions that went silent with no follow-up — worth a human check-in
         </p>
       </div>
-      {welfare.length > 0 ? (
+      {welfareError && (
+        <div role="alert" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <p>{welfareError}</p>
+          <button type="button" onClick={onRefresh} className="mt-2 rounded-lg border border-amber-700 px-3 py-1.5 font-semibold">Retry</button>
+        </div>
+      )}
+      {welfareLoading && welfare.length === 0 ? (
+        <p role="status" className="py-12 text-center text-sm" style={{ color: P.textSecondary }}>Loading welfare checks…</p>
+      ) : welfare.length > 0 ? (
         welfare.map((w) => {
           const sc = severityColor(w.peak_severity);
           return (
@@ -905,13 +919,13 @@ function WelfarePage({ welfare, onViewChat, onMarkChecked, onRefresh }) {
             </div>
           );
         })
-      ) : (
+      ) : !welfareError ? (
         <div className="text-center py-20" style={{ color: P.textMuted }}>
           <div className="mb-3 flex justify-center"><NavIcon id="hotline" size={40} /></div>
           <p className="text-sm font-semibold" style={{ color: P.textSecondary }}>No welfare checks needed</p>
           <p className="text-xs mt-1">Silent High/Crisis sessions will appear here</p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1454,11 +1468,11 @@ const typingThrottleRef = useRef(null);
         setResolved(true);
         setTimeout(() => onClose(), 1500);
       } else {
-        alert(data.detail || data.error || 'Could not resolve this session — it may need to be acknowledged first (Alerts tab).');
+        notifyDashboard(data.detail || data.error || 'Could not resolve this session. It may need acknowledgment first.');
       }
     } catch (e) {
       console.error('Resolve session error:', e);
-      alert('Network error resolving session. Please check your connection.');
+      notifyDashboard('Network error resolving session. Please check your connection.');
     } finally {
       setResolving(false);
     }
@@ -2060,6 +2074,9 @@ export default function CounselorDashboard() {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(null);
   const [welfare, setWelfare] = useState([]);
+  const [welfareLoading, setWelfareLoading] = useState(true);
+  const [welfareError, setWelfareError] = useState(null);
+  const [dashboardNotice, setDashboardNotice] = useState('');
   const [chatSessionId, setChatSessionId] = useState(null);
   // On desktop start with the full panel open so the profile and labels are
   // visible immediately; phones always start with it closed.
@@ -2090,9 +2107,26 @@ export default function CounselorDashboard() {
   const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+    let timer;
+    const onNotice = (event) => {
+      setDashboardNotice(String(event.detail || ''));
+      clearTimeout(timer);
+      timer = setTimeout(() => setDashboardNotice(''), 8000);
+    };
+    window.addEventListener('gaida:counselor-notice', onNotice);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('gaida:counselor-notice', onNotice);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window) || !window.isSecureContext) return;
+    try {
+      if (Notification.permission === 'default') {
+        Promise.resolve(Notification.requestPermission()).catch(() => {});
+      }
+    } catch { /* notifications are optional and may be blocked by the browser */ }
   }, []);
 
   const fetchAlerts = async () => {
@@ -2118,12 +2152,14 @@ export default function CounselorDashboard() {
         const freshLoud = loudNow.filter(a => !prevLoudIdsRef.current.has(a.session_id));
         if (freshLoud.length > 0) {
           playAlertSound();
-          if (Notification.permission === 'granted') {
-            new Notification('GAIDA Alert', {
-              body: `${freshLoud.length} new alert${freshLoud.length > 1 ? 's' : ''} need attention`,
-              icon: '/favicon.ico',
-            });
-          }
+          try {
+            if (typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext && Notification.permission === 'granted') {
+              new Notification('GAIDA Alert', {
+                body: `${freshLoud.length} new alert${freshLoud.length > 1 ? 's' : ''} need attention`,
+                icon: '/favicon.ico',
+              });
+            }
+          } catch { /* sound and in-app alerts remain available */ }
         }
         prevPendingIdsRef.current = new Set(pendingNowIds);
         prevLoudIdsRef.current = new Set(loudNow.map(a => a.session_id));
@@ -2183,13 +2219,13 @@ export default function CounselorDashboard() {
       // High/Crisis alert that needs acknowledging first) — treat both the
       // same instead of silently doing nothing.
       if (!res.ok || data.ok === false) {
-        alert(data.detail || data.error || 'This alert needs to be acknowledged first.');
+        notifyDashboard(data.detail || data.error || 'This alert needs to be acknowledged first.');
         return;
       }
       fetchAlerts();
     } catch (e) {
       console.error('Update alert status error:', e);
-      alert('Network error updating alert status. Please check your connection.');
+      notifyDashboard('Network error updating alert status. Please check your connection.');
     }
   };
 
@@ -2202,23 +2238,29 @@ export default function CounselorDashboard() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) {
-        alert(data.detail || data.error || 'Could not acknowledge this alert.');
+        notifyDashboard(data.detail || data.error || 'Could not acknowledge this alert.');
         return;
       }
       fetchAlerts();
     } catch (e) {
       console.error('Acknowledge alert error:', e);
-      alert('Network error acknowledging alert. Please check your connection.');
+      notifyDashboard('Network error acknowledging alert. Please check your connection.');
     }
   };
 
   const fetchWelfare = async () => {
+    setWelfareLoading(true);
+    setWelfareError(null);
     try {
       const res = await apiFetch(`${BACKEND}/api/counselor/sessions/welfare`);
-      if (!res.ok) return;
+      if (!res.ok) throw new Error('Unable to load welfare checks.');
       const data = await res.json();
       if (data.sessions) setWelfare(data.sessions);
-    } catch { /* ignore */ }
+    } catch {
+      setWelfareError('Could not load welfare checks. Check your connection and retry.');
+    } finally {
+      setWelfareLoading(false);
+    }
   };
 
   // Realtime push via SSE: the backend broadcasts named events when alerts,
@@ -2288,12 +2330,13 @@ export default function CounselorDashboard() {
     };
   }, []);
 
-  // Poll for alert/session/welfare changes every 2 seconds as a fallback to
+  // Poll for alert/session/welfare changes every 30 seconds as a fallback to
   // the SSE push. Placed after the fetch* consts so the effect body never
   // references them before they're initialized (react-hooks/immutability);
   // effects still run in order after mount.
   useEffect(() => {
-    // Initial load + 2s cadence. The first fetch is deferred a tick so the
+    if (connectionStatus === 'live') return undefined;
+    // Initial load + 30s cadence. The first fetch is deferred a tick so the
     // setState inside the fetch* functions doesn't run synchronously in the
     // effect body (react-hooks/set-state-in-effect).
     let cancelled = false;
@@ -2304,13 +2347,13 @@ export default function CounselorDashboard() {
       fetchWelfare();
     };
     const initial = setTimeout(tick, 0);
-    const interval = setInterval(tick, 2000);
+    const interval = setInterval(tick, 30000);
     return () => {
       cancelled = true;
       clearTimeout(initial);
       clearInterval(interval);
     };
-  }, []);
+  }, [connectionStatus]);
 
   const handleMarkWelfareChecked = async (sessionId) => {
     try {
@@ -2323,20 +2366,18 @@ export default function CounselorDashboard() {
       if (res.ok && data.ok) {
         setWelfare(prev => prev.filter(w => w.session_id !== sessionId));
       } else {
-        alert(data.detail || data.error || 'Failed to mark welfare check. Please try again.');
+        notifyDashboard(data.detail || data.error || 'Failed to mark welfare check. Please try again.');
       }
     } catch (err) {
       console.error('Welfare check error:', err);
-      alert('Network error marking welfare check. Please check your connection.');
+      notifyDashboard('Network error marking welfare check. Please check your connection.');
     }
   };
 
   const pendingCount = alerts.filter(a => a.status === 'pending').length;
 
   const logout = () => {
-    localStorage.removeItem('counselor_token');
-    localStorage.removeItem('counselorData');
-    clearSensitiveLocalData(); // purge any cached data / queued messages
+    clearAuth(); // clear both portal identities and sensitive cached data
     navigate('/counselor-login');
   };
 
@@ -2410,6 +2451,12 @@ export default function CounselorDashboard() {
 
   return (
     <div className="h-[100dvh] min-h-0 flex overflow-hidden w-full" style={{ background: P.bg }}>
+      {dashboardNotice && (
+        <div role="alert" className="fixed left-1/2 top-4 z-[100] flex w-[min(92vw,42rem)] -translate-x-1/2 items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg">
+          <span>{dashboardNotice}</span>
+          <button type="button" onClick={() => setDashboardNotice('')} className="shrink-0 font-semibold underline">Dismiss</button>
+        </div>
+      )}
       {mobileNavOpen && (
         <div
           className="fixed inset-0 z-40"
@@ -2899,7 +2946,7 @@ export default function CounselorDashboard() {
               <span className="capitalize">
                 {connectionStatus === 'live' ? 'Realtime Live' :
                  connectionStatus === 'connecting' ? 'Connecting...' :
-                 connectionStatus === 'polling' ? 'Polling (2s)' : 'Offline'}
+                 connectionStatus === 'polling' ? 'Polling (30s)' : 'Offline'}
               </span>
             </div>
             {lastUpdated && (
@@ -2915,7 +2962,7 @@ export default function CounselorDashboard() {
           <div className="w-full max-w-6xl mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} />}
             {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} />}
-            {activePage === 'welfare'   && <WelfarePage welfare={welfare} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} onRefresh={fetchWelfare} />}
+            {activePage === 'welfare'   && <WelfarePage welfare={welfare} welfareLoading={welfareLoading} welfareError={welfareError} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} onRefresh={fetchWelfare} />}
             {activePage === 'sessions' && (
               <SessionsPage
                 sessions={sessions}
@@ -2972,11 +3019,11 @@ function ResolvedCasesPage() {
       if (res.ok && data.ok) {
         setCases(prev => prev.filter(c => c.session_id !== sessionId));
       } else {
-        alert(data.detail || data.error || 'Failed to remove case from the list.');
+        notifyDashboard(data.detail || data.error || 'Failed to remove case from the list.');
       }
     } catch (err) {
       console.error('Delete failed:', err);
-      alert('Network error removing case. Please check your connection.');
+      notifyDashboard('Network error removing case. Please check your connection.');
     }
   };
 
