@@ -287,19 +287,20 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
 ## 10. Security & Privacy (honest posture)
 
 **Implemented now:**
-- Bearer tokens (12 h TTL, role-tagged), backend `Depends(get_current_user)` / `Depends(require_role("counselor"))` — enforced on **every** route except the deliberately-public list in §13 (health, login, consent, research intake, withdraw-by-code).
+- Bearer tokens (12 h TTL, role-tagged), backend `Depends(get_current_user)` / `Depends(require_role("counselor"))` — enforced on **every** route except the deliberately-public list in §13 (health, login, forgot-password, and the CAPTCHA-to-access-token exchange; research intake and withdrawal require that short-lived access token plus the participant's own signed token).
 - `POST /api/auth/counselor-login` — real backend counselor login (was a client-side check + literal `dev-token`).
 - Frontend route guards + a shared `apiFetch()` wrapper that attaches the bearer token to all calls and redirects on 401.
 - CORS allow-list, security headers (`nosniff`, `DENY` frame, `strict-origin-when-cross-origin`).
 - Rate limiting (login, virtual-agent, research, feedback endpoints).
 - Session-ownership check (`403` if `session_id` belongs to another user).
-- Researcher-anonymity by construction: `participant_id = anon_<code>`, nobody but the researcher knows the code.
-- **[NEW]** Right-to-erasure: `POST /api/research/withdraw` deletes a researcher's data by anonymous code (sweeps `interactions`, `consents`, `gad7_responses`, `session_ratings`, `session_notes`, `counselor_alerts`, `acoustic_logs` → `sessions` → `research_participants`; idempotent; rate-limited).
+- Researcher-anonymity by construction: anonymous participants are stored as `participant_id = anon_<code>`, and the credential they hold is a **signed participant token** (`pt1_<payload>.<hmac-sha256>`) binding that id. A raw or tampered code is rejected by signature verification before any database lookup, so one participant cannot reach another's data by guessing. Tokens are stateless and do not expire; pre-token codes remain accepted and are upgraded on the next start.
+- **[NEW]** Right-to-erasure: `POST /api/research/withdraw` deletes a researcher's data by signed participant token (legacy codes still accepted), sweeping `interactions`, `consents`, `gad7_responses`, `session_ratings`, `session_notes`, `counselor_alerts`, `acoustic_logs` → `sessions` → `research_participants`; idempotent; rate-limited.
+- **[NEW]** Participant tokens are not session tokens: `AUTH_SECRET` signs login/session tokens and `PARTICIPANT_TOKEN_SECRET` signs participant tokens, and each verifier rejects the other's tokens.
 - **[NEW]** Honest copy — the UI no longer claims messages are "private and encrypted". `GAIDA_SYSTEM.md` now states sessions are "records each session for the guidance office to review".
 
 **Honest gaps (documented, defensible for a thesis prototype):**
 - Data-at-rest is **not** encrypted at the DB level; it is ordinary Supabase Postgres. Decision: **transparency + retention instead of encryption claims.**
-- Tokens are in-memory (lost on restart, no cross-instance). Fine for single Replit instance.
+- Session tokens are in-memory unless `AUTH_SECRET` is set (signed tokens then survive restarts); participant tokens are always stateless but need `PARTICIPANT_TOKEN_SECRET` (or `AUTH_SECRET`) to survive a restart. No cross-instance deduplication of revocation.
 - The audit list for the defense includes: unvalidated voice/acoustic accuracy (harness built), GAD-7 only in research flow, hardcoded test logins, no automated account registration (counselor creates accounts), retention/deletion only partially automated (**default policy: 6 months**).
 
 ---
@@ -325,11 +326,13 @@ Backend-protected now — every `/api/counselor/*` route requires a bearer token
 ## 12. Research Flow (Opt-In, Identified or Anonymous)
 
 1. Portal → **"Participate in research"**.
-2. `GET/POST /api/research/participant-check` — enter the researcher-issued anonymous code.
-3. Consent steps; research participant row created (`anon_<code>` in `research_participants`).
-4. Research-mode sessions are labeled with `participant_code`; GAD-7 form collects responses into `gad7_responses`.
-5. Researcher contact (as committed by collaborator): **reyes.laurienaemanuel@ue.edu.ph** in `ResearchFlow.jsx`.
-6. **`[NEW — UNCOMMITTED]` Withdrawal:** *“Delete my data”* → `POST /api/research/withdraw` with the anonymous code → everything keyed to that code is purged (idempotent). This satisfies the audit item *“no deleted-by-code data removal”*.
+2. CAPTCHA → `POST /api/research/access` issues a short-lived research access token; every step below sends it as a bearer token.
+3. `POST /api/research/participant-check` — a returning anonymous participant pastes their signed participant token (or a pre-token code, which still works).
+4. Consent steps; research participant row created (`anon_<code>` in `research_participants`).
+5. Research-mode sessions are labeled with `participant_code`; GAD-7 form collects responses into `gad7_responses`.
+6. Researcher contact (as committed by collaborator): **reyes.laurienaemanuel@ue.edu.ph** in `ResearchFlow.jsx`.
+7. `POST /api/research/start` returns `participant_token` (signed) plus `participant_token_issued`. A new anonymous participant, or one arriving with a legacy code, is shown the token once and asked to save it; a returning participant who sent a valid token is not asked again.
+8. **`[NEW]` Withdrawal:** *“Delete my data”* → `POST /api/research/withdraw` with the signed participant token (or a legacy code) → everything keyed to that code is purged (idempotent). This satisfies the audit item *“no deleted-by-code data removal”*.
 
 ---
 
@@ -344,9 +347,16 @@ Backend-protected now — every `/api/counselor/*` route requires a bearer token
 | POST | `/api/auth/google` | verified @ue.edu.ph Google login |
 | POST | `/api/auth/forgot-password` | always-ok response |
 | POST | `/api/auth/consent` | record consent flag per session |
-| POST | `/api/research/participant-check` | research-code check + consent |
-| POST | `/api/research/start` | create research session (opt-in; issues the research token) |
-| POST | `/api/research/withdraw` | self-service "delete my data" by anonymous code (a participant may have lost their token; code alone must work) |
+| POST | `/api/research/access` | CAPTCHA exchange → short-lived research access token |
+
+### Research endpoints (research access token required)
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/research/participant-check` | checks for an existing participant; accepts a signed participant token or legacy code |
+| POST | `/api/research/start` | creates the research session; returns a signed `participant_token` for anonymous participants (issued/upgraded once) |
+| POST | `/api/research/withdraw` | self-service "delete my data" by signed participant token (legacy codes still work for participants who joined before tokens) |
+
+The research access token is not a login: it only unlocks these intake/withdrawal endpoints, and it is rejected by `/virtual-agent`, `/api/session/*`, and the counselor routes. Conversely, a participant token is rejected as a session token. Withdrawal additionally enforces a strict per-IP limit (3/hour).
 
 ### Token-protected (Bearer required)
 | Method | Path | Access |

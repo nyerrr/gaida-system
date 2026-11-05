@@ -107,7 +107,7 @@ Present but incomplete — the visible surface exists, the behaviour does not.
 - **Required:** 🟡 (duplication will drift, and one copy is already carrying dead state).
 
 ### 2.3 Research flow, 6 steps 🟡
-- **What exists:** full 6-step intake, anonymous code, consent, demographics.
+- **What exists:** full 6-step intake, anonymous or identified participation, signed participant token, consent, demographics.
 - **What is broken:**
   - The consent POST at `:174` sends a **hardcoded `consent_given: true`**. This is currently safe *only* because step 2 gates its Next button with `disabled={!consentChecked}` at `:330`. The guarantee lives ~160 lines away from the value it protects — fragile, not broken.
   - The anonymous-code path is inconsistent: `:89`, `:128`, `:193` derive the code differently.

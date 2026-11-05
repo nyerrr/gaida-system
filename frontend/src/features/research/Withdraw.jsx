@@ -5,12 +5,13 @@ import { BACKEND_URL } from '../../config';
 import ResearchCaptcha from './ResearchCaptcha';
 
 // Lets an anonymous research participant delete everything tied to their
-// code: sessions, chat messages, GAD-7/SUS responses, ratings, notes,
-// counselor alerts, acoustic logs, and the participant record itself.
+// participant token: sessions, chat messages, GAD-7/SUS responses, ratings,
+// notes, counselor alerts, acoustic logs, and the participant record itself.
 // Backed by POST /api/research/withdraw (backend/app/api/research.py) —
 // this page is the only way a participant can actually reach that
 // endpoint. Anonymous participants have no account, so the endpoint asks
-// for a code plus a CAPTCHA-gated access token instead of a login.
+// for a signed participant token plus a CAPTCHA-gated access token instead
+// of a login.
 const STEP = { FORM: 0, SUBMITTING: 1, DONE: 2 };
 
 // Mirrors the "Sky" theme in ResearchFlow.jsx / ResearchSUS.jsx /
@@ -57,7 +58,7 @@ const T = {
 export default function Withdraw() {
   const navigate = useNavigate();
   const [step, setStep] = useState(STEP.FORM);
-  const [code, setCode] = useState('');
+  const [token, setToken] = useState('');
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
@@ -66,7 +67,7 @@ export default function Withdraw() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!code.trim() || !confirmChecked) return;
+    if (!token.trim() || !confirmChecked) return;
     if (!captcha.token || !captcha.answer.trim()) {
       setError('Enter the verification code to continue.');
       return;
@@ -93,10 +94,10 @@ export default function Withdraw() {
       const res = await apiFetch(`${BACKEND_URL}/api/research/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participant_code: code.trim() }),
+        body: JSON.stringify({ participant_token: token.trim() }),
       }, accessData.access_token);
-      if (!res.ok) throw new Error('Request failed');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
       setResult(data);
       setStep(STEP.DONE);
     } catch (err) {
@@ -118,25 +119,26 @@ export default function Withdraw() {
       >
         <h1 className="text-2xl font-bold mb-1" style={{ color: T.textPrimary }}>Withdraw From the Study</h1>
         <p className="text-sm mb-6" style={{ color: T.textSecondary }}>
-          For participants who joined anonymously. Entering your code below permanently
-          deletes every session, message, and response tied to it — there's no way to
-          undo this once it's done.
+          For participants who joined anonymously. Entering your participant token below
+          permanently deletes every session, message, and response tied to it — there's
+          no way to undo this once it's done.
         </p>
 
         {step === STEP.FORM && (
           <form onSubmit={handleSubmit}>
-            <label htmlFor="withdraw-code" className="block text-sm font-medium" style={{ color: T.textPrimary }}>
-              Your anonymous code
+            <label htmlFor="withdraw-token" className="block text-sm font-medium" style={{ color: T.textPrimary }}>
+              Your participant token
             </label>
             <p className="text-xs mt-1 mb-2" style={{ color: T.textSecondary }}>
-              The code you were shown after your first session.
+              The token you were shown after your first session. Codes from before this
+              update also still work.
             </p>
             <input
-              id="withdraw-code"
+              id="withdraw-token"
               type="text"
-              placeholder="e.g. anon_4f2a9c"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
+              placeholder="Paste your participant token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-[#5E8FBD]"
               style={{ background: T.card, border: `1px solid ${T.border}`, color: T.textPrimary }}
             />
@@ -154,7 +156,7 @@ export default function Withdraw() {
                 className="mt-0.5 shrink-0"
               />
               <span>
-                I understand this permanently deletes all data tied to this code, and
+                I understand this permanently deletes all data tied to this token, and
                 cannot be undone.
               </span>
             </label>
@@ -182,7 +184,7 @@ export default function Withdraw() {
               </button>
               <button
                 type="submit"
-                disabled={!code.trim() || !confirmChecked || !captcha.token || !captcha.answer.trim()}
+                disabled={!token.trim() || !confirmChecked || !captcha.token || !captcha.answer.trim()}
                 className="flex-1 py-2 rounded-lg font-semibold text-sm transition-opacity disabled:opacity-40"
                 style={{ background: T.red, color: '#FFFFFF' }}
               >
@@ -205,7 +207,7 @@ export default function Withdraw() {
                   {result?.deleted_sessions
                     ? `${result.deleted_sessions} session${result.deleted_sessions === 1 ? '' : 's'} were deleted, but some data could not be removed automatically.`
                     : 'Some data could not be removed automatically.'}
-                  {' '}Please contact the research team below with your code so they can
+                  {' '}Please contact the research team below with your token so they can
                   finish the deletion manually.
                 </p>
                 {Array.isArray(result?.errors) && result.errors.length > 0 && (
@@ -222,7 +224,7 @@ export default function Withdraw() {
                 <p className="mb-2" style={{ color: T.textPrimary }}>
                   {result?.deleted_sessions
                     ? `Done — ${result.deleted_sessions} session${result.deleted_sessions === 1 ? '' : 's'} and all associated data have been deleted.`
-                    : 'Done — no data was found for that code, so there was nothing to delete.'}
+                    : 'Done — no data was found for that token, so there was nothing to delete.'}
                 </p>
                 {/* textSecondary, not the palette's textMuted (#95A6AC, 2.5:1) —
                     that tone is fine for a 10px tooltip label but this sentence

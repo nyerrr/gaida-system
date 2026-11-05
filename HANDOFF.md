@@ -269,7 +269,7 @@ Measured live earlier in this engagement:
 | `GET /docs` | `404` | `79f03ae` hardening **is deployed** |
 | `GET /openapi.json` | `404` | `79f03ae` hardening **is deployed** |
 | `POST /api/counselor/events/ticket` | `401` | SSE ticket auth **is deployed** (401 = present, rejecting an unauthenticated call) |
-| `POST /api/research/participant-check` | `400` | research endpoints **are deployed** (400 = reached, rejected the empty body) |
+| `POST /api/research/participant-check` | `401` | research endpoints **are deployed** (401 = present, rejecting a call without a research access token) |
 
 So the earlier items are done: prod docs are closed, the ticket endpoint is live,
 and the frontend and backend are no longer out of sync.
@@ -381,7 +381,7 @@ curl -s -o /dev/null -w '%{http_code}\n' $B/openapi.json
 # SSE ticket endpoint live — 401 = present and rejecting an unauthenticated call
 curl -s -o /dev/null -w '%{http_code}\n' -X POST $B/api/counselor/events/ticket
 
-# research endpoints live — 400 = reached and rejected the empty body
+# research endpoints live — 401 = present and rejecting a call without a research access token
 curl -s -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'Content-Type: application/json' -d '{}' $B/api/research/participant-check
 ```

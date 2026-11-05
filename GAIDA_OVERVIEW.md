@@ -33,7 +33,7 @@ sent once the connection returns.
 | Offline mode | Installable app; it opens when there is no internet. A message written offline is **saved and sent automatically on reconnect**, shown as "waiting to send", with the offline banner offering the crisis hotline. Past chats are **not** cached offline, and GAIDA's reply still needs a connection. |
 | Post-chat check-in | After a session, students rate how they feel (1–4), which counselors can review. |
 | **Per-message feedback (new)** | Under every GAIDA reply there are "Helpful / Not helpful" buttons; ratings are stored so the team can see which replies work. |
-| **Research participation (new)** | An optional, separate research flow: students enter an anonymous code given by the researcher, take a GAD-7 questionnaire, and can later **delete all their research data by code**. |
+| **Research participation (new)** | An optional, separate research flow: students take a GAD-7 questionnaire anonymously, save a signed participant token, and can later **delete all their research data with that token**. |
 
 ---
 
@@ -224,7 +224,7 @@ look up.)
 | Forgot password | Show-only — it doesn't actually send a reset email; it always shows a success message so no one can guess valid emails. |
 | Consent | Must be accepted before chatting. |
 | Student dashboard | The chat itself, hotline & crisis panel (always visible), voice input, vent mode, per-message "Helpful/Not helpful" buttons, and a color theme picker. |
-| Research flow | Optional participation: enter the researcher's anonymous code, consent, take the GAD-7. |
+| Research flow | Optional participation: anonymous or identified, consent, take the GAD-7, save a signed participant token for later resume/withdrawal. |
 | Counselor dashboard | Alerts, live sessions, welfare-check list (silent High/Crisis students), case notes, PDF export, analytics, and an archive of resolved cases. |
 
 ---
@@ -295,10 +295,12 @@ look up.)
 ## Research mode (added for the study)
 
 - Run entirely separately from the normal chat flow, for consenting participants only.
-- Students enter an **anonymous code** handed out by the researcher; the system stores them
-  as `anon_<code>` so the student never needs to expose their identity in the data.
+- Anonymous participants are stored as `anon_<code>` so the student never needs to expose their
+  identity in the data. The credential they save is a **signed participant token**
+  (`pt1_<payload>.<hmac-sha256>`) binding that id, so a raw or tampered code cannot be used to
+  reach someone else's data. Codes issued before signed tokens still work.
 - A **GAD-7** questionnaire is collected for the study.
-- **Data withdrawal:** entering the code into the *"Delete my data"* screen
+- **Data withdrawal:** entering the participant token into the *"Delete my data"* screen
   (`POST /api/research/withdraw`) permanently removes that participant's interactions,
   consents, GAD-7 answers, session ratings, notes, alerts, and voice logs. This makes the
   system able to honor a participant's right to withdraw.
@@ -352,7 +354,7 @@ look up.)
   fine-tune behavior rather than prompt behavior and needs a training run to move.
 
 **Security**
-- Every endpoint requires a bearer login token, except the deliberately-public list: health check, the three login/consent/forgot-password routes, and the research intake + withdraw-by-code routes (a participant may not hold a token when entering or withdrawing). Counselor-only routes additionally require a *counselor* role token (403 otherwise); student/research routes verify the token owns the session.
+- Every endpoint requires a bearer login token, except the deliberately-public list: health check, the login/consent/forgot-password routes, and the CAPTCHA→research-access exchange. Research intake and withdrawal require that short-lived research access token and the participant's own signed token (legacy codes still work for withdrawal). Counselor-only routes additionally require a *counselor* role token (403 otherwise); student/research routes verify the token owns the session.
 - Counselor login uses test credentials (`COUNSELOR01`–`COUNSELOR05`) passed through a real `/api/auth/counselor-login` endpoint — there's no self-service account system yet (counselors hand out access). Any `TEST_CREDENTIALS` entry tagged `role: "counselor"` can sign in.
 - The login CAPTCHA is generated and verified server-side; the browser only displays it and sends back the typed code with a signed, single-use token.
 

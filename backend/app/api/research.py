@@ -5,10 +5,13 @@ Default path is identified: a real student number is captured (same as a
 normal login) so returning-student features, follow-up, and counselor
 review all work exactly as they do for real sessions. A participant may
 instead choose to participate anonymously — in that case no student number
-is ever collected, and a random participant_code is generated and shown to
+is ever collected, and a signed participant_token is generated and shown to
 them once, so they have something to reference later (to withdraw, or to
 resume as "the same" pseudonymous person) without it identifying them to
-anyone else.
+anyone else. The token binds the internal participant id and is verified by
+signature, so a raw or tampered code cannot be used to reach someone else's
+data. Codes issued before signed tokens still work and are upgraded on the
+next start (see _resolve_participant_id).
 
 Demographics (year level, program, gender, region) are captured once per
 participant, in research_participants, keyed by participant_id — not once
@@ -23,6 +26,7 @@ endpoints unmodified — no changes needed to the chat pipeline,
 session_manager, or the frontend dashboard component.
 """
 import re
+import secrets
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, Depends
@@ -33,6 +37,11 @@ from app.services.captcha import verify_captcha
 from app.services.rate_limiter import check_rate_limit
 from app.services.session_manager import start_session, get_session
 from app.utils.auth import create_session_token, get_current_user, get_research_access
+from app.utils.participant_token import (
+    create_participant_token,
+    looks_like_participant_token,
+    verify_participant_token,
+)
 
 router = APIRouter(prefix="/api/research", tags=["research"])
 
@@ -110,13 +119,54 @@ def _validate_student_number(value: str) -> None:
         )
 
 
-def _resolve_participant_id(anonymous: bool, student_number: str | None, participant_code: str | None) -> tuple[str, str | None]:
-    """Returns (participant_id, code_used). code_used is only non-None for
-    the anonymous path — either the code the participant supplied, or a
-    freshly generated one if this is their first time."""
+# Codes issued before signed participant tokens were introduced. They remain
+# accepted so an existing participant can still withdraw or resume; a start
+# upgrades them to a signed token. New participants never receive a raw code.
+_LEGACY_CODE_RE = re.compile(r"^[0-9a-f]{10}$")
+
+
+def _resolve_participant_id(
+    anonymous: bool,
+    student_number: str | None,
+    participant_code: str | None,
+    participant_token: str | None = None,
+) -> tuple[str, str | None, bool]:
+    """Returns (participant_id, code_used, used_signed_token).
+
+    For the anonymous path, a signed participant token is authoritative. The
+    legacy ``participant_code`` field (and a raw code sent in
+    ``participant_token``) is still accepted so participants who joined before
+    the token change can withdraw or resume; the caller can then hand them a
+    signed token. A brand-new anonymous participant gets a fresh code.
+    """
     if anonymous:
-        code_used = participant_code or uuid.uuid4().hex[:10]
-        return f"anon_{code_used}", code_used
+        # New clients send the saved credential in participant_token. Older
+        # clients may send a raw code there or in participant_code, so treat a
+        # non-token value in either field as legacy rather than rejecting it.
+        credential = (participant_token or "").strip()
+        if looks_like_participant_token(credential):
+            claims = verify_participant_token(credential)
+            if not claims:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Invalid participant token. Check that you pasted the "
+                        "full token you saved."
+                    ),
+                )
+            return claims["participant_id"], claims["code"], True
+
+        legacy_code = (credential or (participant_code or "")).strip().lower()
+        if legacy_code:
+            if not _LEGACY_CODE_RE.fullmatch(legacy_code):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid participant token.",
+                )
+            return f"anon_{legacy_code}", legacy_code, False
+
+        code = secrets.token_hex(5)
+        return f"anon_{code}", code, False
 
     if not student_number or not student_number.strip():
         raise HTTPException(
@@ -125,7 +175,7 @@ def _resolve_participant_id(anonymous: bool, student_number: str | None, partici
         )
     student_number = student_number.strip()
     _validate_student_number(student_number)
-    return student_number, None
+    return student_number, None, False
 
 
 def _fetch_participant(participant_id: str) -> dict | None:
@@ -145,6 +195,10 @@ def _fetch_participant(participant_id: str) -> dict | None:
 class ParticipantCheckRequest(BaseModel):
     anonymous: bool = False
     student_number: str | None = Field(default=None, max_length=50)
+    # New client field: the signed token shown once after a first session.
+    participant_token: str | None = Field(default=None, max_length=512)
+    # Legacy field, kept for participants who joined before signed tokens and
+    # for older clients. See _resolve_participant_id.
     participant_code: str | None = Field(default=None, max_length=32)
 
 
@@ -172,11 +226,14 @@ def check_participant(
     """
     check_rate_limit(f"research_check:{_client_ip(request)}", limit=20, window=60)
 
-    if payload.anonymous and not payload.participant_code:
+    if payload.anonymous and not (payload.participant_token or payload.participant_code):
         return ParticipantCheckResponse(is_returning=False)
 
-    participant_id, _ = _resolve_participant_id(
-        payload.anonymous, payload.student_number, payload.participant_code
+    participant_id, _, _ = _resolve_participant_id(
+        payload.anonymous,
+        payload.student_number,
+        payload.participant_code,
+        payload.participant_token,
     )
     existing = _fetch_participant(participant_id)
     return ParticipantCheckResponse(is_returning=existing is not None)
@@ -188,6 +245,9 @@ def check_participant(
 class StartResearchRequest(BaseModel):
     anonymous: bool = False
     student_number: str | None = Field(default=None, max_length=50)
+    # Signed token from a previous anonymous session (preferred).
+    participant_token: str | None = Field(default=None, max_length=512)
+    # Legacy raw code, kept only so pre-token participants can resume.
     participant_code: str | None = Field(default=None, max_length=32)
 
     # Only used the *first* time a given participant is seen — ignored (not
@@ -204,7 +264,13 @@ class StartResearchResponse(BaseModel):
     session_id: str
     participant_id: str
     anonymous: bool
-    participant_code: str | None = None  # only set (and shown once) for a brand-new anonymous participant
+    # Always present for anonymous starts (new, returning, or upgraded from a
+    # legacy code). Echoing it lets a returning participant keep using the same
+    # deterministic token without the server storing it.
+    participant_token: str | None = None
+    # True when this client did not send a valid signed token, so it must show
+    # the token once and ask the participant to save it.
+    participant_token_issued: bool = False
 
 
 @router.post("/start", response_model=StartResearchResponse)
@@ -215,8 +281,11 @@ def start_research_session(
 ):
     check_rate_limit(f"research_start:{_client_ip(request)}")
 
-    participant_id, code_used = _resolve_participant_id(
-        payload.anonymous, payload.student_number, payload.participant_code
+    participant_id, code_used, used_signed_token = _resolve_participant_id(
+        payload.anonymous,
+        payload.student_number,
+        payload.participant_code,
+        payload.participant_token,
     )
 
     existing = _fetch_participant(participant_id)
@@ -261,14 +330,23 @@ def start_research_session(
 
     token = create_session_token(participant_id, role="research")
 
+    participant_token = None
+    participant_token_issued = False
+    if payload.anonymous:
+        participant_token = create_participant_token(participant_id)
+        # A new participant, or one arriving with a pre-token legacy code, has
+        # not sent a signed token yet and must save this one. A returning
+        # participant who already sent one gets the same deterministic token
+        # back and is not asked to save it again.
+        participant_token_issued = not used_signed_token
+
     return StartResearchResponse(
         session_token=token,
         session_id=session_id,
         participant_id=participant_id,
         anonymous=payload.anonymous,
-        # Only show a code to a *brand-new* anonymous participant — a
-        # returning one already has theirs and doesn't need it shown again.
-        participant_code=code_used if (payload.anonymous and not existing) else None,
+        participant_token=participant_token,
+        participant_token_issued=participant_token_issued,
     )
 
 
@@ -286,11 +364,15 @@ class Gad7Response(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Withdraw — delete all data tied to an anonymous code
-# (This is the "delete by anonymous code" the research consent promises.)
+# Withdraw — delete all data tied to an anonymous participant
+# (This is the "delete my data" promise the research consent makes; the signed
+# participant token is the credential, and legacy codes still work.)
 # ---------------------------------------------------------------------------
 class WithdrawRequest(BaseModel):
-    participant_code: str = Field(min_length=1, max_length=32)
+    # Preferred: the signed participant token.
+    participant_token: str | None = Field(default=None, max_length=512)
+    # Legacy raw code from before signed tokens.
+    participant_code: str | None = Field(default=None, max_length=32)
 
 
 class WithdrawResponse(BaseModel):
@@ -329,18 +411,26 @@ def withdraw_anonymous_code(
     unknown code safely returns an empty "everything deleted" result.
 
     Requires a CAPTCHA-gated research access token (POST /api/research/access),
-    so the destructive code lookup is not reachable by an unauthenticated
-    script. The code itself remains the participant's bearer credential.
+    so the destructive lookup is not reachable by an unauthenticated script.
+    The signed participant token is the participant's own credential; a legacy
+    raw code is still accepted for participants who joined before tokens.
     """
     # Stricter than the default 5/min: this endpoint hard-deletes data on a
-    # single guessable-length code, so brute-forcing or mass-triggering it
-    # needs to be far more expensive than a login attempt. 3/hour/IP still
-    # comfortably covers a genuine participant withdrawing (once) while making
-    # enumeration impractical.
+    # single credential, so brute-forcing or mass-triggering it needs to be far
+    # more expensive than a login attempt. 3/hour/IP still comfortably covers a
+    # genuine participant withdrawing (once) while making enumeration
+    # impractical.
     check_rate_limit(f"research_withdraw:{_client_ip(request)}", limit=3, window=3600)
 
-    code = payload.participant_code.strip()
-    participant_id = f"anon_{code}"
+    if not (payload.participant_token or payload.participant_code):
+        raise HTTPException(status_code=400, detail="A participant token is required.")
+
+    participant_id, code, _ = _resolve_participant_id(
+        anonymous=True,
+        student_number=None,
+        participant_code=payload.participant_code,
+        participant_token=payload.participant_token,
+    )
     errors: list[str] = []
 
     # 1. Find every session that belongs to this code.

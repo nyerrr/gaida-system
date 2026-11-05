@@ -94,8 +94,8 @@ export default function ResearchFlow() {
 
   const [anonymous, setAnonymous] = useState(false);
   const [studentNumber, setStudentNumber] = useState('');
-  const [hasExistingCode, setHasExistingCode] = useState(false);
-  const [existingCode, setExistingCode] = useState('');
+  const [hasExistingToken, setHasExistingToken] = useState(false);
+  const [existingToken, setExistingToken] = useState('');
 
   const [demographics, setDemographics] = useState({
     year_level: '',
@@ -105,7 +105,8 @@ export default function ResearchFlow() {
   });
 
   const [answers, setAnswers] = useState(Array(GAD7_QUESTIONS.length).fill(null));
-  const [issuedCode, setIssuedCode] = useState(null);
+  const [issuedToken, setIssuedToken] = useState(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
 
   const allAnswered = answers.every((a) => a !== null);
 
@@ -174,10 +175,15 @@ export default function ResearchFlow() {
         body: JSON.stringify({
           anonymous,
           student_number: anonymous ? null : studentNumber.trim(),
-          participant_code: anonymous && hasExistingCode ? existingCode.trim() : null,
+          participant_token: anonymous && hasExistingToken ? existingToken.trim() : null,
         }),
       }, accessToken);
       if (handleAccessExpired(res.status)) return;
+      if (res.status === 400) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.detail || 'That participant token is not valid. Check that you pasted the full token you saved.');
+        return;
+      }
       const { is_returning } = res.ok ? await res.json() : { is_returning: false };
       setSkippedDemographics(is_returning);
       setStep(is_returning ? STEP.GAD7 : STEP.DEMOGRAPHICS);
@@ -209,13 +215,25 @@ export default function ResearchFlow() {
         body: JSON.stringify({
           anonymous,
           student_number: anonymous ? null : studentNumber.trim(),
-          participant_code: anonymous && hasExistingCode ? existingCode.trim() : null,
+          participant_token: anonymous && hasExistingToken ? existingToken.trim() : null,
           ...demographics,
         }),
       }, accessToken);
       if (handleAccessExpired(startRes.status)) return;
+      if (startRes.status === 400) {
+        const data = await startRes.json().catch(() => ({}));
+        setError(data.detail || 'That participant token is not valid. Check that you pasted the full token you saved.');
+        setStep(STEP.IDENTIFICATION);
+        return;
+      }
       if (!startRes.ok) throw new Error('Could not start a research session');
-      const { session_token, session_id, participant_id, participant_code } = await startRes.json();
+      const {
+        session_token,
+        session_id,
+        participant_id,
+        participant_token,
+        participant_token_issued,
+      } = await startRes.json();
 
       // 2. Record consent against that same session_id — same endpoint and
       //    same mechanism the real student flow already uses.
@@ -241,11 +259,12 @@ export default function ResearchFlow() {
       localStorage.setItem('consent_given', 'true');
       localStorage.setItem('is_research_session', 'true');
 
-      if (anonymous && participant_code && !hasExistingCode) {
-        // First-time anonymous participant — show their code once before
-        // continuing, since it's the only way they can reference this
-        // session later.
-        setIssuedCode(participant_code);
+      if (anonymous && participant_token && participant_token_issued) {
+        // First-time anonymous participant, or one arriving with a legacy
+        // pre-token code — show the signed token once before continuing, since
+        // it's the only way they can reference this session later.
+        setIssuedToken(participant_token);
+        setTokenCopied(false);
         setStep(STEP.SAVE_CODE);
       } else {
         navigate('/student-dashboard');
@@ -254,6 +273,16 @@ export default function ResearchFlow() {
       console.error('Research intake error:', err);
       setError('Something went wrong starting your session. Please try again.');
       setStep(STEP.GAD7);
+    }
+  };
+
+  const handleCopyToken = async () => {
+    if (!issuedToken) return;
+    try {
+      await navigator.clipboard.writeText(issuedToken);
+      setTokenCopied(true);
+    } catch {
+      setTokenCopied(false);
     }
   };
 
@@ -454,21 +483,27 @@ export default function ResearchFlow() {
                   <label className="flex items-center gap-2 text-xs" style={{ color: T.textSecondary }}>
                     <input
                       type="checkbox"
-                      checked={hasExistingCode}
-                      onChange={(e) => setHasExistingCode(e.target.checked)}
+                      checked={hasExistingToken}
+                      onChange={(e) => setHasExistingToken(e.target.checked)}
                       style={{ accentColor: T.accent }}
                     />
-                    I have a code from a previous anonymous session
+                    I have a participant token from a previous anonymous session
                   </label>
-                  {hasExistingCode && (
+                  {hasExistingToken && (
                     <input
                       type="text"
-                      placeholder="Your previous code"
-                      value={existingCode}
-                      onChange={(e) => setExistingCode(e.target.value)}
+                      placeholder="Paste your participant token"
+                      value={existingToken}
+                      onChange={(e) => setExistingToken(e.target.value)}
                       className={fieldClasses}
                       style={fieldStyle()}
                     />
+                  )}
+                  {hasExistingToken && (
+                    <p className="text-xs" style={{ color: T.textMuted }}>
+                      It's the long token you saved after your first session. Codes from before
+                      this update also still work.
+                    </p>
                   )}
                 </div>
               )}
@@ -657,22 +692,31 @@ export default function ResearchFlow() {
         {step === STEP.SAVE_CODE && (
           <div>
             <p className="text-sm mb-3" style={{ color: T.textSecondary }}>
-              Save this code — it's the only way to reference this session later
+              Save this participant token — it's the only way to reference this session later
               (to request deletion, or to continue as the same anonymous participant
-              next time). We have no other way to identify your session.
+              next time). It's long, so copy it somewhere safe. We have no other way to
+              identify your session.
             </p>
             <div
-              className="rounded-lg p-4 text-center text-base sm:text-xl font-mono tracking-wide sm:tracking-widest mb-4 break-all"
+              className="rounded-lg p-4 text-center text-xs sm:text-sm font-mono mb-3 break-all"
               style={{ background: T.sidebar, border: `1px solid ${T.border}`, color: T.textPrimary }}
             >
-              {issuedCode}
+              {issuedToken}
             </div>
+            <button
+              type="button"
+              onClick={handleCopyToken}
+              className="w-full mb-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: T.card, border: `1px solid ${T.border}`, color: T.accentDark }}
+            >
+              {tokenCopied ? 'Copied' : 'Copy participant token'}
+            </button>
             <button
               onClick={() => navigate('/student-dashboard')}
               className="w-full py-2 rounded-lg font-semibold transition-opacity"
               style={{ background: T.accent, color: '#FFFFFF' }}
             >
-              I've saved my code — Continue
+              I've saved my token — Continue
             </button>
             <button
               onClick={() => navigate('/research/withdraw')}
