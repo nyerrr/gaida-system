@@ -10,6 +10,7 @@ normal chat/session API.
 import os
 import sys
 import time
+from types import SimpleNamespace
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -45,6 +46,31 @@ def client():
 
 def _headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _request(peer: str, forwarded: str = ""):
+    return SimpleNamespace(
+        client=SimpleNamespace(host=peer),
+        headers={"x-forwarded-for": forwarded} if forwarded else {},
+    )
+
+
+def test_client_ip_ignores_forwarded_header_from_untrusted_peer(monkeypatch):
+    monkeypatch.setenv("TRUSTED_PROXY_CIDRS", "10.0.0.0/8")
+
+    assert research._client_ip(_request("198.51.100.20", "203.0.113.9")) == "198.51.100.20"
+
+
+def test_client_ip_uses_forwarded_client_from_trusted_proxy(monkeypatch):
+    monkeypatch.setenv("TRUSTED_PROXY_CIDRS", "10.0.0.0/8")
+
+    assert research._client_ip(_request("10.0.0.4", "203.0.113.9")) == "203.0.113.9"
+
+
+def test_client_ip_walks_trusted_proxy_chain_from_the_right(monkeypatch):
+    monkeypatch.setenv("TRUSTED_PROXY_CIDRS", "10.0.0.0/8,192.0.2.0/24")
+
+    assert research._client_ip(_request("10.0.0.4", "203.0.113.9, 192.0.2.8")) == "203.0.113.9"
 
 
 def _captcha_token(answer: str = "ABCDEF") -> str:

@@ -28,6 +28,8 @@ session_manager, or the frontend dashboard component.
 import re
 import secrets
 import uuid
+import ipaddress
+import os
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
@@ -47,10 +49,50 @@ router = APIRouter(prefix="/api/research", tags=["research"])
 
 
 def _client_ip(request: Request) -> str:
-    # Deliberately not trusting X-Forwarded-For here: clients can spoof it
-    # unless the deployment is known to sit behind a proxy that overwrites it.
-    # The CAPTCHA is the primary control; this IP is the rate-limit fallback.
-    return request.client.host if request.client else "unknown"
+    """Return the client address, honoring X-Forwarded-For from trusted proxies.
+
+    Configure TRUSTED_PROXY_CIDRS with the proxy IPs/CIDRs that connect to the
+    app. Walk the forwarded chain from the app-facing proxy toward the client,
+    skipping only trusted proxy hops. With no configured trusted proxies the
+    header is ignored, so direct clients cannot spoof their rate-limit bucket.
+    """
+    peer = request.client.host if request.client else "unknown"
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+
+    trusted_proxies = []
+    for value in os.getenv("TRUSTED_PROXY_CIDRS", "").split(","):
+        value = value.strip()
+        if not value:
+            continue
+        try:
+            trusted_proxies.append(ipaddress.ip_network(value, strict=False))
+        except ValueError:
+            # Ignore malformed entries rather than accidentally trusting them.
+            continue
+
+    def is_trusted(address):
+        return any(address.version == network.version and address in network for network in trusted_proxies)
+
+    if not is_trusted(peer_ip):
+        return str(peer_ip)
+
+    forwarded = request.headers.get("x-forwarded-for", "")
+    try:
+        chain = [ipaddress.ip_address(part.strip()) for part in forwarded.split(",")]
+    except ValueError:
+        return str(peer_ip)
+    if not chain:
+        return str(peer_ip)
+
+    current = peer_ip
+    for address in reversed(chain):
+        if not is_trusted(current):
+            break
+        current = address
+    return str(current)
 
 
 # ---------------------------------------------------------------------------
