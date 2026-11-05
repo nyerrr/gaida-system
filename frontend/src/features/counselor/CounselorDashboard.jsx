@@ -8,6 +8,7 @@ import {
 import { BACKEND_URL as BACKEND } from '../../config';
 import apiFetch, { clearAuth } from '../../api';
 import CounselorBottomNav from './CounselorBottomNav';
+import { FALLBACK_POLL_INTERVAL_MS, shouldPollDashboard } from './dashboardPolling';
 
 // ── Shared palette ─────────────────────────────────────────────────────────
 // Same cool-blue / soft-green identity as the student interface. Bright red
@@ -2338,7 +2339,7 @@ export default function CounselorDashboard() {
   // references them before they're initialized (react-hooks/immutability);
   // effects still run in order after mount.
   useEffect(() => {
-    if (connectionStatus === 'live') return undefined;
+    if (!shouldPollDashboard(connectionStatus)) return undefined;
     // Initial load + 30s cadence. The first fetch is deferred a tick so the
     // setState inside the fetch* functions doesn't run synchronously in the
     // effect body (react-hooks/set-state-in-effect).
@@ -2350,7 +2351,7 @@ export default function CounselorDashboard() {
       fetchWelfare();
     };
     const initial = setTimeout(tick, 0);
-    const interval = setInterval(tick, 30000);
+    const interval = setInterval(tick, FALLBACK_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearTimeout(initial);
