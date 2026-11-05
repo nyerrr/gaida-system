@@ -480,7 +480,7 @@ export default function StudentDashboard() {
   const [voiceStatus,       setVoiceStatus]       = useState('');
   const [counselorTyping,   setCounselorTyping]   = useState(false);
   const [counselorActive,   setCounselorActive]   = useState(false);
-  // Crisis hold: GAIDA has paused its replies until a counselor takes over.
+  // High/Crisis hold: GAIDA has paused its replies until a counselor takes over.
   const [crisisHold,        setCrisisHold]        = useState(false);
   useEffect(() => { if (counselorActive) setCrisisHold(false); }, [counselorActive]);
   const [ventMode,          setVentMode]          = useState(false);
@@ -1880,7 +1880,7 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        {/* Crisis hold banner: GAIDA's replies are paused until a counselor joins */}
+        {/* High/Crisis hold banner: GAIDA's replies are paused until a counselor joins */}
         {crisisHold && !counselorActive && (
           <div
             role="alert"
@@ -1888,7 +1888,7 @@ export default function StudentDashboard() {
             style={{ background: '#FDECEA', color: '#7A1F17', borderTop: '1px solid #F2B8B0' }}
           >
             <strong>A counselor has been notified and will message you here.</strong>{' '}
-            GAIDA has paused its replies for your safety. If you are in danger, call{' '}
+            GAIDA has paused its replies while they review your session. If you are in immediate danger, call{' '}
             <a href="tel:1553" style={{ textDecoration: 'underline', fontWeight: 600 }}>1553</a>{' '}or{' '}
             <a href="tel:911" style={{ textDecoration: 'underline', fontWeight: 600 }}>911</a> now.
             You can keep typing; your counselor will see everything you send.

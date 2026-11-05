@@ -53,7 +53,7 @@ export default function PWABanner() {
           <span style={styles.bannerText}>
             You're offline. Messages you write are saved and will send when you reconnect
             {queuedCount > 0 ? ` (${queuedCount} waiting to send)` : ''}.
-            {' '}If this is an emergency, call 1553 (NCMH) or 911.
+            {' '}Emergency contacts: <a href="/emergency.html" style={{ color: 'inherit', textDecoration: 'underline', fontWeight: 700 }}>open the offline resource page</a>. If you are in immediate danger, call 911.
           </span>
         </div>
       )}

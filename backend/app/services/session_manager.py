@@ -221,8 +221,9 @@ def load_session_from_db(session_id: str) -> Dict[str, Any] | None:
         # counselor side (see takeover fallback above).
         "counselor_active": counselor_active,
         # Survive a server restart: a session whose last student message was
-        # Crisis and that no counselor has taken over is still on hold.
-        "crisis_hold": bool(last.get("severity") == "Crisis" and not counselor_active),
+        # A High/Crisis session remains on hold after a server restart until a
+        # counselor takes over. Both levels require human review.
+        "crisis_hold": bool(last.get("severity") in ("High", "Crisis") and not counselor_active),
         "assigned_counselor_id": assigned_counselor_id,
     }
 
