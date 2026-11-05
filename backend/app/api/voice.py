@@ -1,5 +1,4 @@
 import asyncio
-import tempfile
 import os
 from openai import OpenAI
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
@@ -117,26 +116,18 @@ async def speech_to_text(
             base_type = content_type.split(";")[0].strip().lower()
             ext = _EXT_BY_CONTENT_TYPE.get(base_type, "webm")
         suffix = f".{ext}"
-        tmp_path = None
 
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
-            with open(tmp_path, "rb") as f:
-                result = await asyncio.to_thread(
-                    _get_voice_client().audio.transcriptions.create,
-                    model=_STT_MODEL,
-                    file=(f"audio{suffix}", f),
-                )
+            result = await asyncio.to_thread(
+                _get_voice_client().audio.transcriptions.create,
+                model=_STT_MODEL,
+                file=(f"audio{suffix}", audio_bytes),
+            )
             transcript = getattr(result, "text", "").strip()
 
         except Exception:
             print("[voice] Transcription failed")
             raise HTTPException(status_code=500, detail="Transcription failed") from None
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.unlink(tmp_path)
 
         return {
             "transcript": transcript,
