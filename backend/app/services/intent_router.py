@@ -439,9 +439,10 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
 
 
 # ---------------------------------------------------------------------------
-# High/Crisis counselor hold (hard halt)
+# Crisis counselor hold (hard halt)
 # ---------------------------------------------------------------------------
-# On a High or Crisis detection GAIDA stops generating replies. The student gets ONE
+# On a Crisis detection GAIDA stops generating replies. High keeps chatting
+# (with the alert, email and hotline details) and does not halt. The student gets ONE
 # fixed, pre-written message (below), the chat screen shows a persistent
 # banner, and every later message is recorded for the counselor but answered
 # with nothing until a counselor takes over (which sets counselor_active) and
@@ -490,7 +491,7 @@ def _crisis_hold_state(turn: Dict[str, Any]) -> str | None:
     meta = turn["session"].setdefault("meta", {})
     if meta.get("crisis_hold"):
         return "continue"
-    if turn["severity"] in ("High", "Crisis"):
+    if turn["severity"] == "Crisis":
         meta["crisis_hold"] = True
         return "start"
     return None
