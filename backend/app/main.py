@@ -129,7 +129,7 @@ ALLOWED_ORIGINS = [
 # means pointing FRONTEND_URL at a new frontend domain (custom domain, preview
 # deploy, etc.) is enough to allow it in CORS — no code edit required.
 _FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
-if _FRONTEND_URL:
+if _FRONTEND_URL and _FRONTEND_URL not in ALLOWED_ORIGINS:
     ALLOWED_ORIGINS.append(_FRONTEND_URL)
 
 # Also allow the Vite dev server when it's reached over the local network

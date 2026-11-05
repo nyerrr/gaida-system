@@ -353,10 +353,24 @@ def start_research_session(
             "participant_code": code_used,  # None for identified participants
             **demographics,
         }).eq("session_token", session_id).execute()
-    except Exception as e:
-        # Non-fatal — the session still works for chat even if this tagging
-        # update fails; it just won't be picked up by the export script.
-        print(f"[research] session tagging failed: {e}")
+        tagged_session = (
+            supabase.table("sessions")
+            .select("session_token, is_research")
+            .eq("session_token", session_id)
+            .limit(1)
+            .execute()
+        )
+        if not tagged_session.data or tagged_session.data[0].get("is_research") is not True:
+            raise RuntimeError("Research session row was not tagged")
+    except Exception:
+        # Never issue a usable session token for a session that could not be
+        # marked as research data; otherwise it silently escapes research
+        # exports and consent-based handling.
+        print("[research] session tagging failed; refusing to issue session token")
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to initialize the research session. Please try again.",
+        ) from None
 
     token = create_session_token(participant_id, role="research")
 

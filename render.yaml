@@ -5,6 +5,8 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     envVars:
+      - key: ENVIRONMENT
+        value: production
       - key: OPENAI_API_KEY
         sync: false
       - key: SUPABASE_URL
@@ -48,5 +50,7 @@ services:
         sync: false
       - key: COUNSELOR_ALERT_EMAILS
         sync: false
-      - key: FRONTEND_URL
+      - key: ESCALATION_EMAILS
         sync: false
+      - key: FRONTEND_URL
+        value: https://gaida-system.vercel.app
