@@ -34,3 +34,8 @@ A/B comparison tool: `python tools/validate_voice_cleaning.py [clip.wav]`
 ## Run:
 
 > uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+Signed-token revocations are stored in Supabase. Apply
+[`training/sql/2026_11_add_revoked_session_tokens.sql`](training/sql/2026_11_add_revoked_session_tokens.sql)
+before deploying this version; auth validation fails closed if the shared
+revocation table is unavailable. The backend stores only token hashes.
