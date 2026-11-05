@@ -3,8 +3,8 @@ import { BACKEND_URL } from './config'
 // Bearer-token fetch wrapper.
 //
 // - Attaches `Authorization: Bearer <token>` from the active login
-//   (student or counselor) to every request, except login/consent/health
-//   endpoints that are deliberately public.
+//   (student or counselor) to every request, except public login/health
+//   endpoints.
 // - Forwards 401 responses to the portal by clearing stored auth state so
 //   the route guards bounce the user back to login.
 //

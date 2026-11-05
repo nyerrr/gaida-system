@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from datetime import datetime
 from google.oauth2 import id_token
@@ -9,7 +9,8 @@ from app.database.database import supabase
 from app.constants import TEST_CREDENTIALS
 from app.services.rate_limiter import check_rate_limit
 from app.services.captcha import new_challenge, verify_captcha
-from app.utils.auth import create_session_token
+from app.services.session_manager import get_session
+from app.utils.auth import create_session_token, get_current_user
 
 
 ALLOWED_DOMAIN = "@ue.edu.ph"
@@ -233,10 +234,20 @@ def counselor_login(payload: CounselorLoginRequest):
 
 
 @router.post("/consent")
-def record_consent(payload: ConsentRequest):
+def record_consent(payload: ConsentRequest, user: dict = Depends(get_current_user)):
     """
-    Record user consent for logging interactions.
+    Record consent for the authenticated user's session.
+
+    Consent is accepted before the first chat turn, when the client-generated
+    session_id does not exist on the server yet. Once a session exists, only
+    its owner may change consent for it — otherwise any authenticated user who
+    learned another session_id could consent (or revoke consent) on their
+    behalf.
     """
+    session = get_session(payload.session_id)
+    if session and session.get("user_id") and session["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Session does not belong to this user")
+
     existing = supabase.table("consents")\
         .select("*")\
         .eq("session_id", payload.session_id)\

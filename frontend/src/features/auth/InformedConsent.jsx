@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearAuth } from '../../api';
+import { apiFetch, clearAuth } from '../../api';
 import { BACKEND_URL } from '../../config';
 
 export default function InformedConsent() {
@@ -15,7 +15,9 @@ const handleAccept = async (e) => {
     // Get session_id from localStorage (set during login)
     const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
 
-    const response = await fetch(`${BACKEND_URL}/api/auth/consent`, {
+    // apiFetch attaches the student's bearer token. The consent endpoint is
+    // authenticated: without it the backend rejects the request with 401.
+    const response = await apiFetch(`${BACKEND_URL}/api/auth/consent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
