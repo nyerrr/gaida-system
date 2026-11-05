@@ -877,7 +877,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
 function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMarkChecked, onRefresh }) {
   const pull = usePullToRefresh(onRefresh);
   return (
-    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
+    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" aria-busy={welfareLoading} style={pull.style}>
       {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Welfare Checks</h1>
@@ -891,9 +891,12 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
           <button type="button" onClick={onRefresh} className="mt-2 rounded-lg border border-amber-700 px-3 py-1.5 font-semibold">Retry</button>
         </div>
       )}
-      {welfareLoading && welfare.length === 0 ? (
-        <p role="status" className="py-12 text-center text-sm" style={{ color: P.textSecondary }}>Loading welfare checks…</p>
-      ) : welfare.length > 0 ? (
+      {welfareLoading && (
+        <p role="status" aria-live="polite" className="py-3 text-center text-sm" style={{ color: P.textSecondary }}>
+          {welfare.length === 0 ? 'Loading welfare checks…' : 'Refreshing welfare checks…'}
+        </p>
+      )}
+      {welfare.length > 0 ? (
         welfare.map((w) => {
           const sc = severityColor(w.peak_severity);
           return (
@@ -919,7 +922,7 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
             </div>
           );
         })
-      ) : !welfareError ? (
+      ) : !welfareLoading && !welfareError ? (
         <div className="text-center py-20" style={{ color: P.textMuted }}>
           <div className="mb-3 flex justify-center"><NavIcon id="hotline" size={40} /></div>
           <p className="text-sm font-semibold" style={{ color: P.textSecondary }}>No welfare checks needed</p>

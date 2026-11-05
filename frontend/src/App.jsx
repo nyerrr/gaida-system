@@ -152,7 +152,7 @@ function App() {
 
 function RouteLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gray-50">
       <div
         className="w-8 h-8 rounded-full border-2 border-gray-300 border-t-red-700 animate-spin"
         role="status"

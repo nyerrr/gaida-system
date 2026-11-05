@@ -21,7 +21,7 @@ export default function PrivacyPolicy() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
       {/* Decorative Background Pattern */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <div className="absolute top-20 left-20 w-96 h-96 border-4 border-red-200 rotate-45 rounded-3xl"></div>

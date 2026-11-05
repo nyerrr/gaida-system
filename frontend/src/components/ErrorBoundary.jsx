@@ -22,7 +22,7 @@ export default class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div
-          className="min-h-screen flex items-center justify-center p-6"
+          className="min-h-[100dvh] flex items-center justify-center p-6"
           style={{ background: '#F7FAF9' }}
         >
           <div className="max-w-md w-full text-center">

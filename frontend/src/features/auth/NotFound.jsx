@@ -5,7 +5,7 @@ export default function NotFound() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-6 text-center font-sans"
+      className="min-h-[100dvh] flex items-center justify-center p-6 text-center font-sans"
       style={{ background: '#F7FAF9', color: '#2E3B44' }}
     >
       <div

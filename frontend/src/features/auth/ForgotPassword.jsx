@@ -50,7 +50,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-[100dvh] relative overflow-hidden flex items-center justify-center">
 
       {/* Full bleed UE background */}
       <div
