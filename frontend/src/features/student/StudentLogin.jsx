@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
 import { useCaptcha } from '../../hooks/useCaptcha';
-import { clearAuth } from '../../api';
+import apiFetch, { clearAuth } from '../../api';
 
 export default function StudentLogin() {
   const [showPassword, setShowPassword] = useState(false);
@@ -64,8 +64,10 @@ export default function StudentLogin() {
 
     setLoading(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      const response = await apiFetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
+        skipAuth: true,
+        skipUnauthorizedRedirect: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, captcha_token: captchaToken }),
       });
@@ -92,8 +94,10 @@ export default function StudentLogin() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/google`, {
+      const response = await apiFetch(`${BACKEND_URL}/api/auth/google`, {
         method: 'POST',
+        skipAuth: true,
+        skipUnauthorizedRedirect: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential, role: 'student' }),
       });

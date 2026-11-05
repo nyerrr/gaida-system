@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BACKEND_URL } from '../config';
+import apiFetch from '../api';
 
 /** Shared server-issued CAPTCHA flow for both login portals. */
 export function useCaptcha(setError) {
@@ -10,7 +11,11 @@ export function useCaptcha(setError) {
   const loadCaptcha = useCallback(async ({ keepError = false } = {}) => {
     setCaptchaLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/captcha`, { cache: 'no-store' });
+      const res = await apiFetch(`${BACKEND_URL}/api/auth/captcha`, {
+        cache: 'no-store',
+        skipAuth: true,
+        skipUnauthorizedRedirect: true,
+      });
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       setCaptchaToken(data.token);

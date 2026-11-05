@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import GoogleSignIn from '../../components/GoogleSignIn';
 import { BACKEND_URL } from '../../config';
 import { useCaptcha } from '../../hooks/useCaptcha';
-import { clearAuth } from '../../api';
+import apiFetch, { clearAuth } from '../../api';
 
 export default function CounselorLogin() {
   const navigate = useNavigate();
@@ -24,8 +24,10 @@ export default function CounselorLogin() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/google`, {
+      const response = await apiFetch(`${BACKEND_URL}/api/auth/google`, {
         method: 'POST',
+        skipAuth: true,
+        skipUnauthorizedRedirect: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential, role: 'counselor' }),
       });
@@ -75,8 +77,10 @@ export default function CounselorLogin() {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/counselor-login`, {
+      const response = await apiFetch(`${BACKEND_URL}/api/auth/counselor-login`, {
         method: 'POST',
+        skipAuth: true,
+        skipUnauthorizedRedirect: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faculty_id: facultyId, password, antibot, captcha_token: captchaToken }),
       });

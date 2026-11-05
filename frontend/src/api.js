@@ -93,24 +93,29 @@ export async function apiFetch(input, options = {}, tokenOverride = null) {
   const isAbsolute = typeof input === 'string' && /^https?:\/\//.test(input)
   const url = isAbsolute ? input : `${BACKEND_URL}${input}`
 
-  const headers = new Headers(options.headers || {})
-  const token = tokenOverride || getAuthToken(url)
+  // Public auth endpoints still use this wrapper for consistent URL, header,
+  // and fetch handling, but must not inherit a stale bearer token or treat an
+  // expected login 401 as an expired authenticated session.
+  const { skipAuth = false, skipUnauthorizedRedirect = false, ...requestOptions } = options
+
+  const headers = new Headers(requestOptions.headers || {})
+  const token = skipAuth ? null : tokenOverride || getAuthToken(url)
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const body = options.body
+  const body = requestOptions.body
   if (
     body != null &&
     typeof body === 'string' &&
-    !(options.headers instanceof Headers ? options.headers.has('Content-Type') : headers.has('Content-Type'))
+    !(requestOptions.headers instanceof Headers ? requestOptions.headers.has('Content-Type') : headers.has('Content-Type'))
   ) {
     headers.set('Content-Type', 'application/json')
   }
 
-  const response = await fetch(url, { ...options, headers })
+  const response = await fetch(url, { ...requestOptions, headers })
 
-  if (response.status === 401 && !tokenOverride) {
+  if (response.status === 401 && !tokenOverride && !skipUnauthorizedRedirect) {
     clearAuth()
     if (window.location.pathname !== '/') {
       window.location.href = '/'
