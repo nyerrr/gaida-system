@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiFetch from '../../api';
+import { BACKEND_URL } from '../../config';
+import ResearchCaptcha from './ResearchCaptcha';
 
 // Lets an anonymous research participant delete everything tied to their
 // code: sessions, chat messages, GAD-7/SUS responses, ratings, notes,
 // counselor alerts, acoustic logs, and the participant record itself.
 // Backed by POST /api/research/withdraw (backend/app/api/research.py) —
 // this page is the only way a participant can actually reach that
-// endpoint; it's public (no login/token required), matching the fact that
-// an anonymous participant has no account to authenticate with, only the
-// code they were shown once.
+// endpoint. Anonymous participants have no account, so the endpoint asks
+// for a code plus a CAPTCHA-gated access token instead of a login.
 const STEP = { FORM: 0, SUBMITTING: 1, DONE: 2 };
 
 // Mirrors the "Sky" theme in ResearchFlow.jsx / ResearchSUS.jsx /
@@ -60,26 +61,48 @@ export default function Withdraw() {
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [captcha, setCaptcha] = useState({ token: '', answer: '' });
+  const [captchaRefresh, setCaptchaRefresh] = useState(0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!code.trim() || !confirmChecked) return;
+    if (!captcha.token || !captcha.answer.trim()) {
+      setError('Enter the verification code to continue.');
+      return;
+    }
     setError('');
     setStep(STEP.SUBMITTING);
 
     try {
-      const res = await apiFetch('/api/research/withdraw', {
+      // Anonymous participants have no account, so the destructive endpoint
+      // is gated by a short-lived access token issued after a CAPTCHA.
+      const accessRes = await apiFetch(`${BACKEND_URL}/api/research/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captcha_token: captcha.token,
+          antibot: captcha.answer.trim(),
+        }),
+      });
+      const accessData = await accessRes.json().catch(() => ({}));
+      if (!accessRes.ok) {
+        throw new Error(accessData.detail || 'Verification failed. Please try again.');
+      }
+
+      const res = await apiFetch(`${BACKEND_URL}/api/research/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participant_code: code.trim() }),
-      });
+      }, accessData.access_token);
       if (!res.ok) throw new Error('Request failed');
       const data = await res.json();
       setResult(data);
       setStep(STEP.DONE);
     } catch (err) {
       console.error('Withdraw error:', err);
-      setError('Something went wrong submitting your request. Please try again, or email the research team directly if this keeps happening.');
+      setError(err.message || 'Something went wrong submitting your request. Please try again, or email the research team directly if this keeps happening.');
+      setCaptchaRefresh((n) => n + 1);
       setStep(STEP.FORM);
     }
   };
@@ -136,6 +159,12 @@ export default function Withdraw() {
               </span>
             </label>
 
+            <ResearchCaptcha
+              onChange={setCaptcha}
+              refreshSignal={captchaRefresh}
+              disabled={step === STEP.SUBMITTING}
+            />
+
             {error && (
               <p className="text-sm mt-4 rounded-lg px-3 py-2" style={{ color: T.red, background: T.redSoft }}>
                 {error}
@@ -153,7 +182,7 @@ export default function Withdraw() {
               </button>
               <button
                 type="submit"
-                disabled={!code.trim() || !confirmChecked}
+                disabled={!code.trim() || !confirmChecked || !captcha.token || !captcha.answer.trim()}
                 className="flex-1 py-2 rounded-lg font-semibold text-sm transition-opacity disabled:opacity-40"
                 style={{ background: T.red, color: '#FFFFFF' }}
               >

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from '../../config';
 import apiFetch from '../../api';
+import ResearchCaptcha from './ResearchCaptcha';
 
 // Standard GAD-7 items (Spitzer et al., 2006), asked over the last 2 weeks.
 const GAD7_QUESTIONS = [
@@ -83,6 +84,14 @@ export default function ResearchFlow() {
   const [consentChecked, setConsentChecked] = useState(false);
   const [error, setError] = useState('');
 
+  // /participant-check, /start, and /withdraw require a short-lived access
+  // token (see ResearchCaptcha + POST /api/research/access). One CAPTCHA per
+  // research entry keeps the anonymous flow working without an account.
+  const [accessToken, setAccessToken] = useState('');
+  const [captcha, setCaptcha] = useState({ token: '', answer: '' });
+  const [captchaRefresh, setCaptchaRefresh] = useState(0);
+  const [accessLoading, setAccessLoading] = useState(false);
+
   const [anonymous, setAnonymous] = useState(false);
   const [studentNumber, setStudentNumber] = useState('');
   const [hasExistingCode, setHasExistingCode] = useState(false);
@@ -103,6 +112,46 @@ export default function ResearchFlow() {
   const [checkingParticipant, setCheckingParticipant] = useState(false);
   const [skippedDemographics, setSkippedDemographics] = useState(false);
 
+  const handleAccessExpired = (status) => {
+    if (status !== 401) return false;
+    setAccessToken('');
+    setCaptchaRefresh((n) => n + 1);
+    setError('Your verification expired. Please complete the verification code again.');
+    setStep(STEP.CONSENT);
+    return true;
+  };
+
+  const handleConsentContinue = async () => {
+    if (!consentChecked || accessLoading) return;
+    if (!captcha.token || !captcha.answer.trim()) {
+      setError('Enter the verification code to continue.');
+      return;
+    }
+
+    setError('');
+    setAccessLoading(true);
+    try {
+      const res = await apiFetch(`${BACKEND_URL}/api/research/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captcha_token: captcha.token,
+          antibot: captcha.answer.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Verification failed. Please try again.');
+
+      setAccessToken(data.access_token);
+      setStep(STEP.IDENTIFICATION);
+    } catch (err) {
+      setError(err.message || 'Verification failed. Please try again.');
+      setCaptchaRefresh((n) => n + 1);
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
   const handleIdentificationSubmit = async (e) => {
     e.preventDefault();
     if (!anonymous) {
@@ -119,7 +168,7 @@ export default function ResearchFlow() {
       // Ask the backend whether this participant already has demographics
       // on file — if so, skip asking again. A brand-new anonymous
       // participant (no code yet) always comes back "not returning."
-      const res = await fetch(`${BACKEND_URL}/api/research/participant-check`, {
+      const res = await apiFetch(`${BACKEND_URL}/api/research/participant-check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -127,7 +176,8 @@ export default function ResearchFlow() {
           student_number: anonymous ? null : studentNumber.trim(),
           participant_code: anonymous && hasExistingCode ? existingCode.trim() : null,
         }),
-      });
+      }, accessToken);
+      if (handleAccessExpired(res.status)) return;
       const { is_returning } = res.ok ? await res.json() : { is_returning: false };
       setSkippedDemographics(is_returning);
       setStep(is_returning ? STEP.GAD7 : STEP.DEMOGRAPHICS);
@@ -153,7 +203,7 @@ export default function ResearchFlow() {
 
     try {
       // 1. Create the session — identified (student number) or anonymous.
-      const startRes = await fetch(`${BACKEND_URL}/api/research/start`, {
+      const startRes = await apiFetch(`${BACKEND_URL}/api/research/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -162,7 +212,8 @@ export default function ResearchFlow() {
           participant_code: anonymous && hasExistingCode ? existingCode.trim() : null,
           ...demographics,
         }),
-      });
+      }, accessToken);
+      if (handleAccessExpired(startRes.status)) return;
       if (!startRes.ok) throw new Error('Could not start a research session');
       const { session_token, session_id, participant_id, participant_code } = await startRes.json();
 
@@ -318,6 +369,18 @@ export default function ResearchFlow() {
               I have read the above and voluntarily agree to participate.
             </label>
 
+            <ResearchCaptcha
+              onChange={setCaptcha}
+              refreshSignal={captchaRefresh}
+              disabled={accessLoading}
+            />
+
+            {error && (
+              <p className="text-sm mt-3 rounded-lg px-3 py-2" style={{ color: T.errorText, background: T.errorBg }}>
+                {error}
+              </p>
+            )}
+
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => navigate('/')}
@@ -327,12 +390,12 @@ export default function ResearchFlow() {
                 Back
               </button>
               <button
-                disabled={!consentChecked}
-                onClick={() => setStep(STEP.IDENTIFICATION)}
+                disabled={!consentChecked || !captcha.token || !captcha.answer.trim() || accessLoading}
+                onClick={handleConsentContinue}
                 className="flex-1 py-2 rounded-lg font-semibold transition-opacity disabled:opacity-40"
                 style={{ background: T.accent, color: '#FFFFFF' }}
               >
-                Continue
+                {accessLoading ? 'Verifying…' : 'Continue'}
               </button>
             </div>
           </div>

@@ -39,9 +39,13 @@ def _signature(body: str) -> str:
     return _b64(hmac.new(_secret(), body.encode("ascii"), hashlib.sha256).digest())
 
 
-def create_session_token(user_id: str, role: str = "student") -> str:
-    """Issue a bearer token for the given user and store it in ACTIVE_TOKENS."""
-    expires_at = time() + TOKEN_TTL_HOURS * 3600
+def create_session_token(user_id: str, role: str = "student", ttl_hours: float = TOKEN_TTL_HOURS) -> str:
+    """Issue a bearer token for the given user and store it in ACTIVE_TOKENS.
+
+    `ttl_hours` lets short-lived tokens (e.g. a research intake token) expire
+    well before the normal 12-hour session.
+    """
+    expires_at = time() + ttl_hours * 3600
     if _secret():
         body = _b64(json.dumps(
             {"u": user_id, "r": role, "e": int(expires_at), "n": token_urlsafe(6)},
@@ -90,6 +94,32 @@ def get_current_user(authorization: str = Header(None)) -> dict:
     user = validate_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session token")
+
+    # Research intake tokens are deliberately narrow: they only unlock the
+    # pre-session research endpoints (see get_research_access). Rejecting them
+    # here keeps them from being replayed against chat/session/voice endpoints
+    # as if they were a normal student or counselor session.
+    if user.get("role") == "research_access":
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+    return user
+
+
+def get_research_access(authorization: str = Header(None)) -> dict:
+    """FastAPI dependency — accepts only a research intake token.
+
+    These are issued by POST /api/research/access after a CAPTCHA challenge and
+    exist solely to let unauthenticated (including anonymous) participants
+    reach /participant-check, /start, and /withdraw. A normal student,
+    counselor, or research session token must not work on those endpoints.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    token = authorization.split(" ", 1)[1].strip()
+    user = validate_token(token)
+    if not user or user.get("role") != "research_access":
+        raise HTTPException(status_code=401, detail="Invalid or expired research access token")
 
     return user
 

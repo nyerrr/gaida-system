@@ -190,7 +190,9 @@ async def session_ws(websocket: WebSocket, session_id: str, token: str = Query("
     # sockets are rejected up front so anonymous browsers can't eavesdrop on
     # live sessions.
     user = validate_token(token)
-    if not user:
+    # Research intake tokens only unlock the pre-session research endpoints;
+    # they must never be usable as a chat/session credential.
+    if not user or user.get("role") == "research_access":
         await websocket.close(code=4401)
         return
     # Ownership check — mirrors require_session_owner() used by the REST

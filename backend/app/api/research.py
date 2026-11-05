@@ -29,11 +29,59 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
 
 from app.database.database import supabase
+from app.services.captcha import verify_captcha
 from app.services.rate_limiter import check_rate_limit
 from app.services.session_manager import start_session, get_session
-from app.utils.auth import create_session_token, get_current_user
+from app.utils.auth import create_session_token, get_current_user, get_research_access
 
 router = APIRouter(prefix="/api/research", tags=["research"])
+
+
+def _client_ip(request: Request) -> str:
+    # Deliberately not trusting X-Forwarded-For here: clients can spoof it
+    # unless the deployment is known to sit behind a proxy that overwrites it.
+    # The CAPTCHA is the primary control; this IP is the rate-limit fallback.
+    return request.client.host if request.client else "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Research access — CAPTCHA-gated intake token
+#
+# /participant-check, /start, and /withdraw have to work for anonymous
+# participants who have no account to log in with. A CAPTCHA-gated, signed,
+# short-lived access token gives those endpoints a server-issued credential
+# instead of leaving them open to unauthenticated callers.
+# ---------------------------------------------------------------------------
+RESEARCH_ACCESS_TTL_HOURS = 1
+
+
+class ResearchAccessRequest(BaseModel):
+    captcha_token: str = ""
+    antibot: str = ""
+
+
+class ResearchAccessResponse(BaseModel):
+    access_token: str
+    expires_in: int
+
+
+@router.post("/access", response_model=ResearchAccessResponse)
+def issue_research_access(payload: ResearchAccessRequest, request: Request):
+    """Exchange a solved CAPTCHA for a short-lived research access token."""
+    # Generous enough for a class behind one campus NAT; the CAPTCHA is what
+    # stops automated token farming, this limit only caps the obvious abuse.
+    check_rate_limit(f"research_access:{_client_ip(request)}", limit=100, window=3600)
+    verify_captcha(payload.captcha_token, payload.antibot)
+
+    token = create_session_token(
+        f"research-access:{uuid.uuid4().hex}",
+        role="research_access",
+        ttl_hours=RESEARCH_ACCESS_TTL_HOURS,
+    )
+    return ResearchAccessResponse(
+        access_token=token,
+        expires_in=int(RESEARCH_ACCESS_TTL_HOURS * 3600),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -105,22 +153,24 @@ class ParticipantCheckResponse(BaseModel):
 
 
 @router.post("/participant-check", response_model=ParticipantCheckResponse)
-def check_participant(payload: ParticipantCheckRequest, request: Request):
+def check_participant(
+    payload: ParticipantCheckRequest,
+    request: Request,
+    _access: dict = Depends(get_research_access),
+):
     """
     Called right after the identification step, before deciding whether to
     show the demographics form. Anonymous participants only get a
     meaningful answer here if they entered a previous code — a brand-new
     anonymous participant has no code yet, so is always "not returning."
 
-    Rate limited per IP: this is an unauthenticated boolean "has this
-    student number/code been seen before" check, which — without a limit —
-    could be used to mass-enumerate which student numbers have used GAIDA
-    (a sensitive fact in a counseling context). 20/min is generous for a
-    real participant (hit once per identification attempt) but makes
-    scripted enumeration impractical.
+    Requires a CAPTCHA-gated research access token (POST /api/research/access).
+    This is a boolean "has this student number/code been seen before" check,
+    which — without a credential and limit — could be used to mass-enumerate
+    which student numbers have used GAIDA (a sensitive fact in a counseling
+    context). The per-IP limit remains as a second layer.
     """
-    client_ip = request.client.host if request.client else "unknown"
-    check_rate_limit(f"research_check:{client_ip}", limit=20, window=60)
+    check_rate_limit(f"research_check:{_client_ip(request)}", limit=20, window=60)
 
     if payload.anonymous and not payload.participant_code:
         return ParticipantCheckResponse(is_returning=False)
@@ -158,9 +208,12 @@ class StartResearchResponse(BaseModel):
 
 
 @router.post("/start", response_model=StartResearchResponse)
-def start_research_session(payload: StartResearchRequest, request: Request):
-    client_ip = request.client.host if request.client else "unknown"
-    check_rate_limit(f"research_start:{client_ip}")
+def start_research_session(
+    payload: StartResearchRequest,
+    request: Request,
+    _access: dict = Depends(get_research_access),
+):
+    check_rate_limit(f"research_start:{_client_ip(request)}")
 
     participant_id, code_used = _resolve_participant_id(
         payload.anonymous, payload.student_number, payload.participant_code
@@ -264,20 +317,27 @@ _WITHDRAW_SESSION_CHILD_TABLES = [
 
 
 @router.post("/withdraw", response_model=WithdrawResponse)
-def withdraw_anonymous_code(payload: WithdrawRequest, request: Request):
+def withdraw_anonymous_code(
+    payload: WithdrawRequest,
+    request: Request,
+    _access: dict = Depends(get_research_access),
+):
     """
     Irreversibly delete every record tied to an anonymous participant code:
     sessions, chat interactions, GAD-7 responses, ratings, notes, alerts,
     acoustic logs, and the participant row itself. Idempotent — submitting an
     unknown code safely returns an empty "everything deleted" result.
+
+    Requires a CAPTCHA-gated research access token (POST /api/research/access),
+    so the destructive code lookup is not reachable by an unauthenticated
+    script. The code itself remains the participant's bearer credential.
     """
-    client_ip = request.client.host if request.client else "unknown"
     # Stricter than the default 5/min: this endpoint hard-deletes data on a
-    # single guessable-length code with no authentication, so brute-forcing
-    # or mass-triggering it needs to be far more expensive than a login
-    # attempt. 3/hour/IP still comfortably covers a genuine participant
-    # withdrawing (once) while making enumeration impractical.
-    check_rate_limit(f"research_withdraw:{client_ip}", limit=3, window=3600)
+    # single guessable-length code, so brute-forcing or mass-triggering it
+    # needs to be far more expensive than a login attempt. 3/hour/IP still
+    # comfortably covers a genuine participant withdrawing (once) while making
+    # enumeration impractical.
+    check_rate_limit(f"research_withdraw:{_client_ip(request)}", limit=3, window=3600)
 
     code = payload.participant_code.strip()
     participant_id = f"anon_{code}"
