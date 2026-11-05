@@ -1,7 +1,6 @@
 import asyncio
 import tempfile
 import os
-import traceback
 from openai import OpenAI
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from fastapi.responses import Response
@@ -43,11 +42,9 @@ async def speech_to_text(
         # Accept any audio content type — browser sends various formats
         content_type = audio.content_type or ""
         if content_type and not content_type.startswith("audio/") and not content_type.startswith("video/webm"):
-            print(f"DEBUG: Rejected content type: {content_type}")
             raise HTTPException(status_code=400, detail=f"File must be audio type. Got: {content_type}")
 
         audio_bytes = await audio.read()
-        print(f"DEBUG: Audio bytes received: {len(audio_bytes)}")
 
         if len(audio_bytes) == 0:
             raise HTTPException(status_code=400, detail="Empty audio file.")
@@ -65,13 +62,12 @@ async def speech_to_text(
             )
             acoustic_confidence = acoustic_features_dict.get("acoustic_confidence", 1.0)
             acoustic_emotion = acoustic_features_dict.get("acoustic_emotion", "neutral")
-            print(f"DEBUG: Acoustic features extracted - severity={acoustic_severity}, emotion={acoustic_emotion}")
 
             # ── Log to Supabase ──────────────────────────────────────────────
             log_to_supabase(session_id=session_id or "unknown", features=acoustic_features_dict)
 
-        except Exception as e:
-            print(f"DEBUG: Acoustic extraction failed (non-fatal): {e}")
+        except Exception:
+            print("[voice] Acoustic feature extraction failed (non-fatal)")
         # --- Step 2: Save acoustic features to session ---
         if session_id:
             session = get_session(session_id)
@@ -97,7 +93,6 @@ async def speech_to_text(
                 "shimmer": acoustic_features_dict.get("shimmer", 0.0),
                 "energy_mean": acoustic_features_dict.get("energy_mean", 0.0),
             }
-            print(f"DEBUG: Acoustic features saved to session {session_id}")
 
         # --- Step 3: Transcription (hosted OpenAI) ---
         # The upload's real container varies by platform: Android/desktop
@@ -128,9 +123,6 @@ async def speech_to_text(
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
-            print(f"DEBUG: Temp file created: {tmp_path}")
-
-            print(f"DEBUG: Starting transcription ({_STT_MODEL})...")
             with open(tmp_path, "rb") as f:
                 result = await asyncio.to_thread(
                     _get_voice_client().audio.transcriptions.create,
@@ -138,12 +130,10 @@ async def speech_to_text(
                     file=(f"audio{suffix}", f),
                 )
             transcript = getattr(result, "text", "").strip()
-            print(f"DEBUG: Transcription complete: '{transcript}'")
 
-        except Exception as e:
-            print(f"DEBUG: Transcription error: {e}")
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+        except Exception:
+            print("[voice] Transcription failed")
+            raise HTTPException(status_code=500, detail="Transcription failed") from None
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
@@ -166,10 +156,9 @@ async def speech_to_text(
 
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"DEBUG: Unhandled error in speech-to-text: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        print("[voice] Speech-to-text request failed")
+        raise HTTPException(status_code=500, detail="Speech-to-text request failed") from None
 
 
 @router.get("/tts")
