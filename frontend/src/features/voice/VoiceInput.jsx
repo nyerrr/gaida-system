@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 
 import { BACKEND_URL } from '../../config';
 import apiFetch from '../../api';
+import { stopRecorderIfActive } from './voiceRecorder';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const hasSpeechRecognition = !!SpeechRecognition;
@@ -39,9 +40,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
   const stopAll = () => {
     clearTimeout(maxRecordTimerRef.current);
     try { recognitionRef.current?.stop(); } catch (e) { void e; }
-    if (mediaRecorderRef.current?.state !== "inactive") {
-      try { mediaRecorderRef.current?.stop(); } catch (e) { void e; }
-    }
+    try { stopRecorderIfActive(mediaRecorderRef.current); } catch (e) { void e; }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -82,7 +81,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
     }
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
+      stopRecorderIfActive(mediaRecorderRef.current);
     } else if (!text) {
       setError("No speech detected. Try again.");
       setRecording(false);
