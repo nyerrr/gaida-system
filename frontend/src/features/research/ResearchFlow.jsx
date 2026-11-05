@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from '../../config';
 import apiFetch from '../../api';
 import ResearchCaptcha from './ResearchCaptcha';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 // Standard GAD-7 items (Spitzer et al., 2006), asked over the last 2 weeks.
 const GAD7_QUESTIONS = [
@@ -79,6 +80,7 @@ function fieldStyle() {
 }
 
 export default function ResearchFlow() {
+  const [finalSubmitConfirmOpen, setFinalSubmitConfirmOpen] = useState(false);
   const navigate = useNavigate();
   const [step, setStep] = useState(STEP.CONSENT);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -675,11 +677,11 @@ export default function ResearchFlow() {
               </button>
               <button
                 disabled={!allAnswered}
-                onClick={handleFinalSubmit}
+                onClick={() => setFinalSubmitConfirmOpen(true)}
                 className="flex-1 py-2 rounded-lg font-semibold transition-opacity disabled:opacity-40"
                 style={{ background: T.accent, color: '#FFFFFF' }}
               >
-                Start Chat
+                Submit final form
               </button>
             </div>
           </div>
@@ -728,6 +730,19 @@ export default function ResearchFlow() {
           </div>
         )}
       </div>
+      {finalSubmitConfirmOpen && (
+        <ConfirmationDialog
+          title="Submit final form?"
+          description="Your answers will be submitted and your student chat session will start."
+          cancelLabel="Keep reviewing"
+          confirmLabel="Submit final form"
+          onCancel={() => setFinalSubmitConfirmOpen(false)}
+          onConfirm={() => {
+            setFinalSubmitConfirmOpen(false);
+            handleFinalSubmit();
+          }}
+        />
+      )}
     </div>
   );
 }

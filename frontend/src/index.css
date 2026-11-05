@@ -29,6 +29,148 @@
   display: none; /* Chrome, Safari, new Edge */
 }
 
+/* Swipe guidance applies to touch devices and should not appear in the desktop workspace. */
+.counselor-swipe-hint {
+  display: none;
+}
+
+.confirmation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(24 35 42 / 52%);
+}
+
+.confirmation-dialog {
+  position: relative;
+  width: min(100%, 28rem);
+  padding: 1.5rem;
+  border: 1px solid #dce7ea;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 20px 60px rgb(20 35 43 / 22%);
+  color: #22303a;
+  text-align: left;
+}
+
+.confirmation-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: #5c6f78;
+  cursor: pointer;
+}
+
+.confirmation-close:hover,
+.confirmation-cancel:hover {
+  background: #eef4f6;
+}
+
+.confirmation-close:focus-visible,
+.confirmation-cancel:focus-visible,
+.confirmation-confirm:focus-visible {
+  outline: 3px solid #7da8cc;
+  outline-offset: 2px;
+}
+
+.confirmation-close svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.confirmation-title {
+  margin: 0 2.75rem 0.5rem 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.confirmation-description {
+  margin: 0;
+  color: #5c6f78;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5ecee;
+}
+
+.confirmation-cancel,
+.confirmation-confirm {
+  min-height: 2.75rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid #d5e0e3;
+  border-radius: 0.65rem;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirmation-cancel {
+  background: #fff;
+  color: #33454f;
+}
+
+.confirmation-confirm {
+  border-color: #4a7699;
+  background: #4a7699;
+  color: #fff;
+}
+
+.confirmation-confirm.is-destructive {
+  border-color: #b0472f;
+  background: #b0472f;
+}
+
+@media (max-width: 639px) {
+  .confirmation-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .confirmation-dialog {
+    width: 100%;
+    padding: 1.5rem 1rem max(1rem, env(safe-area-inset-bottom));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 1.25rem 1.25rem 0 0;
+  }
+
+  .confirmation-actions {
+    flex-direction: column-reverse;
+    gap: 0.625rem;
+  }
+
+  .confirmation-cancel,
+  .confirmation-confirm {
+    width: 100%;
+    min-height: 3rem;
+  }
+}
+
 /* Counselor mobile app shell. These rules are intentionally scoped to the
    phone breakpoint so the existing desktop workspace remains unchanged. */
 @media (max-width: 1023px) {
@@ -68,6 +210,7 @@
   .counselor-list-row {
     border-radius: 0.875rem;
     box-shadow: 0 1px 3px rgb(34 48 58 / 8%);
+    touch-action: pan-y;
   }
 
   .counselor-filter-controls input,
@@ -126,6 +269,7 @@
   }
 
   .counselor-swipe-hint {
+    display: block;
     width: 100%;
     margin: -0.5rem 0 1rem;
     padding: 0.75rem;

@@ -9,6 +9,7 @@ import { BACKEND_URL as BACKEND } from '../../config';
 import apiFetch, { clearAuth } from '../../api';
 import CounselorBottomNav from './CounselorBottomNav';
 import { FALLBACK_POLL_INTERVAL_MS, shouldPollDashboard } from './dashboardPolling';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 // ── Shared palette ─────────────────────────────────────────────────────────
 // Same cool-blue / soft-green identity as the student interface. Bright red
@@ -260,20 +261,32 @@ function EmptyState({ icon, title, sub }) {
 }
 
 function usePullToRefresh(onRefresh) {
-  const startY = useRef(null);
+  const startTouch = useRef(null);
+  const pullDistanceRef = useRef(0);
   const [pullDistance, setPullDistance] = useState(0);
 
   const onTouchStart = (event) => {
-    startY.current = event.touches[0].clientY;
+    startTouch.current = event.touches.length === 1
+      ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+      : null;
   };
   const onTouchMove = (event) => {
-    if (startY.current === null) return;
-    const distance = event.touches[0].clientY - startY.current;
-    if (distance > 0) setPullDistance(Math.min(distance, 72));
+    if (startTouch.current === null || event.touches.length !== 1) return;
+    const deltaX = event.touches[0].clientX - startTouch.current.x;
+    const deltaY = event.touches[0].clientY - startTouch.current.y;
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+      return;
+    }
+    const distance = Math.max(0, deltaY);
+    pullDistanceRef.current = Math.min(distance, 72);
+    setPullDistance(pullDistanceRef.current);
   };
   const onTouchEnd = () => {
-    if (pullDistance > 52) onRefresh?.();
-    startY.current = null;
+    if (pullDistanceRef.current > 52) onRefresh?.();
+    startTouch.current = null;
+    pullDistanceRef.current = 0;
     setPullDistance(0);
   };
 
@@ -543,7 +556,7 @@ const getEscalationState = (a) => {
 // Defined at module scope (not inside AlertsPage) so the 2-second polling
 // re-render doesn't remount every row and drop mid-click button presses.
 function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
-  const touchStart = useRef(null);
+  const pointerStart = useRef(null);
   const sc  = severityColor(a.severity);
   const esc = getEscalationState(a);
   const needsAck = a.severity === 'High' || a.severity === 'Crisis';
@@ -578,16 +591,26 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     <div
       className="counselor-list-row p-4 rounded-r-xl mb-3"
       style={{ borderLeft: `4px solid ${borderColor}`, background: bgColor }}
-      onTouchStart={(e) => { touchStart.current = e.touches[0].clientX; }}
-      onTouchEnd={(e) => {
-        if (touchStart.current === null) return;
-        const distance = e.changedTouches[0].clientX - touchStart.current;
-        touchStart.current = null;
-        if (Math.abs(distance) < 70) return;
-        if (navigator.vibrate) navigator.vibrate(12);
-        if (distance > 0 && actionable && needsAck && !a.acknowledged) onAcknowledge(a.session_id);
-        if (distance < 0) onViewChat(a.session_id);
+      onPointerDown={(e) => {
+        if (e.pointerType !== 'touch' || !e.isPrimary) return;
+        pointerStart.current = {
+          id: e.pointerId,
+          x: e.clientX,
+          y: e.clientY,
+        };
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* unsupported pointer capture */ }
       }}
+      onPointerUp={(e) => {
+        if (!pointerStart.current || pointerStart.current.id !== e.pointerId) return;
+        const deltaX = e.clientX - pointerStart.current.x;
+        const deltaY = e.clientY - pointerStart.current.y;
+        pointerStart.current = null;
+        if (Math.abs(deltaX) < 50 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) return;
+        if (navigator.vibrate) navigator.vibrate(12);
+        if (deltaX > 0 && actionable && needsAck && !a.acknowledged) onAcknowledge(a.session_id);
+        if (deltaX < 0) onViewChat(a.session_id);
+      }}
+      onPointerCancel={() => { pointerStart.current = null; }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -1041,6 +1064,7 @@ function ChatModal({ sessionId, onClose }) {
   const closeBtnRef = useRef(null);
   const previousActiveElementRef = useRef(null);
   const [resolving, setResolving] = useState(false);
+  const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -1456,7 +1480,7 @@ const typingThrottleRef = useRef(null);
   ];
   
   const handleResolve = async () => {
-    if (!window.confirm('Mark this session as resolved? It will be removed from active sessions.')) return;
+    setResolveConfirmOpen(false);
     setResolving(true);
     try {
       const res = await apiFetch(`${BACKEND}/api/counselor/sessions/resolve`, {
@@ -1492,6 +1516,7 @@ const typingThrottleRef = useRef(null);
   };
 
   return (
+    <>
     <div
       role="dialog"
       aria-modal="true"
@@ -1545,7 +1570,7 @@ const typingThrottleRef = useRef(null);
               <span className="text-xs font-medium" style={{ color: P.greenDark }}>Session resolved</span>
             ) : (
               <button
-                onClick={handleResolve}
+                onClick={() => setResolveConfirmOpen(true)}
                 disabled={resolving || !savedNote}
                 title={!savedNote ? 'Save a case note before resolving' : undefined}
                 className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors duration-200"
@@ -1871,6 +1896,17 @@ const typingThrottleRef = useRef(null);
         )}
       </div>
     </div>
+    {resolveConfirmOpen && (
+      <ConfirmationDialog
+        title="Resolve session?"
+        description="This session will leave active alerts and appear in resolved cases."
+        cancelLabel="Keep session active"
+        confirmLabel="Resolve session"
+        onCancel={() => setResolveConfirmOpen(false)}
+        onConfirm={handleResolve}
+      />
+    )}
+    </>
   );
 }
 
@@ -2082,6 +2118,7 @@ export default function CounselorDashboard() {
   const [welfareError, setWelfareError] = useState(null);
   const [dashboardNotice, setDashboardNotice] = useState('');
   const [chatSessionId, setChatSessionId] = useState(null);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   // On desktop start with the full panel open so the profile and labels are
   // visible immediately; phones always start with it closed.
   const [expanded, setExpanded] = useState(
@@ -2748,12 +2785,7 @@ export default function CounselorDashboard() {
             {/* Logout */}
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm('Are you sure you want to log out?')) {
-                  closeMobileNav();
-                  logout();
-                }
-              }}
+              onClick={() => setLogoutConfirmOpen(true)}
               title={!panelWide ? 'Logout' : undefined}
               className={`group relative flex w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
                 panelWide ? 'gap-3 px-3' : 'justify-center px-0'
@@ -2836,12 +2868,7 @@ export default function CounselorDashboard() {
 
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm('Are you sure you want to log out?')) {
-                  closeMobileNav();
-                  logout();
-                }
-              }}
+              onClick={() => setLogoutConfirmOpen(true)}
               className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
               style={{ color: '#93A6AE' }}
             >
@@ -2996,6 +3023,21 @@ export default function CounselorDashboard() {
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
       )}
+      {logoutConfirmOpen && (
+        <ConfirmationDialog
+          title="Log out?"
+          description="You’ll be signed out of this counselor account on this device."
+          cancelLabel="Stay signed in"
+          confirmLabel="Log out"
+          destructive
+          onCancel={() => setLogoutConfirmOpen(false)}
+          onConfirm={() => {
+            setLogoutConfirmOpen(false);
+            closeMobileNav();
+            logout();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -3005,14 +3047,20 @@ function ResolvedCasesPage() {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+  const [deleteCaseTarget, setDeleteCaseTarget] = useState(null);
   const [casesError, setCasesError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('all');
 
   const handleDelete = async (sessionId, e) => {
     e.stopPropagation();
-    if (!window.confirm('Remove this case from the list? This can be undone from the database if needed.')) return;
+    setDeleteCaseTarget(sessionId);
+  };
 
+  const confirmDeleteCase = async () => {
+    const sessionId = deleteCaseTarget;
+    setDeleteCaseTarget(null);
+    if (!sessionId) return;
     try {
       const res = await apiFetch(`${BACKEND}/api/counselor/sessions/delete`, {
         method: 'POST',
@@ -3239,6 +3287,17 @@ function ResolvedCasesPage() {
             );
           })}
         </div>
+      )}
+      {deleteCaseTarget && (
+        <ConfirmationDialog
+          title="Remove resolved case?"
+          description={`Session ${deleteCaseTarget.slice(0, 16)} will be removed from the resolved cases list.`}
+          cancelLabel="Keep case"
+          confirmLabel="Remove case"
+          destructive
+          onCancel={() => setDeleteCaseTarget(null)}
+          onConfirm={confirmDeleteCase}
+        />
       )}
     </div>
   );
