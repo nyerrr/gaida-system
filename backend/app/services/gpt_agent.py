@@ -17,7 +17,11 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL_BASE = "ft:gpt-3.5-turbo-0125:personal::DqH2I32e"
+# The previous value was a fine-tune of `gpt-3.5-turbo-0125`, which OpenAI shut
+# down on 2026-10-23. Calls to it now return 404 model_not_found, so every reply
+# silently degraded to the canned fallback. Keep this configurable so the next
+# retirement is an env change, not a code change.
+OPENAI_MODEL_BASE = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 MAX_HISTORY_MESSAGES = 4
 
 # Re-balanced against the response flows below.

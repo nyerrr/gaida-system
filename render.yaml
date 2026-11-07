@@ -9,6 +9,11 @@ services:
         value: production
       - key: OPENAI_API_KEY
         sync: false
+      # Managed in the Render dashboard, not here: a fine-tuned model ID is
+      # account-specific and a blueprint `value` would overwrite it on every
+      # sync. When unset, the code falls back to gpt-4.1-mini.
+      - key: OPENAI_MODEL
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY

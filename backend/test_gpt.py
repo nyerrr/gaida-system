@@ -23,7 +23,7 @@ def main() -> None:
     if not key:
         return
 
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
     print("Model:", model)
 
     client = OpenAI(api_key=key)

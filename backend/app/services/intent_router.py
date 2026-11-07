@@ -3,9 +3,13 @@ import logging
 import re
 from app.services.session_manager import get_session, start_session, record_interaction
 from app.services.virtual_agent import detect_intent_and_level, _build_result
-from app.services.gpt_agent import generate_response_with_gpt, stream_gpt_response
+from app.services.gpt_agent import (
+    ensure_crisis_resources,
+    generate_response_with_gpt,
+    stream_gpt_response,
+)
 from app.services.loss_detector import CAP_PLAIN as CAP_LOSS_PLAIN
-from app.services.loss_detector import detect_loss, describe_disclosure, describe_disclosure
+from app.services.loss_detector import detect_loss, describe_disclosure
 from app.services.text_segmenter import analyze_text_segments
 from app.api.counselor import process_alert
 
@@ -699,7 +703,13 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         method = "gpt"
     else:
         logger.warning("GPT unavailable, using safe fallback response")
-        response_text = "I'm here with you. Can you tell me more about how you're feeling?"
+        # The fallback still has to carry hotlines. Crisis resources are
+        # normally injected into the GPT prompt, so a model outage would
+        # otherwise strip them from a crisis reply.
+        response_text = ensure_crisis_resources(
+            "I'm here with you. Can you tell me more about how you're feeling?",
+            turn["crisis_resources"],
+        )
         method = "fallback"
 
     escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
@@ -768,7 +778,13 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
 
     if not got_tokens:
         logger.warning("GPT stream unavailable, using safe fallback response")
-        response_text = "I'm here with you. Can you tell me more about how you're feeling?"
+        # Crisis resources live in the GPT prompt, so this fallback must add
+        # them back — otherwise a model outage removes the hotlines from a
+        # crisis reply.
+        response_text = ensure_crisis_resources(
+            "I'm here with you. Can you tell me more about how you're feeling?",
+            turn["crisis_resources"],
+        )
         yield {"type": "delta", "text": response_text}
 
     method = "gpt" if got_tokens else "fallback"
