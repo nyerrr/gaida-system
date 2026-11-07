@@ -332,7 +332,7 @@ function Card({ children, className = '', style = {} }) {
 
 function EmptyState({ icon, title, sub }) {
   return (
-    <div className="text-center py-20" style={{ color: P.textMuted }}>
+    <div className="counselor-empty-state" style={{ color: P.textMuted }}>
       {typeof icon === 'string' ? (
         <p className="text-4xl mb-3">{icon}</p>
       ) : (
@@ -493,8 +493,8 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError, onNavigate
   return (
     <div className="pb-8 lg:pb-0">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Counselor Dashboard</h1>
-        <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>University of the East - Guidance System Overview</p>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: P.textPrimary }}>Counselor dashboard</h1>
+        <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>A clear view of what matters. A thoughtful next step.</p>
       </div>
       {pending > 0 && (
         <div className="banner" role="status">
@@ -686,6 +686,70 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError, onNavigate
               })}
             </div>
           )}
+        </Card>
+      </div>
+      <div className="dashboard-grid-12 mb-5">
+        <Card className="p-5">
+          <div className="flex items-start gap-3">
+            <div
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
+              style={{ background: P.accentSoft, color: P.accent }}
+            >
+              <NavIcon id="resolved" size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>
+                A thoughtful next step
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: P.textSecondary }}>
+                Automated signals support professional judgment; they do not confirm a
+                student&apos;s safety or provide a diagnosis.
+              </p>
+            </div>
+          </div>
+          <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              'Review new signals and assess urgency.',
+              'Acknowledge the alert and follow campus protocol.',
+              'Document the action and next step before resolving.',
+            ].map((step, index) => (
+              <li key={step} className="flex items-start gap-2 text-xs leading-relaxed" style={{ color: P.textSecondary }}>
+                <span
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                  style={{ background: P.accentSoft, color: P.accent }}
+                >
+                  {index + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-start gap-3">
+            <div
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
+              style={{ background: P.greenSoft, color: P.green }}
+            >
+              <NavIcon id="privacy" size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>
+                Privacy reminder
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: P.textSecondary }}>
+                Keep notes factual and limited to actions taken and follow-up needs.
+                Avoid passwords, account numbers, and unnecessary identifying details.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn ghost mt-5 w-full"
+            onClick={() => onNavigate('resolved')}
+          >
+            View case records
+          </button>
         </Card>
       </div>
     </div>
@@ -929,7 +993,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
   const resolved = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Resolved'));
 
   return (
-    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
+    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page counselor-alerts-page" aria-busy={alertsLoading} style={pull.style}>
       {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
       {sessions?.some((session) => session.severity === 'Crisis') && (
         <button
@@ -945,6 +1009,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
         <div>
           <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Alerts</h1>
           <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Moderate, High and Crisis sessions requiring attention</p>
+          <p className="mt-1 text-xs" style={{ color: P.textMuted }}>Alerts update automatically while this workspace is open.</p>
         </div>
 
         {/* Search & Filter Bar */}
@@ -985,11 +1050,11 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
           </select>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-xs" style={{ color: P.textSecondary }} aria-label="Alert color legend">
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.red }} />Crisis</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.high }} />High</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: P.amber }} />Moderate</span>
-        <span style={{ color: P.textMuted }}>Listed highest risk first</span>
+      <div className="alert-legend mb-4" aria-label="Alert color legend">
+        <span className="flex items-center gap-1.5"><span className="alert-legend-dot" style={{ background: P.red }} />Crisis <b>{visibleAlerts.filter((a) => a.severity === 'Crisis').length}</b></span>
+        <span className="flex items-center gap-1.5"><span className="alert-legend-dot" style={{ background: P.high }} />High <b>{visibleAlerts.filter((a) => a.severity === 'High').length}</b></span>
+        <span className="flex items-center gap-1.5"><span className="alert-legend-dot" style={{ background: P.amber }} />Moderate <b>{visibleAlerts.filter((a) => a.severity === 'Moderate').length}</b></span>
+        <span className="alert-legend-note">Highest risk appears first</span>
       </div>
       {showSwipeHint && alerts.length > 0 && (
         <button
@@ -1046,7 +1111,16 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
               {resolved.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
             </div>
           )}
-          {visibleAlerts.length === 0 && <EmptyState icon="✓" title="No alerts yet" sub="Moderate, High and Crisis sessions will appear here" />}
+          {visibleAlerts.length === 0 && (
+            <div className="alert-empty-state">
+              <div className="alert-empty-icon" aria-hidden="true"><NavIcon id="resolved" size={24} /></div>
+              <h2>No alerts yet</h2>
+              <p>Moderate, High and Crisis sessions will appear here when they need attention.</p>
+              <button type="button" className="btn ghost" onClick={onRetryAlerts}>
+                Refresh alerts
+              </button>
+            </div>
+          )}
           {visibleAlerts.length > 0 && filtered.length === 0 && (
             <EmptyState icon="🔍" title="No matching alerts" sub="Try changing your search or filter criteria" />
           )}
@@ -1066,6 +1140,9 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
                 onClick={() => { setSeverityFilter(value); setFilterOpen(false); }}
               >
                 {value === 'all' ? 'All severities' : value[0].toUpperCase() + value.slice(1)}
+                <span className="filter-count">
+                  {value === 'all' ? visibleAlerts.length : visibleAlerts.filter((a) => a.severity?.toLowerCase() === value).length}
+                </span>
                 <span>{severityFilter === value ? '✓' : '›'}</span>
               </button>
             ))}
@@ -1085,7 +1162,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
 function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMarkChecked, onRefresh }) {
   const pull = usePullToRefresh(onRefresh);
   return (
-    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" aria-busy={welfareLoading} style={pull.style}>
+    <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page counselor-welfare-page" aria-busy={welfareLoading} style={pull.style}>
       {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Welfare Checks</h1>
@@ -1131,10 +1208,11 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
           );
         })
       ) : !welfareLoading && !welfareError ? (
-        <div className="text-center py-20" style={{ color: P.textMuted }}>
+        <div className="counselor-empty-state" style={{ color: P.textMuted }}>
           <div className="mb-3 flex justify-center"><NavIcon id="hotline" size={40} /></div>
           <p className="text-sm font-semibold" style={{ color: P.textSecondary }}>No welfare checks needed</p>
-          <p className="text-xs mt-1">Silent High/Crisis sessions will appear here</p>
+          <p className="text-xs mt-1">Silent High/Crisis sessions will appear here.</p>
+          <button type="button" className="btn ghost mt-4" onClick={onRefresh}>Refresh checks</button>
         </div>
       ) : null}
     </div>
@@ -2165,6 +2243,13 @@ function ReportsPage({ connection, lastUpdated }) {
   const [reportsError, setReportsError] = useState('');
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportPeriod, setReportPeriod] = useState('7d');
+  const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
+  const periodOptions = [
+    ['7d', 'Last 7 days'],
+    ['30d', 'Last 30 days'],
+    ['term', 'This term'],
+    ['custom', 'Custom range'],
+  ];
   const reportsTimerRef = useRef(null);
 
   const loadReports = useCallback(() => {
@@ -2257,14 +2342,25 @@ function ReportsPage({ connection, lastUpdated }) {
           id="report-period"
           value={reportPeriod}
           onChange={(event) => setReportPeriod(event.target.value)}
-          className="min-h-[44px] rounded-lg border px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+          className="report-period-native hidden min-h-[44px] rounded-lg border px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] sm:block"
           style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
         >
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-          <option value="term">This term</option>
-          <option value="custom">Custom range</option>
+          {periodOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
+        <div className="report-period-mobile relative sm:hidden">
+          <button type="button" className="mobile-select-button" onClick={() => setPeriodMenuOpen((open) => !open)} aria-expanded={periodMenuOpen} aria-haspopup="listbox">
+            {periodOptions.find(([value]) => value === reportPeriod)?.[1]} <span aria-hidden="true">⌄</span>
+          </button>
+          {periodMenuOpen && (
+            <div className="mobile-select-menu" role="listbox" aria-label="Reporting period">
+              {periodOptions.map(([value, label]) => (
+                <button type="button" role="option" aria-selected={reportPeriod === value} className={reportPeriod === value ? 'selected' : ''} key={value} onClick={() => { setReportPeriod(value); setPeriodMenuOpen(false); }}>
+                  {label}<span>{reportPeriod === value ? '✓' : ''}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-12 gap-5">
       <Card className="col-span-12 p-5 lg:col-span-6">
@@ -2815,7 +2911,7 @@ export default function CounselorDashboard() {
         className={`
           side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-50 flex flex-col shadow-lg transition-all duration-300
           ${mobileNavOpen ? '' : 'lg:z-30'}
-          w-[84vw] max-w-[320px] ${expanded ? 'lg:w-56' : 'lg:w-20'}
+          w-[84vw] max-w-[320px] ${expanded ? 'lg:w-64' : 'lg:w-20'}
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
         `}
         style={{ background: 'var(--side)' }}
@@ -3115,8 +3211,12 @@ export default function CounselorDashboard() {
         </div>
       </aside>
 
+      <a className="counselor-skip-link" href="#counselor-main">
+        Skip to main content
+      </a>
+
       {/* Main content wrapper */}
-      <div className={`flex-1 flex flex-col min-w-0 w-full overflow-hidden transition-[margin] duration-300 ${expanded ? 'lg:ml-56' : 'lg:ml-16'}`}>
+      <div className={`flex-1 flex flex-col min-w-0 w-full overflow-hidden transition-[margin] duration-300 ${expanded ? 'lg:ml-64' : 'lg:ml-16'}`}>
         {/* Mobile top bar */}
         <div
           className="dashboard-topbar flex lg:hidden items-center justify-between px-3.5 h-14 flex-shrink-0 z-10"
@@ -3147,7 +3247,7 @@ export default function CounselorDashboard() {
             <span className={`badge ${connectionStatus === 'live' ? '' : connectionStatus === 'offline' ? 'risk' : 'amb'}`}>
               <i aria-hidden="true" />{connection.label}
             </span>
-            {lastUpdated && <span className="mut">Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+            {lastUpdated && <span className="counselor-mobile-updated">Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
           </div>
         </div>
 
@@ -3178,7 +3278,7 @@ export default function CounselorDashboard() {
         </div>
 
         {/* Scrollable page content - padded at bottom on mobile for fixed bottom nav */}
-        <main ref={mainRef} className="flex-1 overflow-y-auto pb-32 lg:pb-6 no-scrollbar">
+        <main ref={mainRef} id="counselor-main" tabIndex="-1" className="flex-1 overflow-y-auto pb-32 lg:pb-6 no-scrollbar">
           <div className="w-full max-w-[1240px] mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} onNavigate={setActivePage} onAcknowledge={handleAcknowledge} onViewSession={setChatSessionId} />}
             {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} />}
@@ -3248,6 +3348,8 @@ function ResolvedCasesPage() {
   const [casesError, setCasesError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('all');
+  const [outcomeMenuOpen, setOutcomeMenuOpen] = useState(false);
+  const [casesRequestVersion, setCasesRequestVersion] = useState(0);
 
   const handleDelete = async (sessionId, e) => {
     e.stopPropagation();
@@ -3293,6 +3395,8 @@ function ResolvedCasesPage() {
   };
 
   useEffect(() => {
+    setLoading(true);
+    setCasesError('');
     apiFetch(`${BACKEND}/api/counselor/sessions/resolved`)
       .then(r => r.json())
       .then(data => {
@@ -3308,7 +3412,7 @@ function ResolvedCasesPage() {
         setCasesError('Unable to load resolved cases right now. Please try again later.');
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [casesRequestVersion]);
 
   const filteredCases = cases.filter(c => {
     const q = searchQuery.toLowerCase().trim();
@@ -3350,7 +3454,7 @@ function ResolvedCasesPage() {
             aria-label="Filter cases by outcome"
             value={outcomeFilter}
             onChange={(e) => setOutcomeFilter(e.target.value)}
-            className="px-2.5 py-1.5 text-xs rounded-lg border focus:outline-none"
+            className="resolved-outcome-native hidden px-2.5 py-1.5 text-xs rounded-lg border focus:outline-none sm:block"
             style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
           >
             <option value="all">All Outcomes</option>
@@ -3360,15 +3464,30 @@ function ResolvedCasesPage() {
             <option value="false_alarm">False alarm</option>
             <option value="ongoing">Ongoing</option>
           </select>
+          <div className="resolved-outcome-mobile relative sm:hidden">
+            <button type="button" className="mobile-select-button" onClick={() => setOutcomeMenuOpen((open) => !open)} aria-expanded={outcomeMenuOpen} aria-haspopup="listbox">
+              {outcomeFilter === 'all' ? 'All Outcomes' : OUTCOME_LABELS[outcomeFilter]} <span aria-hidden="true">⌄</span>
+            </button>
+            {outcomeMenuOpen && (
+              <div className="mobile-select-menu" role="listbox" aria-label="Filter cases by outcome">
+                {[['all', 'All Outcomes'], ...Object.entries(OUTCOME_LABELS)].map(([value, label]) => (
+                  <button type="button" role="option" aria-selected={outcomeFilter === value} className={outcomeFilter === value ? 'selected' : ''} key={value} onClick={() => { setOutcomeFilter(value); setOutcomeMenuOpen(false); }}>
+                    {label}<span>{outcomeFilter === value ? '✓' : ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {loading ? (
         <p className="text-xs text-center py-20" style={{ color: P.textMuted }}>Loading...</p>
       ) : casesError ? (
-        <div className="text-center py-20" style={{ color: P.textSecondary }}>
+        <div className="counselor-error-state" style={{ color: P.textSecondary }}>
           <p className="text-sm font-medium">Could not load resolved cases.</p>
           <p className="text-xs mt-1 text-red-500">Please try again later.</p>
+          <button type="button" className="btn ghost mt-4" onClick={() => setCasesRequestVersion((version) => version + 1)}>Retry</button>
         </div>
       ) : cases.length === 0 ? (
         <EmptyState icon="✓" title="No resolved cases yet" sub="Sessions marked as resolved will appear here" />

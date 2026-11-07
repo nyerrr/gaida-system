@@ -154,7 +154,7 @@ export default function CounselorBottomNav({
           />
 
           <div
-            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl shadow-2xl p-4 transition-transform lg:hidden"
+            className="counselor-more-sheet fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl shadow-2xl p-4 transition-transform lg:hidden"
             style={{
               background: P.surface,
               borderTop: `1px solid ${P.border}`,
@@ -162,14 +162,16 @@ export default function CounselorBottomNav({
             }}
             role="dialog"
             aria-label="Additional Counselor Navigation"
+            aria-modal="true"
           >
             {/* Sheet Handle */}
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-3" />
 
             <div className="flex items-center justify-between pb-3 mb-3 border-b" style={{ borderColor: P.border }}>
-              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: P.textSecondary }}>
-                Additional Workspace Views
-              </span>
+              <div>
+                <p className="counselor-sheet-eyebrow">Workspace views</p>
+                <h2 className="counselor-sheet-title">Additional workspace views</h2>
+              </div>
               <button
                 onClick={() => setMoreMenuOpen(false)}
                 className="flex h-11 w-11 items-center justify-center rounded-lg text-base text-gray-500 hover:bg-gray-100 hover:text-gray-800"
@@ -210,8 +212,13 @@ export default function CounselorBottomNav({
                         {item.sub}
                       </p>
                     </div>
+                    {item.id === 'welfare' && welfareCount > 0 && (
+                      <span className="counselor-sheet-count" aria-label={`${welfareCount} welfare checks`}>
+                        {welfareCount}
+                      </span>
+                    )}
                     {active && (
-                      <span className="text-xs font-bold" style={{ color: P.accentDark }}>
+                      <span className="counselor-sheet-selected" aria-label="Current view">
                         ✓
                       </span>
                     )}
@@ -244,14 +251,6 @@ export default function CounselorBottomNav({
               aria-current={active ? 'page' : undefined}
             className={`flex-1 flex flex-col items-center justify-center py-2 px-1 relative transition-transform active:scale-95 touch-manipulation min-h-[54px] ${active ? 'on' : ''}`}
             >
-              {/* Active top indicator line */}
-              {active && (
-                <span
-                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-b-full"
-                  style={{ background: P.accent }}
-                />
-              )}
-
               <span className="relative flex items-center justify-center">
                 <span style={{ color: active ? 'var(--brand)' : 'var(--mut)' }}>
                   {item.icon}
@@ -297,6 +296,14 @@ export default function CounselorBottomNav({
                 </svg>
               )}
             </span>
+            {welfareCount > 0 && (
+              <span
+                className="cnt absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 text-white flex items-center justify-center font-bold text-[9px] shadow-sm"
+                style={{ background: P.red }}
+              >
+                {welfareCount}
+              </span>
+            )}
           </span>
 
           <span
