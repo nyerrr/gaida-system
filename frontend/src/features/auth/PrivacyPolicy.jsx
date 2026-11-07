@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 /**
  * Public Privacy & Consent Information page.
@@ -11,12 +11,14 @@ import { useNavigate } from 'react-router-dom';
  */
 export default function PrivacyPolicy() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const openedFromCounselor = location.state?.from === 'counselor';
 
   const handleBack = () => {
     if (window.history.length > 1) {
       navigate(-1);
     } else {
-      navigate('/student-login');
+      navigate(openedFromCounselor ? '/counselor-dashboard' : '/');
     }
   };
 

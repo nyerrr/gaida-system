@@ -32,6 +32,7 @@ export default function CounselorBottomNav({
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const isMoreActive =
+    activePage === 'welfare' ||
     activePage === 'detection' ||
     activePage === 'reports' ||
     activePage === 'resolved';
@@ -75,20 +76,19 @@ export default function CounselorBottomNav({
       badge: sessionsCount > 0 ? sessionsCount : null,
       badgeColor: P.accent,
     },
+  ];
+
+  const SECONDARY_ITEMS = [
     {
       id: 'welfare',
-      label: 'Welfare',
+      label: 'Welfare Checks',
+      sub: welfareCount > 0 ? `${welfareCount} checks need attention` : 'Follow-up checks for students',
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 4c0 8 6 14 14 14l1-4-5-2-2 2c-2.5-1.3-4.7-3.5-6-6l2-2-2-5-4 1z" />
         </svg>
       ),
-      badge: welfareCount > 0 ? welfareCount : null,
-      badgeColor: '#D97706',
     },
-  ];
-
-  const SECONDARY_ITEMS = [
     {
       id: 'detection',
       label: 'Anxiety Detection',
@@ -101,7 +101,7 @@ export default function CounselorBottomNav({
     },
     {
       id: 'reports',
-      label: 'Reports & Analytics',
+      label: 'Reports',
       sub: 'Monthly anxiety trends & severity breakdowns',
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -227,10 +227,10 @@ export default function CounselorBottomNav({
       {/* Fixed Bottom Bar */}
       <nav
         aria-label="Counselor mobile navigation"
-        className="fixed bottom-0 left-0 right-0 z-30 lg:hidden flex items-center justify-around shadow-lg"
+        className="tabbar fixed bottom-0 left-0 right-0 z-30 lg:hidden flex items-center justify-around shadow-lg"
         style={{
-          background: P.navy,
-          borderTop: `1px solid ${P.navyLight}`,
+          background: 'var(--card)',
+          borderTop: '1px solid var(--line)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           minHeight: '60px',
         }}
@@ -242,7 +242,7 @@ export default function CounselorBottomNav({
               key={item.id}
               onClick={() => tap(() => handleSelectPrimary(item.id))}
               aria-current={active ? 'page' : undefined}
-              className="flex-1 flex flex-col items-center justify-center py-2 px-1 relative transition-transform active:scale-95 touch-manipulation min-h-[54px]"
+            className={`flex-1 flex flex-col items-center justify-center py-2 px-1 relative transition-transform active:scale-95 touch-manipulation min-h-[54px] ${active ? 'on' : ''}`}
             >
               {/* Active top indicator line */}
               {active && (
@@ -253,13 +253,13 @@ export default function CounselorBottomNav({
               )}
 
               <span className="relative flex items-center justify-center">
-                <span style={{ color: active ? '#FFFFFF' : P.textMuted }}>
+                <span style={{ color: active ? 'var(--brand)' : 'var(--mut)' }}>
                   {item.icon}
                 </span>
 
                 {item.badge !== null && (
                   <span
-                    className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-white flex items-center justify-center font-bold text-[9px] shadow-sm"
+                    className="cnt absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 text-white flex items-center justify-center font-bold text-[9px] shadow-sm"
                     style={{ background: item.badgeColor || P.red }}
                   >
                     {item.badge}
@@ -271,7 +271,7 @@ export default function CounselorBottomNav({
                 className={`text-[10px] mt-1 tracking-tight truncate max-w-[64px] ${
                   active ? 'font-bold text-white' : 'font-medium'
                 }`}
-                style={{ color: active ? '#FFFFFF' : P.textMuted }}
+                style={{ color: active ? 'var(--brand)' : 'var(--mut)' }}
               >
                 {item.label}
               </span>
@@ -285,10 +285,10 @@ export default function CounselorBottomNav({
           aria-expanded={moreMenuOpen}
           aria-current={isMoreActive ? 'page' : undefined}
           aria-label={activeSecondary ? `${activeSecondary.label} — open navigation menu` : 'More navigation options'}
-          className="flex-1 flex flex-col items-center justify-center py-2 px-1 relative transition-transform active:scale-95 touch-manipulation min-h-[54px]"
+          className={`flex-1 flex flex-col items-center justify-center py-2 px-1 relative transition-transform active:scale-95 touch-manipulation min-h-[54px] ${isMoreActive ? 'on' : ''}`}
         >
           <span className="relative flex items-center justify-center">
-            <span style={{ color: isMoreActive ? '#FFFFFF' : P.textMuted }}>
+            <span style={{ color: isMoreActive ? 'var(--brand)' : 'var(--mut)' }}>
               {activeSecondary ? activeSecondary.icon : (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="1.5" />
@@ -303,9 +303,10 @@ export default function CounselorBottomNav({
             className={`text-[10px] mt-1 tracking-tight truncate max-w-[64px] ${
               isMoreActive ? 'font-bold text-white' : 'font-medium'
             }`}
-            style={{ color: isMoreActive ? '#FFFFFF' : P.textMuted }}
+            style={{ color: isMoreActive ? 'var(--brand)' : 'var(--mut)' }}
           >
-            {activePage === 'detection' ? 'Detection' :
+            {activePage === 'welfare' ? 'Welfare' :
+             activePage === 'detection' ? 'Detection' :
              activePage === 'reports' ? 'Reports' :
              activePage === 'resolved' ? 'Resolved' : 'More'}
           </span>

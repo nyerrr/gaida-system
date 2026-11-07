@@ -1390,7 +1390,7 @@ def get_analytics_overview(user: dict = Depends(require_role("counselor"))):
         from datetime import timedelta
 
         # Anxiety distribution + monthly trends from interactions
-        interactions = supabase.table("interactions").select("severity, timestamp").execute()
+        interactions = supabase.table("interactions").select("severity, timestamp, session_id").execute()
         severity_counts = {"Low": 0, "Moderate": 0, "High": 0, "Normal": 0, "Crisis": 0}
         for row in interactions.data:
             s = row.get("severity", "Normal") or "Normal"
@@ -1430,21 +1430,65 @@ def get_analytics_overview(user: dict = Depends(require_role("counselor"))):
             if key in buckets:
                 buckets[key][s.lower()] += 1
 
-        # Sessions this week
-        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
-        sessions = (
-            supabase.table("sessions").select("created_at").gte("created_at", week_ago).execute()
-        )
+        # Compare activity in the current seven-day window with the prior one.
+        # These are activity deltas, not fabricated snapshots of current
+        # pending/active state, which the database does not retain historically.
+        week_ago = now - timedelta(days=7)
+        two_weeks_ago = now - timedelta(days=14)
 
+        def _parse_utc(value):
+            if not value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                if parsed.tzinfo is not None:
+                    parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+                return parsed
+            except (TypeError, ValueError):
+                return None
+
+        session_rows = (
+            supabase.table("sessions")
+            .select("created_at")
+            .gte("created_at", two_weeks_ago.isoformat())
+            .execute()
+        ).data
+        sessions_this_week = 0
+        sessions_last_week = 0
         days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         week_data = {d: 0 for d in days}
-        for row in sessions.data:
-            if row.get("created_at"):
-                day = datetime.fromisoformat(row["created_at"]).strftime("%a")
-                if day in week_data:
-                    week_data[day] += 1
+        for row in session_rows:
+            created_at = _parse_utc(row.get("created_at"))
+            if created_at is None or created_at > now or created_at < two_weeks_ago:
+                continue
+            if created_at >= week_ago:
+                sessions_this_week += 1
+                week_data[created_at.strftime("%a")] += 1
+            else:
+                sessions_last_week += 1
+
+        at_risk_sessions_this_week = set()
+        at_risk_sessions_last_week = set()
+        for row in interactions.data:
+            if row.get("severity") not in ("Moderate", "High", "Crisis") or not row.get("session_id"):
+                continue
+            timestamp = _parse_utc(row.get("timestamp"))
+            if timestamp is None or timestamp > now or timestamp < two_weeks_ago:
+                continue
+            target = at_risk_sessions_this_week if timestamp >= week_ago else at_risk_sessions_last_week
+            target.add(row["session_id"])
 
         alerts = supabase.table("counselor_alerts").select("created_at, severity").execute()
+        alerts_this_week = 0
+        alerts_last_week = 0
+        for row in alerts.data:
+            created_at = _parse_utc(row.get("created_at"))
+            if created_at is None or created_at > now or created_at < two_weeks_ago:
+                continue
+            if created_at >= week_ago:
+                alerts_this_week += 1
+            else:
+                alerts_last_week += 1
 
         return {
             "anxiety_distribution": [
@@ -1454,6 +1498,11 @@ def get_analytics_overview(user: dict = Depends(require_role("counselor"))):
                 {k: m[k] for k in ("month", "normal", "low", "moderate", "high", "crisis")} for m in months
             ],
             "sessions_this_week": [{"day": d, "count": week_data[d]} for d in days],
+            "week_over_week": {
+                "sessions_started": sessions_this_week - sessions_last_week,
+                "alerts_created": alerts_this_week - alerts_last_week,
+                "at_risk_sessions": len(at_risk_sessions_this_week) - len(at_risk_sessions_last_week),
+            },
             "total_sessions": len(supabase.table("sessions").select("id").execute().data),
             "total_alerts": len(alerts.data),
         }

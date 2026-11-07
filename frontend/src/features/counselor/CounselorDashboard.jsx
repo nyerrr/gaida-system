@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback, useId } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine
@@ -16,30 +16,30 @@ import ConfirmationDialog from '../../components/ConfirmationDialog';
 // is reserved for genuine crisis-level and overdue/unaddressed states, not
 // used as a general UI color.
 const P = {
-  bg: '#F7FAF9',
-  surface: '#FFFFFF',
-  panel: '#EEF4F6',
-  border: '#DCE7EA',
-  navy: '#22303A',
-  navyLight: '#33454F',
-  accent: '#5E8FBD',
-  accentDark: '#4A7699',
-  accentSoft: '#DCEAF3',
-  green: '#6BA187',
-  greenDark: '#54896D',
-  greenSoft: '#E2F0E4',
-  amber: '#C98B3D',
-  amberSoft: '#F5E9D6',
-  high: '#C25E3A',
-  highSoft: '#F6E3DC',
-  teal: '#4C8F8F',
-  tealSoft: '#DCEFEF',
-  red: '#B0472F',
-  redSoft: '#FBEDEA',
-  redBorder: '#F0D2CA',
-  textPrimary: '#2E3B44',
-  textSecondary: '#5C6F78',
-  textMuted: '#95A6AC',
+  bg: 'var(--bg)',
+  surface: 'var(--card)',
+  panel: 'var(--bg)',
+  border: 'var(--line)',
+  navy: 'var(--side)',
+  navyLight: 'var(--side)',
+  accent: 'var(--brand)',
+  accentDark: 'var(--brand)',
+  accentSoft: 'color-mix(in srgb, var(--brand) 16%, var(--card))',
+  green: 'var(--grn)',
+  greenDark: 'var(--grn)',
+  greenSoft: 'var(--grnbg)',
+  amber: 'var(--amb)',
+  amberSoft: 'var(--ambbg)',
+  high: 'var(--red)',
+  highSoft: 'var(--redbg)',
+  teal: 'var(--brand)',
+  tealSoft: 'color-mix(in srgb, var(--brand) 16%, var(--card))',
+  red: 'var(--red)',
+  redSoft: 'var(--redbg)',
+  redBorder: 'var(--red)',
+  textPrimary: 'var(--ink)',
+  textSecondary: 'var(--mut)',
+  textMuted: 'var(--mut)',
 };
 
 // ── Quick response templates ──────────────────────────────────────────────────
@@ -179,6 +179,34 @@ const NAV = [
   { id: 'resolved',  label: 'Resolved Cases' },
 ];
 
+const NAV_GROUPS = [
+  { label: 'Monitor', ids: ['overview', 'alerts', 'sessions', 'detection'] },
+  { label: 'Follow-up', ids: ['welfare', 'resolved', 'reports'] },
+];
+
+const closeSidebarTooltip = (event) => {
+  if (event.key === 'Escape') event.currentTarget.blur();
+};
+
+const getAlertStatusLabel = (alert) => {
+  const status = String(alert?.status || '').toLowerCase();
+  if (['reviewed', 'resolved', 'closed', 'done'].includes(status)) return 'Resolved';
+  if (alert?.acknowledged || status === 'escalated' || status === 'acknowledged') return 'Acknowledged';
+  return 'New';
+};
+
+const isPendingAlert = (alert) => getAlertStatusLabel(alert) !== 'Resolved';
+
+function FocusTooltip({ children, label, className = '' }) {
+  const tooltipId = useId();
+  return (
+    <span className={`focus-tooltip ${className}`} tabIndex={0} aria-describedby={tooltipId}>
+      {children}
+      <span id={tooltipId} role="tooltip">{label}</span>
+    </span>
+  );
+}
+
 // One shared type scale for every sidebar row (nav + utilities).
 const ROW_TEXT = 'text-[13px] font-medium';
 
@@ -209,6 +237,8 @@ function NavIcon({ id, size = 18 }) {
       return <svg {...common}><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M18.36 5.64a9 9 0 0 1 0 12.73" /><path d="M5.59 15H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h1.59l4.7-4.71C10.92 3.66 12 4.11 12 5v14c0 .89-1.08 1.34-1.71.71L5.59 15z" /></svg>;
     case 'privacy':
       return <svg {...common}><path d="M9 12l2 2 4-4" /><path d="M12 2.94a11.96 11.96 0 0 1-8.62 3.04A12.02 12.02 0 0 0 3 9c0 5.59 3.82 10.29 9 11.62C17.18 19.29 21 14.59 21 9c0-1.04-.13-2.05-.38-3.02A11.96 11.96 0 0 1 12 2.94z" /></svg>;
+    case 'theme':
+      return <svg {...common}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>;
     case 'collapse':
       return <svg {...common}><polyline points="15 18 9 12 15 6" /></svg>;
     case 'logout':
@@ -234,11 +264,65 @@ function RowTooltip({ label }) {
   );
 }
 
+function HotlinesModal({ onClose, returnFocusRef }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  const returnFocusRefHolder = useRef(returnFocusRef);
+
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { returnFocusRefHolder.current = returnFocusRef; }, [returnFocusRef]);
+
+  useEffect(() => {
+    const previousActiveElement = returnFocusRefHolder.current?.current || document.activeElement;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = [...dialogRef.current.querySelectorAll('a[href], button:not([disabled])')];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      previousActiveElement?.focus?.();
+    };
+  }, []);
+
+  return (
+    <div className="modal open" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section ref={dialogRef} className="dlg" role="dialog" aria-modal="true" aria-labelledby="counselor-hotline-title">
+        <button ref={closeButtonRef} className="x" type="button" aria-label="Close crisis hotlines" onClick={onClose}>&times;</button>
+        <h2 id="counselor-hotline-title">Crisis hotlines</h2>
+        <p className="safety">Call a support line for immediate help.</p>
+        <div className="mt-4 flex flex-col gap-3">
+          <a className="btn" href="tel:1553">NCMH 1553</a>
+          <a className="btn ghost" href="tel:+63288044673">Hopeline (02) 8804-4673</a>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ── Small shared UI pieces ───────────────────────────────────────────────────
 function Card({ children, className = '', style = {} }) {
   return (
     <div
-      className={`rounded-2xl shadow-sm ${className}`}
+      className={`box rounded-2xl shadow-sm ${className}`}
       style={{ background: P.surface, border: `1px solid ${P.border}`, ...style }}
     >
       {children}
@@ -301,42 +385,84 @@ function usePullToRefresh(onRefresh) {
 
 // A neutral, non-error placeholder for chart cards. The page-level banner is
 // the only place that explains a failed request.
-function ChartEmptyState({ label = 'No data available' }) {
+function ChartEmptyState({ label = 'No data available', guidance }) {
   return (
-    <p className="text-xs text-center py-8" style={{ color: P.textMuted }}>
+    <p className="empty" style={{ color: P.textMuted }}>
       {label}
+      {guidance && <span className="mt-1 block text-xs">{guidance}</span>}
     </p>
   );
 }
 
+function ChartSkeleton() {
+  return <div className="chart-skeleton" role="status" aria-label="Loading chart data"><span /><span /><span /><span /><span /></div>;
+}
+
+function ChartErrorState({ onRetry, label = 'Trend data unavailable' }) {
+  return (
+    <div className="empty" role="alert">
+      <p>{label}</p>
+      <button type="button" className="btn ghost mt-3" onClick={onRetry}>Try again</button>
+    </div>
+  );
+}
+
 // ── Overview Page ─────────────────────────────────────────────────────────────
-function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
+function OverviewPage({ alerts, sessions, alertsLoading, alertsError, onNavigate, onAcknowledge, onViewSession }) {
   const [analytics, setAnalytics] = useState(null);
   const [analyticsError, setAnalyticsError] = useState('');
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [showCrisisIdentity, setShowCrisisIdentity] = useState(false);
+  const analyticsTimerRef = useRef(null);
 
   const loadAnalytics = useCallback(() => {
+    clearTimeout(analyticsTimerRef.current);
+    setAnalyticsError('');
+    setAnalyticsLoading(true);
+    analyticsTimerRef.current = setTimeout(() => {
+      setAnalyticsError('Analytics took too long to load. Please try again.');
+      setAnalyticsLoading(false);
+    }, 10000);
     apiFetch(`${BACKEND}/api/counselor/analytics/overview`)
-      .then(r => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error('Unable to load analytics.');
+        return r.json();
+      })
       .then(data => {
+        clearTimeout(analyticsTimerRef.current);
+        setAnalyticsLoading(false);
         if (data && data.error) {
           console.error('Analytics overview error from backend:', data.error);
           setAnalyticsError('Unable to load analytics right now. Please try again later.');
         } else {
+          setAnalyticsError('');
           setAnalytics(data);
         }
       })
       .catch((err) => {
+        clearTimeout(analyticsTimerRef.current);
+        setAnalyticsLoading(false);
         console.error('Analytics overview fetch failed:', err);
         setAnalyticsError('Unable to load analytics right now. Please try again later.');
       });
   }, []);
 
   useEffect(() => {
-    loadAnalytics();
+    const initialRequest = setTimeout(loadAnalytics, 0);
+    return () => {
+      clearTimeout(initialRequest);
+      clearTimeout(analyticsTimerRef.current);
+    };
   }, [loadAnalytics]);
 
-  const pending = alerts.filter(a => a.status === 'pending').length;
+  const pending = alerts.filter(isPendingAlert).length;
   const highSessions = sessions.filter(s => ['Moderate', 'High', 'Crisis'].includes(s.severity)).length;
+  const weekChanges = analytics?.week_over_week || {};
+  const formatWeekChange = (key, label) => {
+    const change = weekChanges[key];
+    if (typeof change !== 'number' || !Number.isFinite(change)) return 'Last week comparison unavailable';
+    return `${label}: ${change > 0 ? '+' : ''}${change} vs last week`;
+  };
 
   const DISTRIBUTION_COLORS = {
     Low: P.green,
@@ -349,19 +475,16 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
   const distributionData = analytics?.anxiety_distribution?.map(d => ({
     ...d,
     color: DISTRIBUTION_COLORS[d.name] || P.textMuted,
-  })) || [
-    { name: 'Low', value: 0, color: P.green },
-    { name: 'Moderate', value: 0, color: P.amber },
-    { name: 'High', value: 0, color: P.high },
-    { name: 'Normal', value: 0, color: P.textMuted },
-    { name: 'Crisis', value: 0, color: P.red },
-  ];
+  })) || [];
+  const hasDistributionData = distributionData.some((entry) => Number(entry.value) > 0);
 
   const weekData = analytics?.sessions_this_week || [
     { day: 'Mon', count: 0 }, { day: 'Tue', count: 0 },
     { day: 'Wed', count: 0 }, { day: 'Thu', count: 0 }, { day: 'Fri', count: 0 },
     { day: 'Sat', count: 0 }, { day: 'Sun', count: 0 },
   ];
+  const hasWeekSessions = weekData.some((day) => Number(day.count) > 0);
+  const crisisAlert = alerts.find((alert) => isPendingAlert(alert) && alert.severity === 'Crisis');
 
   const trendData = analytics?.monthly_trends || [];
   const hasTrendData = trendData.some(m =>
@@ -373,33 +496,70 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
         <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Counselor Dashboard</h1>
         <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>University of the East - Guidance System Overview</p>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      {pending > 0 && (
+        <div className="banner" role="status">
+          <span>{pending === 1 ? '1 alert needs review. Status unknown.' : `${pending} alerts need review. Status unknown.`}</span>
+          <button type="button" className="btn ghost" onClick={() => onNavigate('alerts')}>Review alert</button>
+        </div>
+      )}
+      {crisisAlert && (
+        <section className="crisis" aria-live="polite" aria-label="Crisis alert">
+          <div>
+            <span className="tag">Crisis</span>
+            <span className={`status-tag status-${getAlertStatusLabel(crisisAlert).toLowerCase()}`}>{getAlertStatusLabel(crisisAlert)}</span>
+            <strong>Immediate review needed</strong>
+            <p className="mut">
+              Alert: <FocusTooltip label="Full session code" className="alert-code-tooltip">
+                <span className="alert-code">{crisisAlert.session_id || 'Code unavailable'}</span>
+              </FocusTooltip>
+            </p>
+            <p className="mut">A crisis alert is waiting for counselor attention.</p>
+            <p className="mut">
+              {showCrisisIdentity
+                ? (crisisAlert.student_name || crisisAlert.student_id || 'Student identity unavailable')
+                : 'Student identity is hidden'}
+            </p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button type="button" className="btn ghost" onClick={() => setShowCrisisIdentity((shown) => !shown)}>
+              {showCrisisIdentity ? 'Hide identity' : 'Show identity'}
+            </button>
+            {getAlertStatusLabel(crisisAlert) === 'New' && (
+              <button type="button" className="btn ghost" onClick={() => onAcknowledge(crisisAlert.session_id)}>Acknowledge</button>
+            )}
+            <button type="button" className="btn ghost" onClick={() => onViewSession(crisisAlert.session_id)}>View session</button>
+            <button type="button" className="btn red" onClick={() => onNavigate('alerts')}>Review alert</button>
+          </div>
+        </section>
+      )}
+      <div className="kpis">
         {[
-          { label: 'Active Sessions', value: sessions.length, sub: 'right now', color: P.accent, icon: 'sessions' },
-          { label: 'Pending Alerts', value: pending, sub: 'need attention', color: pending > 0 ? P.red : P.textMuted, icon: 'alerts' },
-          { label: 'At-Risk Sessions', value: highSessions, sub: 'Moderate and above', color: P.high, icon: 'detection' },
-          { label: 'Total Alerts', value: analytics?.total_alerts ?? alerts.length, sub: 'all time', color: P.navy, icon: 'bell' },
+          { label: 'Active Sessions', value: sessions.length, sub: 'right now', change: formatWeekChange('sessions_started', 'Sessions started'), color: P.accent, icon: 'sessions', page: 'sessions' },
+          { label: 'Pending Alerts', value: pending, sub: 'need attention', change: formatWeekChange('alerts_created', 'Alerts created'), color: pending > 0 ? P.red : P.textMuted, icon: 'alerts', page: 'alerts', risk: pending > 0 },
+          { label: 'At-Risk Sessions', value: highSessions, sub: 'Moderate and above', change: formatWeekChange('at_risk_sessions', 'At-risk sessions'), color: highSessions > 0 ? P.red : P.textMuted, icon: 'detection', page: 'detection', risk: highSessions > 0 },
+          { label: 'Total Alerts', value: analytics?.total_alerts ?? alerts.length, sub: 'all time', change: formatWeekChange('alerts_created', 'Alerts created'), color: P.navy, icon: 'bell', page: 'alerts' },
         ].map((s) => (
-          <Card key={s.label} className="p-3.5 sm:p-5 flex items-center justify-between gap-2">
+          <button key={s.label} type="button" className={`kpi flex items-center justify-between gap-2 ${s.risk ? 'risk' : ''}`} onClick={() => onNavigate(s.page)}>
             <div className="min-w-0">
-              <p className="text-xs mb-1" style={{ color: P.textSecondary }}>{s.label}</p>
-              <p className="text-2xl font-bold" style={{ color: P.textPrimary }}>{s.value}</p>
-              <p className="text-xs mt-0.5" style={{ color: P.textMuted }}>{s.sub}</p>
+              <p className="mut mb-1">{s.label}</p>
+              <b>{s.value}</b>
+              <p className="mut mt-0.5">{s.sub}</p>
+              <p className="kpi-change">{s.change}</p>
             </div>
             <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+              className="kpi-icon"
               style={{ background: s.color, color: '#FFFFFF' }}
               aria-hidden="true"
             >
               <NavIcon id={s.icon} size={20} />
             </div>
-          </Card>
+          </button>
         ))}
       </div>
       {analyticsError && (
         <div
           className="mb-5 flex flex-col items-start gap-2 rounded-xl p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
-          style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}
+          style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: P.amber }}
           role="alert"
         >
           <span>{analyticsError}</span>
@@ -413,15 +573,23 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
           </button>
         </div>
       )}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+      <div className="dashboard-grid-12 mb-5">
         <Card className="p-5">
           <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Anxiety Level Trends</h3>
           {analyticsError ? (
-            <ChartEmptyState />
+            <div className="empty">
+              <p>Trend data unavailable</p>
+              <button type="button" className="btn ghost mt-3" onClick={() => { setAnalyticsError(''); loadAnalytics(); }}>Try again</button>
+            </div>
+          ) : analyticsLoading && !analytics ? (
+            <ChartSkeleton />
           ) : !analytics ? (
-            <ChartEmptyState label="Loading trends..." />
+            <ChartEmptyState label="Trend data unavailable" />
           ) : !hasTrendData ? (
-            <ChartEmptyState label="No trend data yet — appears once students have sessions" />
+            <div className="empty">
+              <p>Trend data unavailable</p>
+              <button type="button" className="btn ghost mt-3" onClick={loadAnalytics}>Try again</button>
+            </div>
           ) : (
             <>
               <ResponsiveContainer width="100%" height={200}>
@@ -456,21 +624,23 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
         </Card>
         <Card className="p-5">
           <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Sessions This Week</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={weekData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={P.border} />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: P.textSecondary }} />
-              <YAxis tick={{ fontSize: 11, fill: P.textSecondary }} />
-              <Tooltip />
-              <Bar dataKey="count" fill={P.accent} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {analyticsError ? <ChartErrorState onRetry={loadAnalytics} /> : analyticsLoading && !analytics ? <ChartSkeleton /> : !analytics ? <ChartEmptyState label="Trend data unavailable" /> : hasWeekSessions ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={weekData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={P.border} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: P.textSecondary }} />
+                <YAxis tick={{ fontSize: 11, fill: P.textSecondary }} />
+                <Tooltip />
+                <Bar dataKey="count" fill={P.accent} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <p className="empty">No sessions this week.</p>}
         </Card>
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="dashboard-grid-12">
         <Card className="p-5">
           <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Anxiety Distribution</h3>
-          <div className="flex flex-col sm:flex-row items-center gap-4">
+          {analyticsError ? <ChartErrorState onRetry={loadAnalytics} /> : analyticsLoading && !analytics ? <ChartSkeleton /> : !analytics ? <ChartEmptyState label="Trend data unavailable" /> : hasDistributionData ? <div className="flex flex-col sm:flex-row items-center gap-4">
             <ResponsiveContainer width={160} height={160}>
               <PieChart>
                 <Pie data={distributionData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value">
@@ -487,7 +657,7 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError }) {
                 </div>
               ))}
             </div>
-          </div>
+          </div> : <p className="empty">No data</p>}
         </Card>
         <Card className="p-5">
           <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Recent Alerts</h3>
@@ -557,13 +727,11 @@ const getEscalationState = (a) => {
 // re-render doesn't remount every row and drop mid-click button presses.
 function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
   const pointerStart = useRef(null);
+  const [showIdentity, setShowIdentity] = useState(false);
   const sc  = severityColor(a.severity);
   const esc = getEscalationState(a);
-  const needsAck = a.severity === 'High' || a.severity === 'Crisis';
-  // An escalated alert is one a counselor took over — it still needs the
-  // same Acknowledge → Mark Reviewed flow, otherwise it deadlocks forever
-  // (previous code only showed the buttons for status === 'pending').
-  const actionable = a.status === 'pending' || a.status === 'escalated';
+  const statusLabel = getAlertStatusLabel(a);
+  const actionable = statusLabel !== 'Resolved';
 
   // Overdue/urgent are genuinely time-critical — this is the one place on
   // the dashboard that intentionally borrows the reserved emergency red.
@@ -578,7 +746,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     P.amber;
 
   const bgColor =
-    esc.level === 'overdue' ? '#F6DDD5' :
+    esc.level === 'overdue' ? P.redSoft :
     esc.level === 'urgent'  ? P.redSoft :
     esc.level === 'warning' ? P.amberSoft :
     a.severity === 'Crisis' ? P.redSoft :
@@ -607,7 +775,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
         pointerStart.current = null;
         if (Math.abs(deltaX) < 50 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) return;
         if (navigator.vibrate) navigator.vibrate(12);
-        if (deltaX > 0 && actionable && needsAck && !a.acknowledged) onAcknowledge(a.session_id);
+        if (deltaX > 0 && actionable && statusLabel === 'New') onAcknowledge(a.session_id);
         if (deltaX < 0) onViewChat(a.session_id);
       }}
       onPointerCancel={() => { pointerStart.current = null; }}
@@ -616,6 +784,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.text}`} style={{ background: sc.hex }}>{a.severity}</span>
+            <span className={`status-tag status-${statusLabel.toLowerCase()}`}>{statusLabel}</span>
             <span className="text-xs" style={{ color: P.textSecondary }}>{a.intent}</span>
             <span className="text-xs" style={{ color: P.textMuted }}>{formatRelative(a.timestamp)}</span>
 
@@ -650,7 +819,14 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
               </span>
             )}
           </div>
-          <p className="text-xs font-semibold mb-1" style={{ color: P.textSecondary }}>Session: {a.session_id.slice(0, 16)}...</p>
+          <p className="text-xs font-semibold mb-1" style={{ color: P.textSecondary }}>
+            Alert code: <FocusTooltip label="Full alert code" className="alert-code-tooltip">
+              <span className="alert-code">{a.session_id || 'Code unavailable'}</span>
+            </FocusTooltip>
+          </p>
+          <p className="text-xs mb-1" style={{ color: P.textSecondary }}>
+            Student: {showIdentity ? (a.student_name || a.student_id || 'Identity unavailable') : 'Identity hidden'}
+          </p>
           <p className="text-xs truncate" style={{ color: P.textSecondary }}>"{a.message}"</p>
           {a.acknowledged && (
             <p className="text-xs mt-1" style={{ color: P.greenDark }}>
@@ -658,15 +834,15 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
             </p>
           )}
         </div>
-        <div className="flex flex-col gap-2 flex-shrink-0">
+        <div className="alert-actions flex flex-col gap-2 flex-shrink-0">
           <button
             onClick={() => onViewChat(a.session_id)}
             className="text-xs px-3 py-1.5 rounded-lg font-medium text-white transition-colors duration-200"
             style={{ background: P.navy }}
           >
-            View Chat
+            View session
           </button>
-          {actionable && needsAck && !a.acknowledged && (
+          {actionable && statusLabel === 'New' && (
             <button
               onClick={() => onAcknowledge(a.session_id)}
               className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white transition-colors duration-200"
@@ -675,7 +851,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
               Acknowledge
             </button>
           )}
-          {actionable && (!needsAck || a.acknowledged) && (
+          {actionable && statusLabel === 'Acknowledged' && (
             <button
               onClick={() => onUpdateStatus(a.session_id, 'reviewed')}
               className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors duration-200"
@@ -684,6 +860,15 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
               Mark Reviewed
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setShowIdentity((shown) => !shown)}
+            aria-expanded={showIdentity}
+            className="text-xs min-h-[44px] px-3 py-1.5 rounded-lg font-medium"
+            style={{ border: `1px solid ${P.border}`, color: P.textSecondary, background: P.surface }}
+          >
+            {showIdentity ? 'Hide identity' : 'Show identity'}
+          </button>
         </div>
       </div>
 
@@ -691,7 +876,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
       {(esc.level === 'urgent' || esc.level === 'overdue') && (
         <div className="mt-3 pt-3 flex items-center gap-2" style={{ borderTop: `1px solid ${P.redBorder}` }}>
           <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: P.red }} />
-          <p className="text-xs font-medium" style={{ color: '#8C3A26' }}>
+          <p className="text-xs font-medium" style={{ color: P.red }}>
             This alert has been waiting {esc.ageMinutes} minutes without a response.
             {esc.isOffHours && ' Session occurred outside office hours.'}
           </p>
@@ -702,7 +887,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
       {esc.level === 'overdue' && (
         <div className="mt-2 pt-2 flex items-start gap-2" style={{ borderTop: `1px solid ${P.redBorder}` }}>
           <div className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5" style={{ background: P.red }} />
-          <p className="text-xs font-semibold" style={{ color: '#8C3A26' }}>
+          <p className="text-xs font-semibold" style={{ color: P.red }}>
             Past the escalation deadline — supervisor/backup has been notified by email. Acknowledge this alert immediately.
           </p>
         </div>
@@ -739,10 +924,9 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
     return matchTerm && matchSev;
   });
 
-  // Three honest states: pending (needs attention), escalated (counselor active) and reviewed/resolved.
-  const pending   = sortBySeverity(filtered.filter(a => a.status === 'pending'));
-  const escalated = sortBySeverity(filtered.filter(a => a.status === 'escalated'));
-  const resolved  = sortBySeverity(filtered.filter(a => a.status !== 'pending' && a.status !== 'escalated'));
+  const pending = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'New'));
+  const acknowledged = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Acknowledged'));
+  const resolved = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Resolved'));
 
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
@@ -824,8 +1008,8 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
         </div>
       ) : alertsError && alerts.length === 0 ? (
         <div className="p-6 rounded-2xl text-center border my-6" style={{ background: P.amberSoft, borderColor: P.amber }}>
-          <p className="text-sm font-semibold mb-1" style={{ color: '#7A5A28' }}>Unable to load alerts right now</p>
-          <p className="text-xs mb-4" style={{ color: '#7A5A28' }}>The alerts service encountered a problem. It will automatically retry, or you can retry now.</p>
+          <p className="text-sm font-semibold mb-1" style={{ color: P.amber }}>Unable to load alerts right now</p>
+          <p className="text-xs mb-4" style={{ color: P.amber }}>The alerts service encountered a problem. It will automatically retry, or you can retry now.</p>
           {onRetryAlerts && (
             <button
               onClick={onRetryAlerts}
@@ -847,13 +1031,13 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
               {pending.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
             </div>
           )}
-          {escalated.length > 0 && (
+          {acknowledged.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-2 h-2 rounded-full" style={{ background: P.accent }} />
-                <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>In Progress — Counselor Engaged ({escalated.length})</h3>
+                <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>Acknowledged ({acknowledged.length})</h3>
               </div>
-              {escalated.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
+              {acknowledged.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
             </div>
           )}
           {resolved.length > 0 && (
@@ -1092,7 +1276,7 @@ function ChatModal({ sessionId, onClose }) {
     resolved:    { dot: P.green,  badge: { bg: P.greenSoft, color: P.greenDark } },
     false_alarm: { dot: P.textMuted, badge: { bg: P.panel, color: P.textSecondary } },
     referred:    { dot: P.accent, badge: { bg: P.accentSoft, color: P.accentDark } },
-    follow_up:   { dot: P.amber,  badge: { bg: P.amberSoft, color: '#7A5A28' } },
+    follow_up:   { dot: P.amber,  badge: { bg: P.amberSoft, color: P.amber } },
     ongoing:     { dot: P.red,    badge: { bg: P.redSoft, color: P.red } },
   };
 
@@ -1976,65 +2160,123 @@ function DetectionPage() {
 }
 
 // ── Reports Page ──────────────────────────────────────────────────────────────
-function ReportsPage() {
+function ReportsPage({ connection, lastUpdated }) {
   const [reports, setReports] = useState(null);
   const [reportsError, setReportsError] = useState('');
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportPeriod, setReportPeriod] = useState('7d');
+  const reportsTimerRef = useRef(null);
 
   const loadReports = useCallback(() => {
+    clearTimeout(reportsTimerRef.current);
+    setReportsError('');
+    setReportsLoading(true);
+    reportsTimerRef.current = setTimeout(() => {
+      setReportsLoading(false);
+      setReportsError('Reports could not load. Monthly Trends and Severity Breakdown are unavailable.');
+    }, 10000);
     apiFetch(`${BACKEND}/api/counselor/analytics/reports`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Unable to load reports.');
+        return r.json();
+      })
       .then(data => {
+        clearTimeout(reportsTimerRef.current);
+        setReportsLoading(false);
         if (data && data.error) {
           console.error('Reports analytics error from backend:', data.error);
-          setReportsError('Unable to load reports right now. Please try again later.');
+          setReportsError('Reports could not load. Monthly Trends and Severity Breakdown are unavailable.');
         } else {
           setReports(data);
         }
       })
       .catch((err) => {
+        clearTimeout(reportsTimerRef.current);
+        setReportsLoading(false);
         console.error('Reports fetch error:', err);
-        setReportsError('Unable to load reports right now. Please try again later.');
+        setReportsError('Reports could not load. Monthly Trends and Severity Breakdown are unavailable.');
       });
   }, []);
 
   useEffect(() => {
-    loadReports();
+    const initialRequest = setTimeout(loadReports, 0);
+    return () => {
+      clearTimeout(initialRequest);
+      clearTimeout(reportsTimerRef.current);
+    };
   }, [loadReports]);
 
   const trendData = reports?.monthly_reports || [];
   const hasTrendData = trendData.some(m => (m.sessions || 0) + (m.alerts || 0) > 0);
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Reports & Analytics</h1>
-        <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>System performance and anxiety detection analytics</p>
+    <div className="w-full max-w-[1240px]">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="mb-2 text-xs" style={{ color: P.textMuted }}>Guidance system / Reports</p>
+          <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Reports & Analytics</h1>
+          <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>System performance and anxiety detection analytics</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`badge ${connection.label === 'Live' ? '' : connection.label === 'Offline' ? 'risk' : 'amb'}`}>
+            <i aria-hidden="true" />{connection.label}
+          </span>
+          {lastUpdated && (
+            <span className="mut">
+              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button type="button" className="btn ghost" onClick={loadReports}>
+            Refresh reports
+          </button>
+        </div>
       </div>
       {reportsError && (
         <div
           className="mb-5 flex flex-col items-start gap-2 rounded-xl p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
-          style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: '#7A5A28' }}
+          style={{ background: P.amberSoft, border: `1px solid ${P.amber}`, color: P.amber }}
           role="alert"
         >
           <span>{reportsError}</span>
           <button
             type="button"
-            onClick={() => { setReportsError(''); loadReports(); }}
+            disabled={reportsLoading}
+            onClick={loadReports}
             className="inline-flex min-h-[44px] w-full flex-shrink-0 items-center justify-center rounded-lg px-3 font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] sm:w-auto"
             style={{ background: P.navy }}
           >
-            Retry
+            {reportsLoading ? 'Retrying...' : 'Retry'}
           </button>
         </div>
       )}
-      <Card className="p-5 mb-5">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <label htmlFor="report-period" className="text-sm font-semibold" style={{ color: P.textPrimary }}>
+          Reporting period
+        </label>
+        <select
+          id="report-period"
+          value={reportPeriod}
+          onChange={(event) => setReportPeriod(event.target.value)}
+          className="min-h-[44px] rounded-lg border px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+          style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
+        >
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="term">This term</option>
+          <option value="custom">Custom range</option>
+        </select>
+      </div>
+      <div className="grid grid-cols-12 gap-5">
+      <Card className="col-span-12 p-5 lg:col-span-6">
         <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Monthly Trends</h3>
-        {reportsError ? (
-          <ChartEmptyState />
+        {reportsLoading ? (
+          <ChartSkeleton />
+        ) : reportsError ? (
+          <ChartErrorState label="Couldn't load Monthly Trends" onRetry={loadReports} />
         ) : !reports ? (
-          <ChartEmptyState label="Loading trends..." />
+          <ChartEmptyState guidance="Reports appear when sessions are recorded." />
         ) : !hasTrendData ? (
-          <ChartEmptyState label="No report data yet — appears once students have sessions" />
+          <ChartEmptyState guidance="Reports appear when sessions are recorded." />
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={trendData}>
@@ -2048,14 +2290,16 @@ function ReportsPage() {
           </ResponsiveContainer>
         )}
       </Card>
-      <Card className="p-5">
+      <Card className="col-span-12 p-5 lg:col-span-6">
         <h3 className="text-sm font-semibold mb-4" style={{ color: P.textPrimary }}>Severity Breakdown by Month</h3>
-        {reportsError ? (
-          <ChartEmptyState />
+        {reportsLoading ? (
+          <ChartSkeleton />
+        ) : reportsError ? (
+          <ChartErrorState label="Couldn't load Severity Breakdown" onRetry={loadReports} />
         ) : !reports ? (
-          <ChartEmptyState label="Loading breakdown..." />
+          <ChartEmptyState guidance="Reports appear when sessions are recorded." />
         ) : !hasTrendData ? (
-          <ChartEmptyState label="No breakdown data yet — appears once students have sessions" />
+          <ChartEmptyState guidance="Reports appear when sessions are recorded." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -2089,6 +2333,7 @@ function ReportsPage() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   );
 }
@@ -2096,6 +2341,10 @@ function ReportsPage() {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function CounselorDashboard() {
   const navigate = useNavigate();
+  const [dashboardTheme, setDashboardTheme] = useState(() => {
+    try { return localStorage.getItem('gaida_counselor_theme') === 'dark' ? 'dark' : 'light'; }
+    catch { return 'light'; }
+  });
 
   // ── Auth guard ────────────────────────────────────────────────
   // Unlike StudentDashboard, this component previously had no check at
@@ -2106,7 +2355,7 @@ export default function CounselorDashboard() {
       navigate('/counselor-login');
     }
   }, [navigate]);
-  const [activePage, setActivePage] = useState('alerts');
+  const [activePage, setActivePage] = useState('overview');
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [alertsError, setAlertsError] = useState(null);
@@ -2119,10 +2368,23 @@ export default function CounselorDashboard() {
   const [dashboardNotice, setDashboardNotice] = useState('');
   const [chatSessionId, setChatSessionId] = useState(null);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [hotlinesOpen, setHotlinesOpen] = useState(false);
+  const [chimeFlash, setChimeFlash] = useState(false);
+  const chimeTimerRef = useRef(null);
+  const hotlinesTriggerRef = useRef(null);
+  const logoutTriggerRef = useRef(null);
   // On desktop start with the full panel open so the profile and labels are
   // visible immediately; phones always start with it closed.
   const [expanded, setExpanded] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth >= 1024
+    () => {
+      if (typeof window === 'undefined') return false;
+      try {
+        const saved = localStorage.getItem('gaida:counselor-sidebar');
+        if (saved === 'collapsed') return false;
+        if (saved === 'expanded') return true;
+      } catch { /* use the desktop default */ }
+      return window.innerWidth >= 1024;
+    }
   );
   // Phone-only state for the single combined drawer (profile + navigation).
   // On desktop the same panel is a persistent rail, so `expanded` controls
@@ -2146,6 +2408,11 @@ export default function CounselorDashboard() {
     alertsRef.current = alerts;
   }, [alerts]);
   const [lastUpdated, setLastUpdated] = useState(null);
+
+  useEffect(() => {
+    try { localStorage.setItem('gaida:counselor-sidebar', expanded ? 'expanded' : 'collapsed'); }
+    catch { /* private storage */ }
+  }, [expanded]);
 
   useEffect(() => {
     let timer;
@@ -2185,7 +2452,7 @@ export default function CounselorDashboard() {
         // Detect NEW pending alerts by ID (count-based logic missed a replaced
         // alert with the same count, and re-beeped every poll because the
         // effect ran on every 2s fetch).
-        const pendingNow = data.alerts.filter(a => a.status === 'pending');
+        const pendingNow = data.alerts.filter(a => getAlertStatusLabel(a) === 'New');
         const pendingNowIds = pendingNow.map(a => a.session_id);
         // Moderate alerts are listed silently; only High, Crisis and a student's
         // own counselor request ring the dashboard.
@@ -2333,7 +2600,7 @@ export default function CounselorDashboard() {
         if (!res.ok) throw new Error('ticket request failed');
         ({ ticket } = await res.json());
       } catch {
-        setConnectionStatus('polling');
+        setConnectionStatus(navigator.onLine ? 'polling' : 'offline');
         // Backend unreachable / not a counselor anymore — the 2s poll
         // fallback still covers updates; just retry the SSE connection.
         retryTimer = setTimeout(connect, 5000);
@@ -2355,17 +2622,26 @@ export default function CounselorDashboard() {
       // blip, server restart, expired ticket) it can't just be retried —
       // close it and fetch a fresh ticket for a new connection.
       es.onerror = () => {
-        setConnectionStatus('polling');
+        setConnectionStatus(navigator.onLine ? 'polling' : 'offline');
         es?.close();
         es = null;
         if (!cancelled) retryTimer = setTimeout(connect, 3000);
       };
     };
 
+    const onOffline = () => setConnectionStatus('offline');
+    const onOnline = () => {
+      setConnectionStatus('connecting');
+      connect();
+    };
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('online', onOnline);
     connect();
 
     return () => {
       cancelled = true;
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('online', onOnline);
       if (retryTimer) clearTimeout(retryTimer);
       if (es) es.close();
     };
@@ -2415,7 +2691,7 @@ export default function CounselorDashboard() {
     }
   };
 
-  const pendingCount = alerts.filter(a => a.status === 'pending').length;
+  const pendingCount = alerts.filter(isPendingAlert).length;
 
   const logout = () => {
     clearAuth(); // clear both portal identities and sensitive cached data
@@ -2431,11 +2707,36 @@ export default function CounselorDashboard() {
   const panelWide = expanded || mobileNavOpen;
   const counselorId = counselor.id || counselor.student_number || 'Faculty';
   const connection = {
-    live: { color: P.green, label: 'Realtime' },
-    connecting: { color: '#A5B4FC', label: 'Connecting' },
-    polling: { color: P.amber, label: 'Polling' },
+    live: { color: P.green, label: 'Live' },
+    connecting: { color: P.amber, label: 'Reconnecting' },
+    polling: { color: P.amber, label: 'Reconnecting' },
     offline: { color: P.red, label: 'Offline' },
   }[connectionStatus] || { color: P.red, label: 'Offline' };
+
+  const handleTestChime = () => {
+    playAlertSound();
+    setChimeFlash(true);
+    clearTimeout(chimeTimerRef.current);
+    chimeTimerRef.current = setTimeout(() => setChimeFlash(false), 650);
+  };
+
+  const openHotlines = (event) => {
+    hotlinesTriggerRef.current = event.currentTarget;
+    setHotlinesOpen(true);
+  };
+
+  const openLogoutConfirm = (event) => {
+    logoutTriggerRef.current = event.currentTarget;
+    setLogoutConfirmOpen(true);
+  };
+
+  const toggleDashboardTheme = () => {
+    setDashboardTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('gaida_counselor_theme', next); } catch { /* keep this session's selection */ }
+      return next;
+    });
+  };
 
   const openMobileNav = (trigger) => {
     lastTriggerRef.current = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
@@ -2491,7 +2792,7 @@ export default function CounselorDashboard() {
   }, [mobileNavOpen, closeMobileNav]);
 
   return (
-    <div className="h-[100dvh] min-h-0 flex overflow-hidden w-full" style={{ background: P.bg }}>
+    <div data-theme={dashboardTheme} className={`counselor-dashboard h-[100dvh] min-h-0 flex overflow-hidden w-full ${chimeFlash ? 'chime-flash-active' : ''}`} style={{ background: P.bg, color: 'var(--ink)' }}>
       {dashboardNotice && (
         <div role="alert" className="fixed left-1/2 top-4 z-[100] flex w-[min(92vw,42rem)] -translate-x-1/2 items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg">
           <span>{dashboardNotice}</span>
@@ -2512,19 +2813,19 @@ export default function CounselorDashboard() {
           stays as the full collapsible navigation rail. */}
       <aside
         className={`
-          fixed top-0 left-0 h-full z-50 flex flex-col shadow-lg transition-all duration-300
+          side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-50 flex flex-col shadow-lg transition-all duration-300
           ${mobileNavOpen ? '' : 'lg:z-30'}
-          w-[84vw] max-w-[320px] ${expanded ? 'lg:w-56' : 'lg:w-16'}
+          w-[84vw] max-w-[320px] ${expanded ? 'lg:w-56' : 'lg:w-20'}
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
         `}
-        style={{ background: P.navy }}
+        style={{ background: 'var(--side)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Zone 1: profile ───────────────────────────────────────────── */}
         {/* Mobile drawer profile: full name, status dot on the avatar corner,
             and only the counselor ID inside the badge. */}
         <div
-          className="flex-shrink-0 px-4 py-4 lg:hidden"
+          className="counselor-mobile-profile relative flex-shrink-0 px-4 py-4 lg:hidden"
           style={{ borderBottom: `1px solid ${P.navyLight}` }}
         >
           <div className="flex items-start gap-3">
@@ -2544,18 +2845,18 @@ export default function CounselorDashboard() {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="break-words text-sm font-semibold leading-snug text-white">
+              <p className="break-words pr-10 text-sm font-semibold leading-snug text-white">
                 {counselor.name || 'Counselor'}
               </p>
               <p className="mt-0.5 text-[11px]" style={{ color: '#8FA3AC' }}>
                 Guidance Counselor
               </p>
               <p
-                className="mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                className="counselor-sidebar-id mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
                 style={{ background: 'rgba(255,255,255,0.08)', color: '#BBD6EA' }}
-                title={`ID: ${counselorId}`}
+                title={`Workspace ID: ${counselorId}`}
               >
-                ID: {counselorId}
+                <FocusTooltip label={`Workspace ID: ${counselorId}`} className="workspace-id-tooltip">ID: {counselorId}</FocusTooltip>
               </p>
             </div>
 
@@ -2563,7 +2864,7 @@ export default function CounselorDashboard() {
               <button
                 type="button"
                 onClick={closeMobileNav}
-                className="-mr-1 mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+                className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 title="Close menu"
                 aria-label="Close menu"
               >
@@ -2615,11 +2916,10 @@ export default function CounselorDashboard() {
                   Guidance Counselor
                 </p>
                 <p
-                  className="mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  className="counselor-sidebar-id mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
                   style={{ background: 'rgba(255,255,255,0.08)', color: '#BBD6EA' }}
-                  title={`ID: ${counselorId} · Authorized Counselor`}
                 >
-                  ID: {counselorId} · Authorized Counselor
+                  <FocusTooltip label={`Workspace ID: ${counselorId}`} className="workspace-id-tooltip">ID: {counselorId}</FocusTooltip>
                 </p>
               </div>
             )}
@@ -2640,55 +2940,54 @@ export default function CounselorDashboard() {
 
         {/* ── Zone 2: navigation (its own scroll area) ──────────────────── */}
         <div
-          className={`min-h-0 flex-1 py-3 pl-2 pr-3 overscroll-contain ${
-            panelWide ? 'overflow-y-auto overflow-x-hidden no-scrollbar' : 'overflow-visible'
-          }`}
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 pl-2 pr-3 overscroll-contain no-scrollbar"
         >
-          <nav className="hidden space-y-1 lg:block">
-            {NAV.map((navItem) => {
-              const active = activePage === navItem.id;
-              const badgeCount = navItem.id === 'alerts' ? pendingCount : 0;
-              return (
-                <button
-                  key={navItem.id}
-                  type="button"
-                  onClick={() => { setActivePage(navItem.id); closeMobileNav(); }}
-                  title={!panelWide ? navItem.label : undefined}
-                  aria-current={active ? 'page' : undefined}
-                  className={`group relative flex w-full items-center rounded-lg py-2.5 min-h-[44px] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
-                    panelWide ? 'gap-3 px-3' : 'justify-center px-0'
-                  } ${active ? '' : 'hover:bg-white/[0.06]'}`}
-                  style={active
-                    ? { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }
-                    : { color: '#93A6AE' }}
-                >
-                  {active && (
-                    <span
-                      className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full"
-                      style={{ background: P.accent }}
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="relative flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
-                    <NavIcon id={navItem.id} size={18} />
-                    {badgeCount > 0 && (
-                      <span
-                        className="absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 font-semibold text-white"
-                        style={{ fontSize: '9px', lineHeight: 1, background: P.red }}
+          <nav className="hidden space-y-3 lg:block" aria-label="Workspace navigation">
+            {NAV_GROUPS.map((group, groupIndex) => (
+              <div key={group.label} className={!panelWide && groupIndex > 0 ? 'collapsed-sidebar-group-divider' : ''}>
+                {panelWide && <p className="grp">{group.label}</p>}
+                <div className="space-y-1">
+                  {group.ids.map((id) => {
+                    const navItem = NAV.find((item) => item.id === id);
+                    const active = activePage === id;
+                    const badgeCount = id === 'alerts' ? pendingCount : 0;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => { setActivePage(id); closeMobileNav(); }}
+                        title={!panelWide ? navItem.label : undefined}
+                        aria-label={navItem.label}
+                        aria-current={active ? 'page' : undefined}
+                        className={`nav ${active ? 'on' : ''} group relative min-h-[44px] ${panelWide ? 'px-3' : 'justify-center px-0'}`}
                       >
-                        {badgeCount}
-                      </span>
-                    )}
-                  </span>
-                  {panelWide && (
-                    <span className={`${ROW_TEXT} whitespace-nowrap`}>{navItem.label}</span>
-                  )}
-                  {!panelWide && (
-                    <RowTooltip label={`${navItem.label}${badgeCount > 0 ? ` (${badgeCount})` : ''}`} />
-                  )}
+                        <span className="relative flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                          <NavIcon id={id} size={18} />
+                        </span>
+                        {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>{navItem.label}</span>}
+                        {id === 'alerts' && badgeCount > 0 && <span className="cnt">{badgeCount}</span>}
+                        {!panelWide && <RowTooltip label={`${navItem.label}${badgeCount > 0 ? ` (${badgeCount})` : ''}`} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div>
+              {panelWide && <p className="grp">Settings</p>}
+              <div className="space-y-1">
+                <Link to="/privacy" state={{ from: 'counselor' }} className={`nav ${panelWide ? 'px-3' : 'justify-center px-0'}`} title={!panelWide ? 'Privacy and Consent' : undefined} aria-label="Privacy and Consent">
+                  <span className="flex h-[18px] w-[18px] items-center justify-center"><NavIcon id="privacy" size={18} /></span>
+                  {panelWide && <span className={ROW_TEXT}>Privacy and Consent</span>}
+                  {!panelWide && <RowTooltip label="Privacy and Consent" />}
+                </Link>
+                <button type="button" className={`nav ${panelWide ? 'px-3' : 'justify-center px-0'} ${chimeFlash ? 'chime-flash' : ''}`} onClick={handleTestChime} title={!panelWide ? 'Test Alert Chime' : undefined} aria-label="Test Alert Chime">
+                  <span className="flex h-[18px] w-[18px] items-center justify-center"><NavIcon id="sound" size={18} /></span>
+                  {panelWide && <span className={ROW_TEXT}>Test Alert Chime</span>}
+                  {!panelWide && <RowTooltip label="Test Alert Chime" />}
                 </button>
-              );
-            })}
+              </div>
+            </div>
           </nav>
         </div>
 
@@ -2701,70 +3000,18 @@ export default function CounselorDashboard() {
           }}
         >
           <div className="space-y-0.5">
-            {/* Crisis hotlines */}
-            <div
-              className={`group relative flex w-full min-h-[44px] items-center rounded-lg ${
-                panelWide ? 'gap-3 px-3 py-2' : 'justify-center px-0 py-2'
-              }`}
-              title={!panelWide ? 'Crisis Hotlines — NCMH 1553 · Hopeline (02) 8804-4673' : undefined}
-            >
-              <span
-                className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center"
-                style={{ color: '#93A6AE' }}
-              >
-                <NavIcon id="hotline" size={18} />
-              </span>
-              {panelWide && (
-                <div className="min-w-0">
-                  <p className={ROW_TEXT} style={{ color: '#93A6AE' }}>Crisis Hotlines</p>
-                  <p className={`${ROW_TEXT} mt-0.5`} style={{ color: '#7F949D' }}>
-                    NCMH 1553 · Hopeline (02) 8804-4673
-                  </p>
-                </div>
-              )}
-              {!panelWide && <RowTooltip label="Crisis Hotlines — NCMH 1553 · Hopeline (02) 8804-4673" />}
-            </div>
-
-            {/* Test alert chime */}
-            <button
-              type="button"
-              onClick={playAlertSound}
-              title={!panelWide ? 'Test Alert Chime' : undefined}
-              className={`group relative flex w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
-                panelWide ? 'gap-3 px-3' : 'justify-center px-0'
-              }`}
-              style={{ color: '#93A6AE' }}
-            >
-              <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
-                <NavIcon id="sound" size={18} />
-              </span>
-              {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>Test Alert Chime</span>}
-              {!panelWide && <RowTooltip label="Test Alert Chime" />}
+            <button type="button" className={`hot group relative min-h-[44px] ${panelWide ? 'w-full flex items-center gap-3' : 'collapsed-hotline flex items-center justify-center'} `} onClick={openHotlines} aria-label="Open crisis hotlines" title={!panelWide ? 'Crisis hotlines' : undefined}>
+              <NavIcon id="hotline" size={18} />
+              {panelWide && <span>Crisis hotlines</span>}
+              {!panelWide && <RowTooltip label="Crisis hotlines" />}
             </button>
-
-            {/* Privacy & Consent */}
-            <a
-              href="/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              title={!panelWide ? 'Privacy & Consent' : undefined}
-              className={`group relative flex w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
-                panelWide ? 'gap-3 px-3' : 'justify-center px-0'
-              }`}
-              style={{ color: '#93A6AE' }}
-            >
-              <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
-                <NavIcon id="privacy" size={18} />
-              </span>
-              {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>Privacy & Consent</span>}
-              {!panelWide && <RowTooltip label="Privacy & Consent" />}
-            </a>
 
             {/* Collapse (desktop only) */}
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
               title={!panelWide ? 'Expand sidebar' : undefined}
+              aria-label={panelWide ? 'Collapse sidebar' : 'Expand sidebar'}
               className={`group relative hidden w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] lg:flex ${
                 panelWide ? 'gap-3 px-3' : 'justify-center px-0'
               }`}
@@ -2785,9 +3032,10 @@ export default function CounselorDashboard() {
             {/* Logout */}
             <button
               type="button"
-              onClick={() => setLogoutConfirmOpen(true)}
+              onClick={openLogoutConfirm}
               title={!panelWide ? 'Logout' : undefined}
-              className={`group relative flex w-full min-h-[44px] items-center rounded-lg py-2.5 transition-colors duration-200 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
+              aria-label="Logout"
+              className={`out group relative flex w-full min-h-[44px] items-center rounded-lg transition-colors duration-200 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${
                 panelWide ? 'gap-3 px-3' : 'justify-center px-0'
               }`}
               style={{ color: '#93A6AE' }}
@@ -2810,39 +3058,16 @@ export default function CounselorDashboard() {
           }}
         >
           <div className="flex flex-col gap-1">
-            {/* Crisis hotlines: red-tinted card, title on the first line,
-                each number on its own line. */}
-            <div
-              className="flex items-start gap-2.5 rounded-xl px-3 py-2.5"
-              style={{
-                background: 'rgba(176,71,47,0.18)',
-                border: '1px solid rgba(240,210,202,0.22)',
-              }}
-            >
-              <span
-                className="mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center"
-                style={{ color: '#F3B7A7' }}
-              >
-                <NavIcon id="hotline" size={18} />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[12px] font-semibold" style={{ color: '#F3C4B8' }}>
-                  Crisis Hotlines
-                </p>
-                <p className="mt-1 text-[13px] leading-snug" style={{ color: '#F7D7CF' }}>
-                  <a href="tel:1553" className="block">NCMH 1553</a>
-                </p>
-                <p className="text-[13px] leading-snug" style={{ color: '#F7D7CF' }}>
-                  <a href="tel:+63288044673" className="block">Hopeline (02) 8804-4673</a>
-                </p>
-              </div>
-            </div>
+            <button type="button" className="hot flex min-h-[44px] w-full items-center gap-2.5" onClick={openHotlines}>
+              <NavIcon id="hotline" size={18} />
+              <span>Crisis hotlines</span>
+            </button>
 
             {/* Smaller, quieter utilities. */}
             <button
               type="button"
-              onClick={playAlertSound}
-              className="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+              onClick={handleTestChime}
+              className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${chimeFlash ? 'chime-flash' : ''}`}
               style={{ color: '#7F949D' }}
             >
               <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
@@ -2851,10 +3076,19 @@ export default function CounselorDashboard() {
               <span>Test Alert Chime</span>
             </button>
 
-            <a
-              href="/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={toggleDashboardTheme}
+              aria-pressed={dashboardTheme === 'dark'}
+              className="nav min-h-[44px] gap-2.5 px-2 py-2 text-[11px]"
+            >
+              <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center"><NavIcon id="theme" size={16} /></span>
+              <span>Switch to {dashboardTheme === 'dark' ? 'light' : 'dark'} mode</span>
+            </button>
+
+            <Link
+              to="/privacy"
+              state={{ from: 'counselor' }}
               className="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
               style={{ color: '#7F949D' }}
             >
@@ -2862,14 +3096,14 @@ export default function CounselorDashboard() {
                 <NavIcon id="privacy" size={16} />
               </span>
               <span>Privacy &amp; Consent</span>
-            </a>
+            </Link>
 
             <div className="border-t" style={{ borderColor: P.navyLight }} />
 
             <button
               type="button"
-              onClick={() => setLogoutConfirmOpen(true)}
-              className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+              onClick={openLogoutConfirm}
+              className="out flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
               style={{ color: '#93A6AE' }}
             >
               <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
@@ -2885,7 +3119,7 @@ export default function CounselorDashboard() {
       <div className={`flex-1 flex flex-col min-w-0 w-full overflow-hidden transition-[margin] duration-300 ${expanded ? 'lg:ml-56' : 'lg:ml-16'}`}>
         {/* Mobile top bar */}
         <div
-          className="flex lg:hidden items-center justify-between px-3.5 h-14 flex-shrink-0 z-10"
+          className="dashboard-topbar flex lg:hidden items-center justify-between px-3.5 h-14 flex-shrink-0 z-10"
           style={{ background: P.navy, color: '#FFF' }}
         >
           {/* Avatar button opening the profile/utility drawer */}
@@ -2910,40 +3144,16 @@ export default function CounselorDashboard() {
 
           {/* Connection status badge */}
           <div className="flex items-center gap-2">
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
-              style={{
-                background:
-                  connectionStatus === 'live' ? 'rgba(76,175,80,0.2)' :
-                  connectionStatus === 'connecting' ? 'rgba(99,102,241,0.2)' :
-                  connectionStatus === 'polling' ? 'rgba(255,193,7,0.2)' : 'rgba(239,83,80,0.2)',
-                color:
-                  connectionStatus === 'live' ? '#81C784' :
-                  connectionStatus === 'connecting' ? '#A5B4FC' :
-                  connectionStatus === 'polling' ? '#FCD34D' : '#EF5350',
-              }}
-            >
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'live' || connectionStatus === 'connecting' ? 'animate-pulse' : ''}`}
-                style={{
-                  background:
-                    connectionStatus === 'live' ? '#81C784' :
-                    connectionStatus === 'connecting' ? '#A5B4FC' :
-                    connectionStatus === 'polling' ? '#FCD34D' : '#EF5350',
-                }}
-              />
-              <span className="capitalize">
-                {connectionStatus === 'live' ? 'Live' :
-                 connectionStatus === 'connecting' ? 'Connecting' :
-                 connectionStatus === 'polling' ? 'Polling' : 'Offline'}
-              </span>
-            </div>
+            <span className={`badge ${connectionStatus === 'live' ? '' : connectionStatus === 'offline' ? 'risk' : 'amb'}`}>
+              <i aria-hidden="true" />{connection.label}
+            </span>
+            {lastUpdated && <span className="mut">Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
           </div>
         </div>
 
         {/* Desktop top bar with realtime status */}
         <div
-          className="hidden lg:flex items-center justify-between px-6 py-2.5 border-b flex-shrink-0"
+          className="dashboard-topbar hidden lg:flex items-center justify-between px-6 py-2.5 border-b flex-shrink-0"
           style={{ background: P.surface, borderColor: P.border }}
         >
           <div className="flex items-center gap-2">
@@ -2952,34 +3162,13 @@ export default function CounselorDashboard() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium"
-              style={{
-                background:
-                  connectionStatus === 'live' ? P.greenSoft :
-                  connectionStatus === 'connecting' ? '#EEF2FF' :
-                  connectionStatus === 'polling' ? P.amberSoft : P.redSoft,
-                color:
-                  connectionStatus === 'live' ? P.greenDark :
-                  connectionStatus === 'connecting' ? '#4338CA' :
-                  connectionStatus === 'polling' ? '#7A5A28' : P.red,
-              }}
-            >
-              <div
-                className={`w-2 h-2 rounded-full ${connectionStatus === 'live' || connectionStatus === 'connecting' ? 'animate-pulse' : ''}`}
-                style={{
-                  background:
-                    connectionStatus === 'live' ? P.green :
-                    connectionStatus === 'connecting' ? '#6366F1' :
-                    connectionStatus === 'polling' ? '#B8860B' : P.red,
-                }}
-              />
-              <span className="capitalize">
-                {connectionStatus === 'live' ? 'Realtime Live' :
-                 connectionStatus === 'connecting' ? 'Connecting...' :
-                 connectionStatus === 'polling' ? 'Polling (30s)' : 'Offline'}
-              </span>
-            </div>
+            <button type="button" className="theme-toggle" onClick={toggleDashboardTheme} aria-label={`Switch to ${dashboardTheme === 'dark' ? 'light' : 'dark'} mode`} aria-pressed={dashboardTheme === 'dark'}>
+              <NavIcon id="theme" size={17} />
+              <span>{dashboardTheme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+            </button>
+            <span className={`badge ${connectionStatus === 'live' ? '' : connectionStatus === 'offline' ? 'risk' : 'amb'}`}>
+              <i aria-hidden="true" />{connection.label}
+            </span>
             {lastUpdated && (
               <span className="text-[11px]" style={{ color: P.textMuted }}>
                 Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -2990,8 +3179,8 @@ export default function CounselorDashboard() {
 
         {/* Scrollable page content - padded at bottom on mobile for fixed bottom nav */}
         <main ref={mainRef} className="flex-1 overflow-y-auto pb-32 lg:pb-6 no-scrollbar">
-          <div className="w-full max-w-6xl mx-auto p-3.5 sm:p-6 min-w-0">
-            {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} />}
+          <div className="w-full max-w-[1240px] mx-auto p-3.5 sm:p-6 min-w-0">
+            {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} onNavigate={setActivePage} onAcknowledge={handleAcknowledge} onViewSession={setChatSessionId} />}
             {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} />}
             {activePage === 'welfare'   && <WelfarePage welfare={welfare} welfareLoading={welfareLoading} welfareError={welfareError} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} onRefresh={fetchWelfare} />}
             {activePage === 'sessions' && (
@@ -3005,8 +3194,9 @@ export default function CounselorDashboard() {
               />
             )}
             {activePage === 'detection' && <DetectionPage />}
-            {activePage === 'reports'   && <ReportsPage />}
+            {activePage === 'reports'   && <ReportsPage connection={connection} lastUpdated={lastUpdated} />}
             {activePage === 'resolved'  && <ResolvedCasesPage />}
+            <p className="safety-note" role="note">A zero count does not confirm safety. Follow your campus emergency procedure.</p>
           </div>
         </main>
       </div>
@@ -3020,16 +3210,22 @@ export default function CounselorDashboard() {
         sessionsCount={sessions.length}
       />
 
+      <button type="button" className="fab hotline-fab" onClick={openHotlines}>
+        <NavIcon id="hotline" size={18} />
+        <span>Crisis hotlines</span>
+      </button>
+
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
       )}
       {logoutConfirmOpen && (
         <ConfirmationDialog
-          title="Log out?"
+          title="Log out of workspace?"
           description="You’ll be signed out of this counselor account on this device."
-          cancelLabel="Stay signed in"
+          cancelLabel="Keep session"
           confirmLabel="Log out"
           destructive
+          returnFocusRef={logoutTriggerRef}
           onCancel={() => setLogoutConfirmOpen(false)}
           onConfirm={() => {
             setLogoutConfirmOpen(false);
@@ -3038,6 +3234,7 @@ export default function CounselorDashboard() {
           }}
         />
       )}
+      {hotlinesOpen && <HotlinesModal onClose={() => setHotlinesOpen(false)} returnFocusRef={hotlinesTriggerRef} />}
     </div>
   );
 }
@@ -3083,7 +3280,7 @@ function ResolvedCasesPage() {
     resolved:    { bg: P.greenSoft, color: P.greenDark },
     false_alarm: { bg: P.panel, color: P.textSecondary },
     referred:    { bg: P.accentSoft, color: P.accentDark },
-    follow_up:   { bg: P.amberSoft, color: '#7A5A28' },
+    follow_up:   { bg: P.amberSoft, color: P.amber },
     ongoing:     { bg: P.redSoft, color: P.red },
   };
 

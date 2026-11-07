@@ -6,18 +6,25 @@ export default function ConfirmationDialog({
   confirmLabel,
   cancelLabel,
   destructive = false,
+  returnFocusRef,
   onConfirm,
   onCancel,
 }) {
   const dialogRef = useRef(null);
   const closeRef = useRef(null);
   const onCancelRef = useRef(onCancel);
+  const returnFocusRefHolder = useRef(returnFocusRef);
 
   useEffect(() => {
     onCancelRef.current = onCancel;
   }, [onCancel]);
 
   useEffect(() => {
+    returnFocusRefHolder.current = returnFocusRef;
+  }, [returnFocusRef]);
+
+  useEffect(() => {
+    const previousActiveElement = returnFocusRefHolder.current?.current || document.activeElement;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
@@ -48,6 +55,7 @@ export default function ConfirmationDialog({
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown, true);
+      previousActiveElement?.focus?.();
     };
   }, []);
 
@@ -70,7 +78,7 @@ export default function ConfirmationDialog({
         </button>
         <h2 id="confirmation-title" className="confirmation-title">{title}</h2>
         <p id="confirmation-description" className="confirmation-description">{description}</p>
-        <div className="confirmation-actions">
+        <div className="confirmation-actions acts">
           <button type="button" className="confirmation-cancel" onClick={onCancel}>{cancelLabel}</button>
           <button
             type="button"
