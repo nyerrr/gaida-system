@@ -121,7 +121,16 @@ app.include_router(research_router)
 # ----------------------------
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:5174",
     "http://localhost:3000",
+    # Some browsers/launchers open the dev server via the loopback IP instead
+    # of "localhost". Without these, the browser blocks the captcha response
+    # with a CORS error and the login form shows "Could not load the
+    # verification image".
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "http://[::1]:5173",
+    "http://[::1]:3000",
     "https://gaida-system.vercel.app",
 ]
 

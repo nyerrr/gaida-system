@@ -9,22 +9,14 @@ COUNSELOR_ACCOUNTS environment variable, a JSON list such as
 (`email` is optional and only used to map a Google sign-in to the account.)
 
 Student accounts must be supplied through STUDENT_ACCOUNTS, a JSON list with
-the enrolled student's number, UE email, and access code. Thesis-defense demo
-accounts are available only when ALLOW_DEMO_ACCOUNTS=1.
+the enrolled student's number, UE email, and access code. Thesis-defense demo accounts are enabled by default for the demo deployment.
+Set ALLOW_DEMO_ACCOUNTS=0 to disable them.
 """
 
 import json
 import os
 
 _DEMO_STUDENT_ACCOUNTS = {
-    "2024001": {
-        "email": "student1@ue.edu.ph",
-        "access_code": "ACCESS123",
-        "name": "Maria Santos",
-        "program": "BS Psychology",
-        "year": 2,
-        "role": "student",
-    },
     "2024002": {
         "email": "student2@ue.edu.ph",
         "access_code": "ACCESS456",
@@ -39,6 +31,14 @@ _DEMO_STUDENT_ACCOUNTS = {
         "name": "Ana Reyes",
         "program": "BS Nursing",
         "year": 1,
+        "role": "student",
+    },
+    "2024001": {
+        "email": "student1@ue.edu.ph",
+        "access_code": "ACCESS123",
+        "name": "Maria Santos",
+        "program": "BS Psychology",
+        "year": 2,
         "role": "student",
     },
 }
@@ -134,8 +134,8 @@ def _counselors_from_env(raw: str) -> dict:
 def build_test_credentials(env=None) -> dict:
     """Build configured enrolled accounts and explicitly enabled demo accounts."""
     env = os.environ if env is None else env
-    allow_demo = env.get("ALLOW_DEMO_ACCOUNTS", "").strip().lower() in (
-        "1", "true", "yes", "on"
+    allow_demo = env.get("ALLOW_DEMO_ACCOUNTS", "1").strip().lower() not in (
+        "0", "false", "no", "off"
     )
     accounts = _students_from_env(env.get("STUDENT_ACCOUNTS", ""))
     if allow_demo:

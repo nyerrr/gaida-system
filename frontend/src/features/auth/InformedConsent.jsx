@@ -65,7 +65,7 @@ const handleAccept = async (e) => {
   };
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 p-3 sm:p-4 relative overflow-y-auto">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 p-3 sm:p-4 relative overflow-y-auto no-scrollbar">
       {/* Decorative Background Pattern */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <div className="absolute top-10 sm:top-20 left-10 sm:left-20 w-64 sm:w-96 h-64 sm:h-96 border-4 border-red-200 rotate-45 rounded-3xl"></div>
@@ -85,7 +85,7 @@ const handleAccept = async (e) => {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 md:p-8 w-full max-w-2xl my-4 max-h-[95dvh] overflow-y-auto">
+      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 md:p-8 w-full max-w-2xl my-4 max-h-[95dvh] overflow-y-auto no-scrollbar">
         {/* Top Back Navigation */}
         <div className="mb-4">
           <button
@@ -119,7 +119,7 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Consent Content - Scrollable */}
-        <div role="region" aria-label="Consent terms" tabIndex={0} className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[40dvh] sm:max-h-96 overflow-y-auto border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#608AB6]">
+        <div role="region" aria-label="Consent terms" tabIndex={0} className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[40dvh] sm:max-h-96 overflow-y-auto no-scrollbar border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#608AB6]">
           <div className="space-y-4 text-sm text-gray-700">
             {/* Purpose */}
             <div>

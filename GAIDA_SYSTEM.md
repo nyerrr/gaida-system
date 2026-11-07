@@ -307,7 +307,7 @@ Currently **only `/virtual-agent` is protected**. The `/api/counselor/*`, `/audi
 
 | Endpoint | Body | What it does |
 |---|---|---|
-| `POST /api/auth/login` | `{student_number, email, access_code, antibot}` | Validates the exact enrolled student number/email/access-code tuple from `STUDENT_ACCOUNTS`, then issues a token via `create_session_token(student_number, "student")`. Thesis-defense demo accounts require `ALLOW_DEMO_ACCOUNTS=1`. |
+| `POST /api/auth/login` | `{student_number, email, access_code, antibot}` | Validates the exact enrolled student number/email/access-code tuple from `STUDENT_ACCOUNTS`, then issues a token via `create_session_token(student_number, "student")`. Thesis-defense demo accounts are enabled by default; set `ALLOW_DEMO_ACCOUNTS=0` to disable them. |
 | `POST /api/auth/logout` | Bearer token header | Revokes the current session token. |
 | `POST /api/auth/consent` | `{session_id, consent_given}` | Upserts a row in the `consents` table (insert or update). |
 | `POST /api/auth/forgot-password` | `{email, role}` | Always returns `{"ok": true, ...}` (never reveals whether an email exists — prevents enumeration). It does **not** actually send an email. |

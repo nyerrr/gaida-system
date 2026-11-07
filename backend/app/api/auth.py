@@ -5,11 +5,12 @@ from pydantic import BaseModel
 from datetime import datetime
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-from app.database.database import supabase
+from app.database.database import UnconfiguredSupabase, supabase
 from app.constants import TEST_CREDENTIALS
 from app.services.rate_limiter import check_rate_limit
 from app.services.captcha import new_challenge, verify_captcha
 from app.services.session_manager import get_session
+from app.utils.config import persistence_disabled
 from app.utils.auth import create_session_token, get_current_user, revoke_session_token
 
 
@@ -265,6 +266,14 @@ def record_consent(payload: ConsentRequest, user: dict = Depends(get_current_use
     if session and session.get("user_id") and session["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="Session does not belong to this user")
 
+    if persistence_disabled() and isinstance(supabase, UnconfiguredSupabase):
+        return {
+            "success": True,
+            "message": f"Consent recorded: {payload.consent_given}",
+            "session_id": payload.session_id,
+            "stored": False,
+        }
+
     existing = supabase.table("consents")\
         .select("*")\
         .eq("session_id", payload.session_id)\
@@ -298,5 +307,3 @@ def forgot_password(payload: ForgotPasswordRequest):
     Initiate password reset. Always returns success to prevent email enumeration.
     """
     return {"ok": True, "message": "If the email is registered, a reset link has been sent."}
-
-
