@@ -412,7 +412,6 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError, onNavigate
   const [analytics, setAnalytics] = useState(null);
   const [analyticsError, setAnalyticsError] = useState('');
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
-  const [showCrisisIdentity, setShowCrisisIdentity] = useState(false);
   const analyticsTimerRef = useRef(null);
 
   const loadAnalytics = useCallback(() => {
@@ -514,16 +513,8 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError, onNavigate
               </FocusTooltip>
             </p>
             <p className="mut">A crisis alert is waiting for counselor attention.</p>
-            <p className="mut">
-              {showCrisisIdentity
-                ? (crisisAlert.student_name || crisisAlert.student_id || 'Student identity unavailable')
-                : 'Student identity is hidden'}
-            </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button type="button" className="btn ghost" onClick={() => setShowCrisisIdentity((shown) => !shown)}>
-              {showCrisisIdentity ? 'Hide identity' : 'Show identity'}
-            </button>
             {getAlertStatusLabel(crisisAlert) === 'New' && (
               <button type="button" className="btn ghost" onClick={() => onAcknowledge(crisisAlert.session_id)}>Acknowledge</button>
             )}
@@ -791,7 +782,6 @@ const getEscalationState = (a) => {
 // re-render doesn't remount every row and drop mid-click button presses.
 function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
   const pointerStart = useRef(null);
-  const [showIdentity, setShowIdentity] = useState(false);
   const sc  = severityColor(a.severity);
   const esc = getEscalationState(a);
   const statusLabel = getAlertStatusLabel(a);
@@ -888,9 +878,6 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
               <span className="alert-code">{a.session_id || 'Code unavailable'}</span>
             </FocusTooltip>
           </p>
-          <p className="text-xs mb-1" style={{ color: P.textSecondary }}>
-            Student: {showIdentity ? (a.student_name || a.student_id || 'Identity unavailable') : 'Identity hidden'}
-          </p>
           <p className="text-xs truncate" style={{ color: P.textSecondary }}>"{a.message}"</p>
           {a.acknowledged && (
             <p className="text-xs mt-1" style={{ color: P.greenDark }}>
@@ -924,15 +911,6 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
               Mark Reviewed
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setShowIdentity((shown) => !shown)}
-            aria-expanded={showIdentity}
-            className="text-xs min-h-[44px] px-3 py-1.5 rounded-lg font-medium"
-            style={{ border: `1px solid ${P.border}`, color: P.textSecondary, background: P.surface }}
-          >
-            {showIdentity ? 'Hide identity' : 'Show identity'}
-          </button>
         </div>
       </div>
 
@@ -980,8 +958,6 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
   const filtered = visibleAlerts.filter(a => {
     const term = searchTerm.toLowerCase().trim();
     const matchTerm = !term ||
-      (a.student_id && a.student_id.toLowerCase().includes(term)) ||
-      (a.student_name && a.student_name.toLowerCase().includes(term)) ||
       (a.initial_message && a.initial_message.toLowerCase().includes(term)) ||
       (a.trigger_reason && a.trigger_reason.toLowerCase().includes(term));
     const matchSev = severityFilter === 'all' || a.severity?.toLowerCase() === severityFilter.toLowerCase();
@@ -1328,7 +1304,6 @@ function ChatModal({ sessionId, onClose }) {
   const [resolving, setResolving] = useState(false);
   const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false);
   const [resolved, setResolved] = useState(false);
-  const [studentProfile, setStudentProfile] = useState(null);
   const [exporting, setExporting] = useState(false);
 
   // ── Case Notes state ──────────────────────────────────────────────────────
@@ -1359,22 +1334,6 @@ function ChatModal({ sessionId, onClose }) {
   };
 
 
-  useEffect(() => {
-    // get user_id from the session first, then fetch profile
-    apiFetch(`${BACKEND}/api/counselor/chat/${sessionId}`)
-      .then(r => r.json())
-      .then(data => {
-        const userId = data.user_id;
-        if (userId) {
-          return apiFetch(`${BACKEND}/api/counselor/student-profile/${userId}`)
-            .then(r => r.json())
-            .then(d => setStudentProfile(d.profile));
-        }
-      })
-      .catch(() => {});
-  }, [sessionId]);
-
-  
   useEffect(() => {
     fetchChat();
     const interval = setInterval(fetchChat, 3000);
@@ -1794,21 +1753,8 @@ const typingThrottleRef = useRef(null);
         {/* Header */}
         <div className="px-5 py-4 flex items-center justify-between flex-shrink-0" style={{ borderBottom: `1px solid ${P.border}` }}>
           <div>
-            {studentProfile ? (
-              <>
-                <p id="chat-modal-title" className="text-sm font-bold" style={{ color: P.textPrimary }}>{studentProfile.name}</p>
-                <p className="text-xs" style={{ color: P.textSecondary }}>
-                  {studentProfile.student_id}
-                  {studentProfile.program && ` · ${studentProfile.program}`}
-                  {studentProfile.year && `, Year ${studentProfile.year}`}
-                </p>
-              </>
-            ) : (
-              <>
-                <h3 id="chat-modal-title" className="text-sm font-bold" style={{ color: P.textPrimary }}>Live Session</h3>
-                <p className="text-xs" style={{ color: P.textSecondary }}>{sessionId.slice(0, 24)}...</p>
-              </>
-            )}
+            <h3 id="chat-modal-title" className="text-sm font-bold" style={{ color: P.textPrimary }}>Live Session</h3>
+            <p className="text-xs" style={{ color: P.textSecondary }}>{sessionId.slice(0, 24)}...</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -3417,9 +3363,6 @@ function ResolvedCasesPage() {
   const filteredCases = cases.filter(c => {
     const q = searchQuery.toLowerCase().trim();
     const matchQuery = !q ||
-      (c.student_id && c.student_id.toLowerCase().includes(q)) ||
-      (c.profile?.name && c.profile.name.toLowerCase().includes(q)) ||
-      (c.profile?.program && c.profile.program.toLowerCase().includes(q)) ||
       (c.note?.note && c.note.note.toLowerCase().includes(q));
     const matchOutcome = outcomeFilter === 'all' || (c.note?.outcome === outcomeFilter);
     return matchQuery && matchOutcome;
@@ -3508,11 +3451,7 @@ function ResolvedCasesPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      {c.profile ? (
-                        <span className="text-sm font-semibold truncate" style={{ color: P.textPrimary }}>{c.profile.name}</span>
-                      ) : (
-                        <span className="text-sm font-semibold truncate" style={{ color: P.textPrimary }}>{c.student_id || 'Unknown'}</span>
-                      )}
+                      <span className="text-sm font-semibold truncate" style={{ color: P.textPrimary }}>Resolved session</span>
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white flex-shrink-0" style={{ background: sc.hex }}>{c.severity}</span>
                       {c.note?.outcome && (
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: oc?.bg, color: oc?.color }}>
@@ -3521,13 +3460,6 @@ function ResolvedCasesPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-xs" style={{ color: P.textMuted }}>
-                      {c.profile && (
-                        <span>
-                          {c.profile.student_id}
-                          {c.profile.program && ` · ${c.profile.program}`}
-                          {c.profile.year && `, Year ${c.profile.year}`}
-                        </span>
-                      )}
                       <span>•</span>
                       <span>{formatRelative(c.timestamp)}</span>
                       <span>•</span>
