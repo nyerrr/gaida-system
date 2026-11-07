@@ -17,6 +17,19 @@ import {
 const POLL_INTERVAL = 3000;
 const TYPING_DEBOUNCE = 2000;
 
+// 10 ms of silence. iOS Safari only allows a later `play()` on an <audio>
+// element that was first played *inside a user gesture* — and our real audio
+// only arrives after an `await fetch(...)`, by which point the gesture has
+// expired. Playing this silent clip synchronously on click "unlocks" the
+// element so the real reply can play once the network round-trip finishes.
+const SILENT_WAV_DATA_URI =
+  'data:audio/wav;base64,UklGRsQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+// How many synthesized replies to keep as blob URLs for instant replay. Each
+// entry is roughly the size of the MP3 (tens of KB). In-memory only — reply
+// audio is never written to localStorage or disk.
+const TTS_CACHE_LIMIT = 20;
+
 // Calm, light palettes. Cool blues and soft greens lead; lavender and sand
 // are softer secondary options. Keys stay stable so any saved preference
 // still resolves to a theme.
@@ -269,7 +282,7 @@ function Avatar({ role, accent, breathing = false }) {
   );
 }
 
-function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlayingTTS, onFeedbackComment }) {
+function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlayingTTS, isLoadingTTS, onFeedbackComment, ttsError }) {
   const { role, text, isVoice, acoustic, timestamp, pending } = message;
   const [commentText, setCommentText] = useState('');
   const [commentSent, setCommentSent] = useState(false);
@@ -334,24 +347,47 @@ function MessageBubble({ message, theme, onFeedback, feedback, onPlayTTS, isPlay
             onClick={onPlayTTS}
             className="text-[11px] px-2 py-0.5 rounded-full border transition-colors duration-200 touch-manipulation flex items-center gap-1"
             style={{
-              background: isPlayingTTS ? theme.accentDark : 'transparent',
-              color: isPlayingTTS ? '#FFFFFF' : theme.textSecondary,
+              background: (isPlayingTTS || isLoadingTTS) ? theme.accentDark : 'transparent',
+              color: (isPlayingTTS || isLoadingTTS) ? '#FFFFFF' : theme.textSecondary,
               border: `1px solid ${theme.border}`,
             }}
-            title={isPlayingTTS ? "Stop voice audio" : "Listen to GAIDA's reply"}
-            aria-label={isPlayingTTS ? "Stop reading reply aloud" : "Read reply aloud"}
+            title={
+              isLoadingTTS ? "Loading voice audio"
+                : isPlayingTTS ? "Stop voice audio"
+                : "Listen to GAIDA's reply"
+            }
+            aria-label={
+              isLoadingTTS ? "Cancel loading voice audio"
+                : isPlayingTTS ? "Stop reading reply aloud"
+                : "Read reply aloud"
+            }
+            aria-busy={isLoadingTTS || undefined}
+            aria-pressed={isPlayingTTS}
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className={`w-3 h-3 ${isLoadingTTS ? 'animate-pulse' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               {isPlayingTTS ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
               ) : (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
               )}
             </svg>
-            <span className="text-[10px] hidden sm:inline">{isPlayingTTS ? "Playing" : "Listen"}</span>
+            <span className="text-[10px] hidden sm:inline">
+              {isLoadingTTS ? "Loading…" : isPlayingTTS ? "Playing" : "Listen"}
+            </span>
           </button>
         )}
       </div>
+
+      {ttsError && (
+        <span role="alert" className="px-1 text-xs leading-snug" style={{ color: '#9C5A3C' }}>
+          {ttsError}
+        </span>
+      )}
 
       {role === 'bot' && acoustic && (
         <div className="flex flex-wrap items-center gap-2 px-1 mt-0.5">
@@ -493,6 +529,8 @@ export default function StudentDashboard() {
   const [streamingStarted,    setStreamingStarted]    = useState(false);
   const [showCrisisHotlines,  setShowCrisisHotlines]  = useState(false);
   const [playingTTSIndex,     setPlayingTTSIndex]     = useState(null);
+  const [ttsLoadingIndex,     setTtsLoadingIndex]     = useState(null);
+  const [ttsError,            setTtsError]            = useState(null); // { index, message }
   const [loadingTranscript,   setLoadingTranscript]   = useState(false);
   const [transcriptError,     setTranscriptError]     = useState(false);
 
@@ -576,7 +614,9 @@ export default function StudentDashboard() {
   const typingActiveRef    = useRef(false);
   const wasCounselorActive = useRef(false);
   const audioRef           = useRef(null);
-  const audioUrlRef        = useRef(null);
+  const audioUnlockedRef   = useRef(false);
+  const ttsCacheRef        = useRef(new Map()); // plain text → object URL
+  const ttsAbortRef        = useRef(null);
   const ventUsedRef        = useRef(false);
   const flushingRef        = useRef(false);
 
@@ -1196,71 +1236,165 @@ export default function StudentDashboard() {
   };
 
   const stopTTS = useCallback(() => {
-    if (audioRef.current) {
-      try {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      } catch { /* ignore pause error */ }
-      audioRef.current = null;
+    if (ttsAbortRef.current) {
+      try { ttsAbortRef.current.abort(); } catch { /* ignore abort error */ }
+      ttsAbortRef.current = null;
     }
-    if (audioUrlRef.current) {
+    const audio = audioRef.current;
+    if (audio) {
       try {
-        URL.revokeObjectURL(audioUrlRef.current);
-      } catch { /* ignore revoke error */ }
-      audioUrlRef.current = null;
+        audio.onended = null;
+        audio.onerror = null;
+        audio.pause();
+        audio.currentTime = 0;
+      } catch { /* ignore pause error */ }
     }
     setPlayingTTSIndex(null);
+    setTtsLoadingIndex(null);
   }, []);
 
+  // ── Client-side audio cache ──────────────────────────────────
+  // Object URLs are owned by the cache. `stopTTS` pauses but never revokes, so
+  // a replayed reply can still be served from memory; revocation happens only
+  // when an entry is evicted or the dashboard unmounts.
+  const touchTtsCache = (key) => {
+    const cache = ttsCacheRef.current;
+    if (!cache.has(key)) return;
+    const url = cache.get(key);
+    cache.delete(key);
+    cache.set(key, url); // re-insert as most-recently used
+  };
+
+  const cacheTtsUrl = (key, url) => {
+    const cache = ttsCacheRef.current;
+    cache.delete(key);
+    cache.set(key, url);
+    while (cache.size > TTS_CACHE_LIMIT) {
+      const [oldKey, oldUrl] = cache.entries().next().value;
+      cache.delete(oldKey);
+      if (audioRef.current && audioRef.current.src === oldUrl) stopTTS();
+      try { URL.revokeObjectURL(oldUrl); } catch { /* ignore revoke error */ }
+    }
+  };
+
+  const playTtsUrl = useCallback((url, index) => {
+    const audio = audioRef.current || new Audio();
+    audioRef.current = audio;
+    audio.onended = () => stopTTS();
+    audio.onerror = () => {
+      stopTTS();
+      setTtsError({ index, message: "Couldn't play this reply aloud. Please try again." });
+    };
+    audio.src = url;
+    audio.currentTime = 0;
+    setPlayingTTSIndex(index);
+    return audio.play(); // caller handles rejection
+  }, [stopTTS]);
+
+  const reportTtsError = useCallback((err, index) => {
+    if (err?.name === 'AbortError') return;
+    console.error('TTS playback error:', err);
+    stopTTS();
+    setTtsError({
+      index,
+      message: err?.name === 'NotAllowedError'
+        ? 'Your browser blocked the audio. Tap Listen again to allow it.'
+        : "Couldn't play this reply aloud. Please check your connection and try again.",
+    });
+  }, [stopTTS]);
+
+  // Auto-dismiss the inline TTS error.
+  useEffect(() => {
+    if (!ttsError) return;
+    const timer = setTimeout(() => setTtsError(null), 6000);
+    return () => clearTimeout(timer);
+  }, [ttsError]);
+
   const handlePlayTTS = async (index, text) => {
-    if (playingTTSIndex === index) {
+    if (playingTTSIndex === index || ttsLoadingIndex === index) {
       stopTTS();
       return;
     }
     stopTTS();
-    setPlayingTTSIndex(index);
+    setTtsError(null);
+
+    const plainText = text
+      .replace(/[#*`_~>[\]()]/g, '')
+      .replace(/\n+/g, ' ')
+      .trim();
+
+    if (!plainText) return;
+
+    // Cache hit: play instantly, no network round-trip and no loading state.
+    const cachedUrl = ttsCacheRef.current.get(plainText);
+    if (cachedUrl) {
+      touchTtsCache(plainText);
+      try {
+        await playTtsUrl(cachedUrl, index);
+      } catch (err) {
+        reportTtsError(err, index);
+      }
+      return;
+    }
+
+    // One reusable element. Once it has been played inside a click gesture,
+    // iOS Safari lets us call play() on it again after the fetch resolves.
+    const audio = audioRef.current || new Audio();
+    audioRef.current = audio;
+
+    if (!audioUnlockedRef.current) {
+      try {
+        audio.onended = null;
+        audio.onerror = null;
+        audio.src = SILENT_WAV_DATA_URI;
+        const unlock = audio.play();
+        audioUnlockedRef.current = true;
+        if (unlock && typeof unlock.catch === 'function') {
+          unlock.catch(() => { audioUnlockedRef.current = false; });
+        }
+      } catch { /* unlock is best-effort */ }
+    }
+
+    const controller = new AbortController();
+    ttsAbortRef.current = controller;
+    setTtsLoadingIndex(index);
 
     try {
-      const plainText = text
-        .replace(/[#*`_~>[\]()]/g, '')
-        .replace(/\n+/g, ' ')
-        .trim();
-
-      if (!plainText) {
-        setPlayingTTSIndex(null);
-        return;
-      }
-
-      const res = await apiFetch(`${BACKEND}/api/voice/tts?text=${encodeURIComponent(plainText)}`);
+      const res = await apiFetch(
+        `${BACKEND}/audio/tts?text=${encodeURIComponent(plainText)}`,
+        { signal: controller.signal },
+      );
       if (!res.ok) {
-        throw new Error('TTS service unavailable');
+        throw new Error(`TTS request failed with status ${res.status}`);
       }
 
       const blob = await res.blob();
+      if (!blob.size) {
+        throw new Error('TTS returned an empty audio response');
+      }
+      if (ttsAbortRef.current !== controller) {
+        return; // cancelled while the request was in flight
+      }
+      ttsAbortRef.current = null;
+      setTtsLoadingIndex(null);
+
       const audioUrl = URL.createObjectURL(blob);
-      audioUrlRef.current = audioUrl;
-
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        stopTTS();
-      };
-      audio.onerror = () => {
-        console.error('Audio playback error');
-        stopTTS();
-      };
-
-      await audio.play();
+      cacheTtsUrl(plainText, audioUrl);
+      await playTtsUrl(audioUrl, index);
     } catch (err) {
-      console.error('TTS playback error:', err);
-      stopTTS();
+      if (err?.name === 'AbortError') return;
+      reportTtsError(err, index);
     }
   };
 
   useEffect(() => {
+    const cache = ttsCacheRef.current;
     return () => {
       stopTTS();
+      for (const url of cache.values()) {
+        try { URL.revokeObjectURL(url); } catch { /* ignore revoke error */ }
+      }
+      cache.clear();
     };
   }, [stopTTS]);
 
@@ -1835,6 +1969,8 @@ export default function StudentDashboard() {
                   onFeedbackComment={m.role === 'bot' && messageRatings[i] ? (text) => commentOnMessage(i, text) : undefined}
                   onPlayTTS={m.role === 'bot' ? () => handlePlayTTS(i, m.text) : undefined}
                   isPlayingTTS={playingTTSIndex === i}
+                  isLoadingTTS={ttsLoadingIndex === i}
+                  ttsError={ttsError?.index === i ? ttsError.message : null}
                 />
               </div>
             );
