@@ -134,6 +134,16 @@ def test_login_with_valid_captcha_passes_then_replay_fails():
     assert c.post("/api/auth/login", json=_student_body(captcha_token=token)).status_code == 400
 
 
+def test_login_requires_the_enrolled_email_for_the_student_number():
+    c = _client()
+    token = _make("HELLO")
+    response = c.post(
+        "/api/auth/login",
+        json=_student_body(email="different.student@ue.edu.ph", captcha_token=token),
+    )
+    assert response.status_code == 401
+
+
 def test_counselor_login_requires_captcha():
     c = _client()
     body = {"faculty_id": "counselor01", "password": "counsel123"}

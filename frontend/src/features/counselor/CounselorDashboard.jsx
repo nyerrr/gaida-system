@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 
 import { BACKEND_URL as BACKEND } from '../../config';
-import apiFetch, { clearAuth } from '../../api';
+import apiFetch, { logoutAndClearAuth } from '../../api';
 import CounselorBottomNav from './CounselorBottomNav';
 import { FALLBACK_POLL_INTERVAL_MS, shouldPollDashboard } from './dashboardPolling';
 import ConfirmationDialog from '../../components/ConfirmationDialog';
@@ -2525,10 +2525,10 @@ export default function CounselorDashboard() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window) || !window.isSecureContext) return;
+    if (typeof window === 'undefined' || typeof window.Notification !== 'function' || !window.isSecureContext) return;
     try {
-      if (Notification.permission === 'default') {
-        Promise.resolve(Notification.requestPermission()).catch(() => {});
+      if (window.Notification.permission === 'default') {
+        Promise.resolve(window.Notification.requestPermission()).catch(() => {});
       }
     } catch { /* notifications are optional and may be blocked by the browser */ }
   }, []);
@@ -2557,8 +2557,8 @@ export default function CounselorDashboard() {
         if (freshLoud.length > 0) {
           playAlertSound();
           try {
-            if (typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext && Notification.permission === 'granted') {
-              new Notification('GAIDA Alert', {
+            if (typeof window !== 'undefined' && typeof window.Notification === 'function' && window.isSecureContext && window.Notification.permission === 'granted') {
+              new window.Notification('GAIDA Alert', {
                 body: `${freshLoud.length} new alert${freshLoud.length > 1 ? 's' : ''} need attention`,
                 icon: '/favicon.ico',
               });
@@ -2789,8 +2789,8 @@ export default function CounselorDashboard() {
 
   const pendingCount = alerts.filter(isPendingAlert).length;
 
-  const logout = () => {
-    clearAuth(); // clear both portal identities and sensitive cached data
+  const logout = async () => {
+    await logoutAndClearAuth();
     navigate('/counselor-login');
   };
 

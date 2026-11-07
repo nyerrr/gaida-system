@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 from datetime import datetime
 from google.oauth2 import id_token
@@ -10,7 +10,7 @@ from app.constants import TEST_CREDENTIALS
 from app.services.rate_limiter import check_rate_limit
 from app.services.captcha import new_challenge, verify_captcha
 from app.services.session_manager import get_session
-from app.utils.auth import create_session_token, get_current_user
+from app.utils.auth import create_session_token, get_current_user, revoke_session_token
 
 
 ALLOWED_DOMAIN = "@ue.edu.ph"
@@ -58,6 +58,17 @@ class CounselorLoginRequest(BaseModel):
     password: str
     antibot: str = ""
     captcha_token: str = ""
+
+
+@router.post("/logout")
+def logout(authorization: str = Header(None)):
+    """Revoke the current bearer token when a client logs out."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return {"ok": True}
+    token = authorization.split(" ", 1)[1].strip()
+    if token:
+        revoke_session_token(token)
+    return {"ok": True}
 
 
 def _counselor_credentials(faculty_id: str) -> dict | None:
@@ -126,7 +137,8 @@ def login(payload: LoginRequest):
 
     student_number = payload.student_number.strip()
 
-    if not validate_email_domain(payload.email):
+    email = payload.email.strip().lower()
+    if not validate_email_domain(email):
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
@@ -134,7 +146,12 @@ def login(payload: LoginRequest):
     
     credentials = TEST_CREDENTIALS.get(student_number)
     
-    if not credentials or payload.access_code != credentials.get("access_code"):
+    if (
+        not credentials
+        or credentials.get("role") != "student"
+        or email != str(credentials.get("email", "")).strip().lower()
+        or payload.access_code != credentials.get("access_code")
+    ):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     session_token = create_session_token(student_number, role="student")
@@ -281,7 +298,5 @@ def forgot_password(payload: ForgotPasswordRequest):
     Initiate password reset. Always returns success to prevent email enumeration.
     """
     return {"ok": True, "message": "If the email is registered, a reset link has been sent."}
-
-
 
 

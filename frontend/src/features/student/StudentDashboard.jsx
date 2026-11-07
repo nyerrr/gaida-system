@@ -8,7 +8,7 @@ import ReactMarkdown from 'react-markdown';
 // ─────────────────────────────────────────────────────────────
 
 import { BACKEND_URL as BACKEND } from '../../config';
-import apiFetch, { clearSensitiveLocalData } from '../../api';
+import apiFetch, { clearSensitiveLocalData, logoutAndClearAuth } from '../../api';
 import {
   enqueue as enqueueOffline,
   getAll as getQueuedOffline,
@@ -1562,8 +1562,12 @@ export default function StudentDashboard() {
     const keysToClear = wasResearchSession
       ? ['student_id', 'consent_given', 'is_research_session']
       : ['session_token', 'student_id', 'consent_given', 'session_id', 'is_research_session'];
-    keysToClear.forEach(k => localStorage.removeItem(k));
-    clearSensitiveLocalData(); // purge cached chat data & offline queue
+    if (wasResearchSession) {
+      keysToClear.forEach(k => localStorage.removeItem(k));
+      await clearSensitiveLocalData();
+    } else {
+      await logoutAndClearAuth();
+    }
 
     setSessionId(null); // closes the realtime WebSocket for this session
 

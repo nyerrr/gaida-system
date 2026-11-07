@@ -1,7 +1,5 @@
 """Login accounts.
 
-STUDENT test accounts are demo accounts for the pilot login.
-
 COUNSELOR accounts are no longer hardcoded for production. They come from the
 COUNSELOR_ACCOUNTS environment variable, a JSON list such as
 
@@ -10,24 +8,22 @@ COUNSELOR_ACCOUNTS environment variable, a JSON list such as
 
 (`email` is optional and only used to map a Google sign-in to the account.)
 
-When COUNSELOR_ACCOUNTS is not set, the old demo counselors (COUNSELOR01 /
-counsel123 and so on) are only available if ENVIRONMENT=development or
-GAIDA_ALLOW_DEMO_COUNSELORS=1. On a deployed server with neither, the ID and
-password counselor login simply has no accounts, and counselors sign in with
-Google (COUNSELOR_EMAILS) instead. Nothing here changes how a login is checked
-in app/api/auth.py: it still looks accounts up by role == "counselor".
+Student accounts must be supplied through STUDENT_ACCOUNTS, a JSON list with
+the enrolled student's number, UE email, and access code. Thesis-defense demo
+accounts are available only when ALLOW_DEMO_ACCOUNTS=1.
 """
 
 import json
 import os
 
-_STUDENT_ACCOUNTS = {
+_DEMO_STUDENT_ACCOUNTS = {
     "2024001": {
         "email": "student1@ue.edu.ph",
         "access_code": "ACCESS123",
         "name": "Maria Santos",
         "program": "BS Psychology",
         "year": 2,
+        "role": "student",
     },
     "2024002": {
         "email": "student2@ue.edu.ph",
@@ -35,6 +31,7 @@ _STUDENT_ACCOUNTS = {
         "name": "Juan dela Cruz",
         "program": "BS Computer Science",
         "year": 3,
+        "role": "student",
     },
     "2024003": {
         "email": "student3@ue.edu.ph",
@@ -42,6 +39,7 @@ _STUDENT_ACCOUNTS = {
         "name": "Ana Reyes",
         "program": "BS Nursing",
         "year": 1,
+        "role": "student",
     },
 }
 
@@ -79,6 +77,34 @@ _DEMO_COUNSELORS = {
 }
 
 
+def _students_from_env(raw: str) -> dict:
+    """Parse the enrolled student roster without retaining credentials in code."""
+    try:
+        items = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    accounts = {}
+    if not isinstance(items, list):
+        return accounts
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        student_number = str(item.get("student_number", "")).strip()
+        email = str(item.get("email", "")).strip().lower()
+        access_code = str(item.get("access_code", ""))
+        if not student_number or not email or not access_code:
+            continue
+        accounts[student_number] = {
+            "email": email,
+            "access_code": access_code,
+            "name": str(item.get("name") or student_number),
+            "program": str(item.get("program") or ""),
+            "year": item.get("year"),
+            "role": "student",
+        }
+    return accounts
+
+
 def _counselors_from_env(raw: str) -> dict:
     """Parse COUNSELOR_ACCOUNTS. A malformed value yields no accounts rather
     than crashing the server at import time."""
@@ -106,16 +132,19 @@ def _counselors_from_env(raw: str) -> dict:
 
 
 def build_test_credentials(env=None) -> dict:
-    """Student demo accounts plus whichever counselor accounts `env` allows."""
+    """Build configured enrolled accounts and explicitly enabled demo accounts."""
     env = os.environ if env is None else env
-    accounts = dict(_STUDENT_ACCOUNTS)
+    allow_demo = env.get("ALLOW_DEMO_ACCOUNTS", "").strip().lower() in (
+        "1", "true", "yes", "on"
+    )
+    accounts = _students_from_env(env.get("STUDENT_ACCOUNTS", ""))
+    if allow_demo:
+        accounts.update(_DEMO_STUDENT_ACCOUNTS)
+        accounts.update(_students_from_env(env.get("DEMO_STUDENT_ACCOUNTS", "")))
     configured = _counselors_from_env(env.get("COUNSELOR_ACCOUNTS", ""))
     if configured:
         accounts.update(configured)
-    elif (
-        env.get("ENVIRONMENT", "").strip().lower() == "development"
-        or env.get("GAIDA_ALLOW_DEMO_COUNSELORS", "").strip().lower() in ("1", "true", "yes")
-    ):
+    elif allow_demo:
         accounts.update(_DEMO_COUNSELORS)
     return accounts
 

@@ -85,7 +85,7 @@ gaida-system/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI wiring, CORS, security headers
-│   │   ├── constants.py            # TEST_CREDENTIALS (3 students + 1 counselor)
+│   │   ├── constants.py            # Environment-backed enrolled/counselor accounts
 │   │   ├── api/
 │   │   │   ├── auth.py             # /api/auth/* (login, google, consent, forgot)
 │   │   │   ├── voice.py            # /audio/* (speech-to-text, tts, analyze) — NO token guard
@@ -220,7 +220,7 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
 
 ### 7.2 Login flows
 - **Student ID login** → `POST /api/auth/login` — checks `@ue.edu.ph` domain + hardcoded credential, issues bearer token. Rate-limited by student number.
-- **Google login** → `POST /api/auth/google` — verifies the ID token against `GOOGLE_CLIENT_ID`; requires `email_verified` and a `@ue.edu.ph` domain; maps a matching `TEST_CREDENTIALS` e-mail back to the student number. `503` if server-side `GOOGLE_CLIENT_ID` is unset.
+- **Google login** → `POST /api/auth/google` — verifies the ID token against `GOOGLE_CLIENT_ID`; requires `email_verified` and a `@ue.edu.ph` domain; maps a matching configured account e-mail back to the student number. `503` if server-side `GOOGLE_CLIENT_ID` is unset.
 - **Counselor login** → `POST /api/auth/counselor-login` — validates any `TEST_CREDENTIALS` entry tagged `role: "counselor"` (COUNSELOR01–COUNSELOR05) by faculty ID + password and issues a **counselor-bearing** token (unlocks the role-gated `/api/counselor/*` routes). `401` on bad credentials (rate-limited by faculty ID). Onboarding a counselor is a `constants.py` change, not an auth.py change.
 - **Consent** → `POST /api/auth/consent` records `consent_given` per session (upsert).
 - **Forgot password** → `POST /api/auth/forgot-password` — always returns success (no e-mail enumeration).

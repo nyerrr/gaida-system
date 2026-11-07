@@ -7,6 +7,10 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: production
+      - key: ALLOW_DEMO_ACCOUNTS
+        value: "0"
+      - key: STUDENT_ACCOUNTS
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       # Managed in the Render dashboard, not here: a fine-tuned model ID is

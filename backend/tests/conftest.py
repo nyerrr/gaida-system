@@ -13,8 +13,18 @@ read at call time in ``app.utils.config.persistence_disabled``.
 """
 
 import os
+import json
 
 os.environ.setdefault("GAIDA_DISABLE_PERSISTENCE", "1")
 os.environ["AUTH_REVOCATION_BACKEND"] = "memory"
-# Counselor-login tests use the demo counselors (see app/constants.py).
-os.environ.setdefault("GAIDA_ALLOW_DEMO_COUNSELORS", "1")
+# Authentication tests use an explicit test-only roster; production defaults
+# contain no demo student or counselor accounts.
+os.environ.setdefault("ALLOW_DEMO_ACCOUNTS", "1")
+os.environ.setdefault("DEMO_STUDENT_ACCOUNTS", json.dumps([
+    {
+        "student_number": "2024001",
+        "email": "student1@ue.edu.ph",
+        "access_code": "ACCESS123",
+        "name": "Maria Santos",
+    },
+]))

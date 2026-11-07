@@ -53,6 +53,7 @@ export function getAuthToken(targetUrl = null) {
 // what keeps messages queued on a shared device from outliving the login that
 // created them.
 export async function clearSensitiveLocalData() {
+  if (typeof window === 'undefined') return
   try {
     if ('caches' in window && typeof caches.keys === 'function') {
       const keys = await caches.keys()
@@ -73,9 +74,8 @@ export async function clearSensitiveLocalData() {
 }
 
 export function clearAuth() {
-  // Clear all GAIDA localStorage state for both portals, including preferences,
-  // so a shared browser profile starts clean for its next user.
-  [
+  if (typeof window === 'undefined') return
+  const knownKeys = [
     'session_token',
     'counselor_token',
     'counselorData',
@@ -85,8 +85,37 @@ export function clearAuth() {
     'is_research_session',
     'gaida_theme',
     'gaida:alert-swipe-hint',
-  ].forEach((key) => localStorage.removeItem(key))
+    'gaida_counselor_theme',
+    'gaida:counselor-sidebar',
+  ]
+  try {
+    const gaidaKeys = Object.keys(localStorage).filter((key) =>
+      key.toLowerCase().startsWith('gaida')
+    )
+    const keysToRemove = [...new Set([...knownKeys, ...gaidaKeys])]
+    keysToRemove.forEach((key) => localStorage.removeItem(key))
+  } catch { /* storage may be unavailable */ }
   clearSensitiveLocalData()
+}
+
+export async function logoutAndClearAuth() {
+  const tokens = typeof window === 'undefined'
+    ? []
+    : ['session_token', 'counselor_token']
+      .map((key) => localStorage.getItem(key))
+      .filter(Boolean)
+  await Promise.all(tokens.map(async (token) => {
+    try {
+      await fetch(`${BACKEND_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+      })
+    } catch (error) {
+      console.warn('Logout token revocation failed:', error)
+    }
+  }))
+  clearAuth()
 }
 
 export async function apiFetch(input, options = {}, tokenOverride = null) {

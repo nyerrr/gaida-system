@@ -23,13 +23,18 @@ def test_no_counselors_on_a_deployed_server_by_default():
     assert _counselors(build_test_credentials({"ENVIRONMENT": "production"})) == {}
 
 
-def test_demo_counselors_available_in_development():
+def test_demo_counselors_require_explicit_opt_in():
     accounts = build_test_credentials({"ENVIRONMENT": "development"})
+    assert _counselors(accounts) == {}
+
+
+def test_demo_counselors_available_with_explicit_opt_in():
+    accounts = build_test_credentials({"ALLOW_DEMO_ACCOUNTS": "1"})
     assert len(_counselors(accounts)) == 5
 
 
 def test_demo_counselors_can_be_switched_on_explicitly():
-    accounts = build_test_credentials({"GAIDA_ALLOW_DEMO_COUNSELORS": "1"})
+    accounts = build_test_credentials({"ALLOW_DEMO_ACCOUNTS": "1"})
     assert "COUNSELOR01" in accounts
 
 
@@ -52,5 +57,25 @@ def test_malformed_config_gives_no_counselors_instead_of_crashing():
         assert _counselors(build_test_credentials({"COUNSELOR_ACCOUNTS": bad})) == {}
 
 
-def test_students_are_unaffected():
-    assert "2024001" in build_test_credentials({})
+def test_students_are_loaded_from_the_configured_roster():
+    accounts = build_test_credentials({
+        "STUDENT_ACCOUNTS": json.dumps([{
+            "student_number": "2024001",
+            "email": "student1@ue.edu.ph",
+            "access_code": "ACCESS123",
+        }]),
+    })
+    assert accounts["2024001"]["email"] == "student1@ue.edu.ph"
+
+
+def test_demo_student_roster_requires_explicit_opt_in():
+    demo = json.dumps([{
+        "student_number": "2024001",
+        "email": "student1@ue.edu.ph",
+        "access_code": "ACCESS123",
+    }])
+    assert "2024001" not in build_test_credentials({"DEMO_STUDENT_ACCOUNTS": demo})
+    assert "2024001" in build_test_credentials({
+        "ALLOW_DEMO_ACCOUNTS": "1",
+        "DEMO_STUDENT_ACCOUNTS": demo,
+    })
