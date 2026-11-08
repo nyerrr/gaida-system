@@ -148,6 +148,32 @@ KEYWORDS = {
         ("suicide", 3.5),
         ("suicidal", 3.5),
         ("i want to kill myself", 3.5),
+        # Direct first-person statements about not wanting or being able to
+        # live must take the hard crisis path, including common contractions.
+        ("i don't want to live", 4.0),
+        ("i dont want to live", 4.0),
+        ("i don't wanna live", 4.0),
+        ("i dont wanna live", 4.0),
+        ("i can't live anymore", 4.0),
+        ("i cant live anymore", 4.0),
+        ("i cannot live anymore", 4.0),
+        ("don't want to be alive", 4.0),
+        ("dont want to be alive", 4.0),
+        ("don't wanna be alive", 4.0),
+        ("dont wanna be alive", 4.0),
+        ("i don't want to be alive", 4.0),
+        ("i dont want to be alive", 4.0),
+        ("i don't wanna be alive", 4.0),
+        ("i dont wanna be alive", 4.0),
+        ("i'm tired of living", 4.0),
+        ("im tired of living", 4.0),
+        ("i'm tired of being alive", 4.0),
+        ("im tired of being alive", 4.0),
+        ("i can't keep living", 4.0),
+        ("i cant keep living", 4.0),
+        ("i cannot keep living", 4.0),
+        ("i don't see a reason to stay alive", 4.0),
+        ("i dont see a reason to stay alive", 4.0),
 
         # Indirect English
         ("no point of living", 4.0),
@@ -445,7 +471,19 @@ METHOD_OBJECT_PAIRS = (
 # is the safety net that keeps clear self-harm language from being diluted to
 # Moderate by rounding/fuzzy matching when no hard keyword was matched.
 EXPLICIT_SELF_HARM_RE = re.compile(
-    r"\b(kill(ing|ed|er)?|kms|dying|die|suicid\w*|self[- ]harm\w*|"
+    # A bare mention of death ("someday I will die") is not evidence of
+    # self-harm intent. Require first-person desire/intent for die/dying; the
+    # direct crisis phrase matcher still handles its explicit known phrases.
+    r"\b(i\s+(?:(?:really|just)\s+)?(?:want|wanna|wish|hope|plan|intend)\s+"
+    r"(?:to\s+)?(?:just\s+)?die|i\s+should\s+(?:just\s+)?die|"
+    r"i\s+might\s+as\s+well\s+die|i\s+feel\s+like\s+dying|"
+    r"i\s+(?:do\s+not|don't|dont)\s+(?:want\s+to|wanna)\s+live|"
+    r"(?:i\s+)?(?:do\s+not|don't|dont)\s+(?:want\s+to|wanna)\s+be\s+alive|"
+    r"i\s+(?:cannot|can't|cant)\s+live\s+anymore|"
+    r"i\s+(?:really\s+)?(?:am\s+|['’]?m\s+)?tired\s+of\s+(?:living|(?:being\s+)?alive)|"
+    r"i\s+(?:really\s+)?(?:cannot|can't|cant)\s+keep\s+living|"
+    r"let\s+me\s+(?:just\s+)?die|"
+    r"kill(ing|ed|er)?|kms|suicid\w*|self[- ]harm\w*|"
     r"off (my )?self|end(ing)? my|hurt myself|harm myself|cut myself|"
     r"strangl\w* myself|chok\w* myself|suffocat\w* myself|hang(ing|ed)? myself|"
     r"wakasan|wawakasan|mamatay|magpakamatay|kamatayan|papatayin|patayin|"
