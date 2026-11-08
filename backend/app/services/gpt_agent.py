@@ -1,7 +1,9 @@
 import os
 import re
+import json
 import zlib
 import logging
+from pathlib import Path
 from difflib import SequenceMatcher
 from dotenv import load_dotenv
 from typing import Dict, Any, List
@@ -16,12 +18,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-# The previous value was a fine-tune of `gpt-3.5-turbo-0125`, which OpenAI shut
-# down on 2026-10-23. Calls to it now return 404 model_not_found, so every reply
-# silently degraded to the canned fallback. Keep this configurable so the next
-# retirement is an env change, not a code change.
-OPENAI_MODEL_BASE = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+_HF_TOKEN = os.getenv("HF_TOKEN")
+_LLM_BASE_URL = os.getenv("LLM_BASE_URL")
+LLM_MODEL = os.getenv("LLM_MODEL", "Qwen/Qwen3.5-9B")
 MAX_HISTORY_MESSAGES = 4
 
 # Re-balanced against the response flows below.
@@ -62,12 +61,53 @@ ECHO_HOLD_CHARS = 180
 ECHO_GUARD_EXEMPT = {"crisis"}
 
 client = None
-if OpenAI and _OPENAI_API_KEY:
+if OpenAI and _HF_TOKEN:
     try:
-        client = OpenAI(api_key=_OPENAI_API_KEY)
+        client = OpenAI(api_key=_HF_TOKEN, base_url=_LLM_BASE_URL)
     except Exception as e:
         logger.error("Failed to initialize OpenAI client: %s", e)
         client = None
+
+
+def _load_tagged_examples() -> dict[str, list[dict[str, str]]]:
+    """Load training turns once, grouped by the anxiety tag in their system prompt."""
+    examples: dict[str, list[dict[str, str]]] = {}
+    source = Path(__file__).resolve().parents[2] / "training" / "finetune.jsonl"
+    try:
+        with source.open(encoding="utf-8-sig") as training_file:
+            for line in training_file:
+                if not line.strip():
+                    continue
+                try:
+                    messages = json.loads(line).get("messages", [])
+                except (json.JSONDecodeError, AttributeError):
+                    continue
+                system = next((m.get("content", "") for m in messages
+                               if isinstance(m, dict) and m.get("role") == "system"), "")
+                tag_match = next(
+                    (match for match in re.finditer(r"\[[^\]]+\]", system)
+                     if "DETECTED" in match.group(0) or match.group(0) == "[VENT MODE ACTIVE]"),
+                    None,
+                )
+                if not tag_match:
+                    continue
+                turns = [{"role": m["role"], "content": m["content"]}
+                         for m in messages if isinstance(m, dict)
+                         and m.get("role") in ("user", "assistant")
+                         and isinstance(m.get("content"), str) and m["content"].strip()]
+                if turns:
+                    examples.setdefault(tag_match.group(0), []).append({"turns": turns})
+    except OSError as exc:
+        logger.error("Could not load few-shot training examples from %s: %s", source, exc)
+    return examples
+
+
+_TAGGED_EXAMPLES = _load_tagged_examples()
+
+
+def _reasoning_effort_kwargs() -> dict[str, dict[str, str]]:
+    effort = os.getenv("LLM_REASONING_EFFORT")
+    return {"extra_body": {"reasoning_effort": effort}} if effort else {}
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1440,6 +1480,21 @@ def _build_gpt_messages(
     return messages
 
 
+def _add_few_shot_examples(messages: List[Dict[str, str]], user_message: str) -> List[Dict[str, str]]:
+    """Insert up to three cached demonstrations matching the system prompt tag."""
+    del user_message
+    if not messages or messages[0].get("role") != "system":
+        return messages
+    match = re.search(r"\[[^\]]*(?:ANXIETY DETECTED|CRISIS DETECTED|VENT MODE ACTIVE|LOSS DETECTED)[^\]]*\]", messages[0].get("content", ""))
+    if not match:
+        return messages
+    examples = _TAGGED_EXAMPLES.get(match.group(0), [])[:3]
+    if examples:
+        turns = [turn for example in examples for turn in example["turns"]]
+        return [messages[0], *turns, *messages[1:]]
+    return messages
+
+
 def _max_tokens_for(anxiety_level: str | None) -> int:
     return TOKEN_LIMITS.get(anxiety_level.lower() if anxiety_level else "none", 130)
 
@@ -1542,7 +1597,7 @@ def generate_response_with_gpt(
 ) -> Dict[str, Any]:
 
     if not client:
-        logger.error("OpenAI client is not initialized")
+        logger.error("LLM client is not initialized")
         return {"response": None, "used": False}
 
     messages = _build_gpt_messages(
@@ -1554,14 +1609,16 @@ def generate_response_with_gpt(
     )
     if messages is None:
         return {"response": None, "used": False}
+    messages = _add_few_shot_examples(messages, user_message)
 
     # ── Step 7: Call OpenAI ───────────────────────────────────────
     try:
         resp = client.chat.completions.create(
-            model=OPENAI_MODEL_BASE,
+            model=LLM_MODEL,
             messages=messages,
             temperature=0.75,
             max_tokens=_max_tokens_for(anxiety_level),
+            **_reasoning_effort_kwargs(),
         )
 
         content = None
@@ -1569,6 +1626,8 @@ def generate_response_with_gpt(
         if hasattr(resp, "choices") and len(resp.choices) > 0:
             content = resp.choices[0].message.content
             finish_reason = resp.choices[0].finish_reason
+
+        content = (content or "").split("</think>")[-1].strip()
 
         if not content:
             logger.warning("GPT returned empty content")
@@ -1585,16 +1644,18 @@ def generate_response_with_gpt(
         )
         if _is_exemplar_echo(content, echo_flow):
             retry = client.chat.completions.create(
-                model=OPENAI_MODEL_BASE,
+                model=LLM_MODEL,
                 messages=_echo_retry_messages(messages, echo_flow or ""),
                 temperature=0.9,
                 max_tokens=_max_tokens_for(anxiety_level),
+                **_reasoning_effort_kwargs(),
             )
             retried = (
                 retry.choices[0].message.content
                 if hasattr(retry, "choices") and len(retry.choices) > 0
                 else None
             )
+            retried = (retried or "").split("</think>")[-1].strip()
             if retried and not _is_exemplar_echo(retried, echo_flow):
                 content = retried
             elif retried:
@@ -1618,13 +1679,13 @@ def generate_response_with_gpt(
         return {"response": content.strip(), "used": True}
 
     except RateLimitError:
-        logger.error("OpenAI rate limit reached")
+        logger.error("LLM request was rate limited or quota was exceeded")
         return {"response": None, "used": False}
     except APIConnectionError:
-        logger.error("OpenAI connection error")
+        logger.error("LLM connection error")
         return {"response": None, "used": False}
     except APITimeoutError:
-        logger.error("OpenAI request timed out")
+        logger.error("LLM request timed out")
         return {"response": None, "used": False}
     except Exception as e:
         logger.error("GPT call failed: %s", e)
@@ -1662,14 +1723,16 @@ def stream_gpt_response(
     )
     if messages is None:
         return
+    messages = _add_few_shot_examples(messages, user_message)
 
     try:
         resp = client.chat.completions.create(
-            model=OPENAI_MODEL_BASE,
+            model=LLM_MODEL,
             messages=messages,
             temperature=0.75,
             max_tokens=_max_tokens_for(anxiety_level),
             stream=True,
+            **_reasoning_effort_kwargs(),
         )
 
         echo_flow = INTENT_FLOW_OVERRIDE.get((intent or "").lower()) or (
@@ -1715,19 +1778,16 @@ def stream_gpt_response(
                             break
                         for piece_text in held:
                             full_text.append(piece_text)
-                            yield (piece_text, "".join(full_text))
                         held = []
                     continue
 
                 full_text.append(delta)
-                yield (delta, "".join(full_text))
 
         # A reply shorter than the hold window never reached the check. Release
         # it rather than dropping it — nothing was wrong with it.
         if held and not echoed:
             for piece_text in held:
                 full_text.append(piece_text)
-                yield (piece_text, "".join(full_text))
             held = []
 
         if echoed:
@@ -1737,18 +1797,19 @@ def stream_gpt_response(
             except Exception:
                 pass
             retry = client.chat.completions.create(
-                model=OPENAI_MODEL_BASE,
+                model=LLM_MODEL,
                 messages=_echo_retry_messages(messages, echo_flow or ""),
                 temperature=0.9,
                 max_tokens=_max_tokens_for(anxiety_level),
+                **_reasoning_effort_kwargs(),
             )
             retried = (
                 retry.choices[0].message.content
                 if hasattr(retry, "choices") and len(retry.choices) > 0
                 else None
             )
+            retried = (retried or "").split("</think>")[-1].strip()
             if retried:
-                yield (retried, retried)
                 full_text = [retried]
                 finish_reason = None
             else:
@@ -1757,7 +1818,6 @@ def stream_gpt_response(
                 logger.warning("echo retry returned nothing; keeping original")
                 for piece_text in held:
                     full_text.append(piece_text)
-                    yield (piece_text, "".join(full_text))
                 held = []
 
         if not full_text:
@@ -1771,21 +1831,22 @@ def stream_gpt_response(
             # the same reason. No corresponding "delta" is yielded — callers
             # should only use this final (None, text) pair to update their
             # stored full-text, not to render another chat bubble chunk.
-            raw = "".join(full_text)
+            raw = ("".join(full_text) or "").split("</think>")[-1].strip()
             if finish_reason == "length":
                 raw = _trim_to_complete_sentence(raw)
             raw = ensure_crisis_resources(raw, crisis_resources)
             repaired = ensure_closing_question(
                 raw, anxiety_level, user_message, intent
             )
-            if repaired != raw:
-                yield (None, repaired)
+            # Buffer the stream until completion so any Qwen reasoning before
+            # </think> is never sent to the client.
+            yield (repaired, repaired)
 
     except RateLimitError:
-        logger.error("OpenAI rate limit reached (stream)")
+        logger.error("LLM stream was rate limited or quota was exceeded")
     except APIConnectionError:
-        logger.error("OpenAI connection error (stream)")
+        logger.error("LLM stream connection error")
     except APITimeoutError:
-        logger.error("OpenAI request timed out (stream)")
+        logger.error("LLM stream timed out")
     except Exception as e:
         logger.error("GPT stream failed: %s", e)
