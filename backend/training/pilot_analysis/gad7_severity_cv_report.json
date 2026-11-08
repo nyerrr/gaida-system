@@ -1,0 +1,199 @@
+{
+  "evaluation": "5-fold stratified group cross-validation; one document per session",
+  "target": "GAD-7-derived four-band severity label; not a clinical diagnosis",
+  "input_rows": 482,
+  "session_count": 78,
+  "group_count": 71,
+  "majority_baseline": {
+    "predicted_class": "mild",
+    "accuracy_percent": 48.72
+  },
+  "session_counts_by_gad7_band": {
+    "severe": 14,
+    "mild": 38,
+    "moderate": 18,
+    "minimal": 8
+  },
+  "classes": [
+    "minimal",
+    "mild",
+    "moderate",
+    "severe"
+  ],
+  "models": {
+    "Logistic Regression": {
+      "accuracy_percent": 37.18,
+      "macro_f1_percent": 24.08,
+      "per_class": {
+        "minimal": {
+          "support_sessions": 8,
+          "precision_percent": 0.0,
+          "recall_percent": 0.0,
+          "f1_percent": 0.0
+        },
+        "mild": {
+          "support_sessions": 38,
+          "precision_percent": 45.83,
+          "recall_percent": 57.89,
+          "f1_percent": 51.16
+        },
+        "moderate": {
+          "support_sessions": 18,
+          "precision_percent": 30.77,
+          "recall_percent": 22.22,
+          "f1_percent": 25.81
+        },
+        "severe": {
+          "support_sessions": 14,
+          "precision_percent": 17.65,
+          "recall_percent": 21.43,
+          "f1_percent": 19.35
+        }
+      },
+      "confusion_matrix_rows_true_columns_predicted": [
+        [
+          0,
+          7,
+          0,
+          1
+        ],
+        [
+          0,
+          22,
+          6,
+          10
+        ],
+        [
+          0,
+          11,
+          4,
+          3
+        ],
+        [
+          0,
+          8,
+          3,
+          3
+        ]
+      ]
+    },
+    "Random Forest": {
+      "accuracy_percent": 39.74,
+      "macro_f1_percent": 16.84,
+      "per_class": {
+        "minimal": {
+          "support_sessions": 8,
+          "precision_percent": 0.0,
+          "recall_percent": 0.0,
+          "f1_percent": 0.0
+        },
+        "mild": {
+          "support_sessions": 38,
+          "precision_percent": 46.15,
+          "recall_percent": 78.95,
+          "f1_percent": 58.25
+        },
+        "moderate": {
+          "support_sessions": 18,
+          "precision_percent": 0.0,
+          "recall_percent": 0.0,
+          "f1_percent": 0.0
+        },
+        "severe": {
+          "support_sessions": 14,
+          "precision_percent": 12.5,
+          "recall_percent": 7.14,
+          "f1_percent": 9.09
+        }
+      },
+      "confusion_matrix_rows_true_columns_predicted": [
+        [
+          0,
+          8,
+          0,
+          0
+        ],
+        [
+          0,
+          30,
+          3,
+          5
+        ],
+        [
+          0,
+          16,
+          0,
+          2
+        ],
+        [
+          0,
+          11,
+          2,
+          1
+        ]
+      ]
+    },
+    "Neural Network": {
+      "accuracy_percent": 24.36,
+      "macro_f1_percent": 16.04,
+      "per_class": {
+        "minimal": {
+          "support_sessions": 8,
+          "precision_percent": 9.68,
+          "recall_percent": 37.5,
+          "f1_percent": 15.38
+        },
+        "mild": {
+          "support_sessions": 38,
+          "precision_percent": 42.86,
+          "recall_percent": 39.47,
+          "f1_percent": 41.1
+        },
+        "moderate": {
+          "support_sessions": 18,
+          "precision_percent": 0.0,
+          "recall_percent": 0.0,
+          "f1_percent": 0.0
+        },
+        "severe": {
+          "support_sessions": 14,
+          "precision_percent": 8.33,
+          "recall_percent": 7.14,
+          "f1_percent": 7.69
+        }
+      },
+      "confusion_matrix_rows_true_columns_predicted": [
+        [
+          3,
+          3,
+          0,
+          2
+        ],
+        [
+          16,
+          15,
+          0,
+          7
+        ],
+        [
+          7,
+          9,
+          0,
+          2
+        ],
+        [
+          5,
+          8,
+          0,
+          1
+        ]
+      ]
+    }
+  },
+  "limitations": [
+    "GAD-7 provides four severity bands, so this does not evaluate the SOP's Crisis class.",
+    "Only 78 sessions are available; minimal has 8 sessions, so estimates are imprecise.",
+    "Anonymous participant identity is unavailable in the export; those sessions are grouped individually.",
+    "This separate experiment does not alter GAIDA's production intent classifier."
+  ]
+}

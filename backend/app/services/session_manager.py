@@ -213,6 +213,8 @@ def load_session_from_db(session_id: str) -> Dict[str, Any] | None:
         "peak_confidence": peak_confidence,
         "post_crisis": last.get("intent") == "suicidal" or last.get("severity") in ("High", "Crisis"),
         "pending_acoustic": None,
+        "acoustic_baseline": None,
+        "acoustic_turn_count": 0,
         "covered_themes": covered_themes,
         "resolved": resolved,
         "resolved_at": resolved_at,
@@ -264,6 +266,9 @@ def start_session(user_id: str | None = None, session_id: str | None = None) -> 
             "running_intent": "neutral",
             "peak_severity": "Normal",
             "peak_confidence": 0.3,
+            "pending_acoustic": None,
+            "acoustic_baseline": None,
+            "acoustic_turn_count": 0,
         }
     }
     if persistence_disabled():

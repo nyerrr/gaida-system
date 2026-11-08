@@ -67,7 +67,7 @@ def _is_ffmpeg_available(cmd: str) -> bool:
         return False
 
 
-def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
+def extract_features(audio_bytes: bytes, sample_rate: int = 16000, baseline: dict = None) -> dict:
     try:
         # Try direct load first
         try:
@@ -98,6 +98,22 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
         features['pitch_mean'] = float(np.mean(voiced_f0)) if len(voiced_f0) > 0 else 0.0
         features['pitch_std']  = float(np.std(voiced_f0))  if len(voiced_f0) > 0 else 0.0
 
+        # Semitone representation (relative to A440)
+        if features['pitch_mean'] > 0:
+            features['pitch_semitones'] = float(12.0 * np.log2(features['pitch_mean'] / 440.0) + 69.0)
+        else:
+            features['pitch_semitones'] = 0.0
+
+        # Baseline comparison if available
+        if baseline and isinstance(baseline, dict) and baseline.get('pitch_mean', 0) > 0 and features['pitch_mean'] > 0:
+            base_p_mean = float(baseline['pitch_mean'])
+            base_p_std = max(float(baseline.get('pitch_std', 20.0)), 5.0)
+            features['pitch_delta_semitones'] = float(abs(12.0 * np.log2(features['pitch_mean'] / base_p_mean)))
+            features['pitch_std_ratio'] = float(features['pitch_std'] / base_p_std)
+        else:
+            features['pitch_delta_semitones'] = 0.0
+            features['pitch_std_ratio'] = 1.0
+
         # ── Energy (RMS) ────────────────────────────────────────────────────
         rms = librosa.feature.rms(y=y)[0]
         features['energy_mean'] = float(np.mean(rms))
@@ -115,6 +131,11 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
         duration = librosa.get_duration(y=y, sr=sr)
         features['speech_rate'] = float(len(onsets) / duration) if duration > 0 else 0.0
         features['duration'] = float(duration)
+
+        if baseline and isinstance(baseline, dict) and 'speech_rate' in baseline:
+            features['rate_delta'] = float(features['speech_rate'] - baseline['speech_rate'])
+        else:
+            features['rate_delta'] = 0.0
 
         # ── Jitter ──────────────────────────────────────────────────────────
         if len(voiced_f0) > 1:
@@ -153,12 +174,21 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
             features[f'mfcc_{i+1}_std']  = float(np.std(coef))
 
         # ── Scores ───────────────────────────────────────────────────────────
-        features['acoustic_anxiety_score'] = _score_from_features(features)
+        features['acoustic_anxiety_score'] = _score_from_features(features, baseline=baseline)
         features['acoustic_emotion'] = _detect_emotion(features)
-        features['acoustic_confidence'] = min(
-            1.0,
-            features['acoustic_anxiety_score'] + 0.3
-        )
+
+        # ── Confidence Estimation ─────────────────────────────────────────────
+        # Confidence reflects sample duration, speech presence, and score intensity
+        if duration < 0.8:
+            conf = min(0.35, duration / 2.0)
+        else:
+            dur_factor = min(1.0, duration / 2.5)
+            conf = dur_factor * (0.45 + 0.55 * min(features['acoustic_anxiety_score'] * 1.2, 1.0))
+
+        if len(voiced_f0) < 5 and duration >= 0.8:
+            conf *= 0.5
+
+        features['acoustic_confidence'] = round(float(min(1.0, max(0.1, conf))), 3)
 
         return features
 
@@ -167,47 +197,73 @@ def extract_features(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
         return _empty_features()
 
 
-def _score_from_features(f: dict) -> float:
+def _score_from_features(f: dict, baseline: dict = None) -> float:
     score = 0.0
     weights = 0.0
 
-    pitch_std = f.get('pitch_std', 0)
-    if pitch_std > 0:
-        pitch_score = min(pitch_std / 80.0, 1.0)
-        score += pitch_score * 0.25
-        weights += 0.25
+    # 1. Pitch Instability (weight: 0.25)
+    pitch_std = f.get('pitch_std', 0.0)
+    std_ratio = f.get('pitch_std_ratio', 1.0)
+    pitch_delta_st = f.get('pitch_delta_semitones', 0.0)
 
-    jitter = f.get('jitter', 0)
-    if jitter > 0:
-        jitter_score = min(jitter / 0.05, 1.0)
-        score += jitter_score * 0.25
-        weights += 0.25
+    if baseline and std_ratio > 0:
+        pitch_score = min(max(std_ratio - 0.8, 0.0) / 1.5, 1.0) * 0.7 + min(pitch_delta_st / 3.5, 1.0) * 0.3
+    else:
+        pitch_score = min(pitch_std / 70.0, 1.0) if pitch_std > 0 else 0.0
 
-    shimmer = f.get('shimmer', 0)
-    if shimmer > 0:
-        shimmer_score = min(shimmer / 0.30, 1.0)
-        score += shimmer_score * 0.20
-        weights += 0.20
+    score += pitch_score * 0.25
+    weights += 0.25
 
-    pause_ratio = f.get('pause_ratio', 0)
-    pause_score = min(pause_ratio / 0.60, 1.0)
+    # 2. Jitter / Vocal Micro-tremor (weight: 0.25)
+    # Healthy voice jitter is < 0.01; stressed vocal fold tension is >= 0.02
+    jitter = f.get('jitter', 0.0)
+    jitter_score = min(max(jitter - 0.005, 0.0) / 0.035, 1.0) if jitter > 0 else 0.0
+    score += jitter_score * 0.25
+    weights += 0.25
+
+    # 3. Shimmer / Amplitude Perturbation (weight: 0.20)
+    # Strained/breathy amplitude perturbation is >= 0.15
+    shimmer = f.get('shimmer', 0.0)
+    shimmer_score = min(max(shimmer - 0.05, 0.0) / 0.22, 1.0) if shimmer > 0 else 0.0
+    score += shimmer_score * 0.20
+    weights += 0.20
+
+    # 4. Pause Detection / Hesitations (weight: 0.15)
+    pause_ratio = f.get('pause_ratio', 0.0)
+    pause_score = min(max(pause_ratio - 0.15, 0.0) / 0.40, 1.0)
     score += pause_score * 0.15
     weights += 0.15
 
-    rate = f.get('speech_rate', 3)
-    if rate > 6:
-        rate_score = min((rate - 6) / 4.0, 1.0)
-    elif rate < 1.5:
-        rate_score = min((1.5 - rate) / 1.5, 1.0)
+    # 5. Speech Rate (weight: 0.15)
+    # Agitated/pressured: > 5.5 onsets/sec. Hesitant/frozen: < 1.8 onsets/sec.
+    rate = f.get('speech_rate', 3.0)
+    if rate > 5.5:
+        rate_score = min((rate - 5.5) / 3.5, 1.0)
+    elif 0.1 < rate < 1.8:
+        rate_score = min((1.8 - rate) / 1.5, 1.0)
     else:
         rate_score = 0.0
     score += rate_score * 0.15
     weights += 0.15
 
-    if weights > 0:
-        score = score / weights * (weights / 1.0)
+    raw_score = score / weights if weights > 0 else 0.0
 
-    return round(min(score, 1.0), 3)
+    # ── High-Arousal Control Discrimination ──────────────────────────────
+    # Distinguish controlled, confident/angry fast speech from anxious speech:
+    # If speech is fast and continuous, but jitter is low and pauses are absent,
+    # the speaker exhibits strong neuromuscular vocal control.
+    is_controlled_assertive = (
+        rate > 5.2 and jitter < 0.015 and pause_ratio < 0.18
+    )
+    if is_controlled_assertive:
+        raw_score *= 0.60  # discount: controlled rapid speech is not acute anxiety
+
+    # If active vocal tremor is detected (elevated jitter AND shimmer), boost score
+    has_vocal_tremor = (jitter >= 0.020 and shimmer >= 0.15)
+    if has_vocal_tremor and raw_score > 0.20:
+        raw_score = min(1.0, raw_score + 0.10)
+
+    return round(min(max(raw_score, 0.0), 1.0), 3)
 
 
 def _detect_emotion(f: dict) -> str:
@@ -220,33 +276,56 @@ def _detect_emotion(f: dict) -> str:
     shimmer     = f.get('shimmer', 0)
 
     scores = {'anxious': 0.0, 'sad': 0.0, 'angry': 0.0, 'calm': 0.0}
-
-    # Energy cutoffs are relative to the (normalized) reference RMS, so with
-    # cleaning off they equal the legacy absolutes (0.02 / 0.08) unchanged.
     energy_cutoffs = emotion_energy_thresholds()
 
-    if pitch_std > 30:       scores['anxious'] += 0.3
-    if speech_rate > 5:      scores['anxious'] += 0.25
-    if jitter > 0.02:        scores['anxious'] += 0.25
-    if shimmer > 0.15:       scores['anxious'] += 0.20
+    # ANXIOUS: pitch instability, vocal tremor (jitter/shimmer), hesitations or erratic rate
+    if pitch_std > 28:
+        scores['anxious'] += 0.25
+    if jitter > 0.020:
+        scores['anxious'] += 0.25
+    if shimmer > 0.15:
+        scores['anxious'] += 0.20
+    if pause_ratio > 0.30:
+        scores['anxious'] += 0.20
+    if speech_rate > 5.2 and (jitter > 0.018 or pause_ratio > 0.22):
+        scores['anxious'] += 0.20
+    elif 0.1 < speech_rate < 1.8 and pause_ratio > 0.35:
+        scores['anxious'] += 0.15
 
-    if pitch_mean < 150:     scores['sad'] += 0.3
-    if speech_rate < 2:      scores['sad'] += 0.3
-    if pause_ratio > 0.5:    scores['sad'] += 0.25
-    if energy_mean < energy_cutoffs['sad']: scores['sad'] += 0.15
+    # SAD: low pitch, slow speech, quiet energy, high pause ratio
+    if 0 < pitch_mean < 155:
+        scores['sad'] += 0.30
+    if 0.1 < speech_rate < 2.2:
+        scores['sad'] += 0.30
+    if pause_ratio > 0.45:
+        scores['sad'] += 0.25
+    if energy_mean < energy_cutoffs['sad']:
+        scores['sad'] += 0.20
 
-    if energy_mean > energy_cutoffs['angry']: scores['angry'] += 0.3
-    if pitch_mean > 250:     scores['angry'] += 0.25
-    if speech_rate > 6:      scores['angry'] += 0.25
-    if pause_ratio < 0.1:    scores['angry'] += 0.20
+    # ANGRY: high energy, high pitch, high speech rate, low pauses, but CONTROLLED jitter
+    if energy_mean > energy_cutoffs['angry']:
+        scores['angry'] += 0.35
+    if pitch_mean > 240:
+        scores['angry'] += 0.25
+    if speech_rate > 5.5:
+        scores['angry'] += 0.25
+    if pause_ratio < 0.15:
+        scores['angry'] += 0.20
+    if jitter < 0.018:
+        scores['angry'] += 0.15
 
-    if 1.5 <= speech_rate <= 4.5: scores['calm'] += 0.3
-    if pitch_std < 20:            scores['calm'] += 0.3
-    if jitter < 0.01:             scores['calm'] += 0.2
-    if 0.1 <= pause_ratio <= 0.3: scores['calm'] += 0.2
+    # CALM: steady pitch, moderate tempo, low jitter, natural pauses
+    if 1.8 <= speech_rate <= 4.6:
+        scores['calm'] += 0.30
+    if 0 < pitch_std < 22:
+        scores['calm'] += 0.30
+    if 0 < jitter < 0.012:
+        scores['calm'] += 0.25
+    if 0.08 <= pause_ratio <= 0.30:
+        scores['calm'] += 0.20
 
     best = max(scores, key=scores.get)
-    if scores[best] < 0.2:
+    if scores[best] < 0.25:
         return 'neutral'
     return best
 
@@ -272,12 +351,33 @@ def fuse_with_text_severity(
 
     a = order.get(acoustic_severity, 0)
     t = order.get(text_severity, 0)
-    fused = max(a, t)
 
-    if acoustic_emotion in ('sad', 'anxious') and fused == 0:
+    # If acoustic confidence is low (< 0.45), trust text only
+    if acoustic_confidence < 0.45:
+        return text_severity if text_severity in order else reverse[t]
+
+    fused = t
+
+    # If acoustic indicates higher distress than text:
+    if a > t:
+        if acoustic_emotion in ('anxious', 'sad'):
+            if acoustic_confidence >= 0.75:
+                # Strong acoustic confidence: can upgrade up to 2 tiers (e.g. Normal -> Moderate)
+                fused = min(a, t + 2)
+            else:
+                # Moderate acoustic confidence: conservative single tier upgrade
+                fused = min(a, t + 1)
+    else:
+        fused = t
+
+    # If text is Normal but voice indicates anxious/sad emotion with solid confidence, bump to Low
+    if fused == 0 and acoustic_emotion in ('anxious', 'sad') and acoustic_confidence >= 0.50:
         fused = 1
 
-    return reverse[fused]
+    # Safety guard: acoustic analysis alone NEVER escalates to Crisis
+    fused = min(fused, 3)
+
+    return reverse.get(fused, 'Normal')
 
 
 def _empty_features() -> dict:
@@ -288,6 +388,10 @@ def _empty_features() -> dict:
         'duration': 0.0, 'jitter': 0.0, 'shimmer': 0.0,
         'zcr_mean': 0.0, 'spectral_centroid_mean': 0.0,
         'spectral_rolloff_mean': 0.0,
+        'pitch_semitones': 0.0,
+        'pitch_delta_semitones': 0.0,
+        'pitch_std_ratio': 1.0,
+        'rate_delta': 0.0,
         'acoustic_anxiety_score': 0.0,
         'acoustic_emotion': 'neutral',
         'acoustic_confidence': 0.0,

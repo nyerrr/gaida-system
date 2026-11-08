@@ -37,6 +37,9 @@ async def speech_to_text(
             session = get_session(session_id)
             if session and session.get("user_id") and session["user_id"] != user["user_id"]:
                 raise HTTPException(status_code=403, detail="Session does not belong to this user")
+        else:
+            session_id = start_session()
+            session = get_session(session_id)
 
         # Accept any audio content type — browser sends various formats
         content_type = audio.content_type or ""
@@ -48,59 +51,7 @@ async def speech_to_text(
         if len(audio_bytes) == 0:
             raise HTTPException(status_code=400, detail="Empty audio file.")
 
-        # --- Step 1: Acoustic feature extraction ---
-        acoustic_features_dict = {}
-        acoustic_severity = "Normal"
-        acoustic_confidence = 0.0
-        acoustic_emotion = "neutral"
-
-        try:
-            acoustic_features_dict = extract_features(audio_bytes)
-            acoustic_severity = map_acoustic_to_severity(
-                acoustic_features_dict.get("acoustic_anxiety_score", 0.0)
-            )
-            acoustic_confidence = acoustic_features_dict.get("acoustic_confidence", 1.0)
-            acoustic_emotion = acoustic_features_dict.get("acoustic_emotion", "neutral")
-
-            # ── Log to Supabase ──────────────────────────────────────────────
-            log_to_supabase(session_id=session_id or "unknown", features=acoustic_features_dict)
-
-        except Exception:
-            print("[voice] Acoustic feature extraction failed (non-fatal)")
-        # --- Step 2: Save acoustic features to session ---
-        if session_id:
-            session = get_session(session_id)
-            if session is None:
-                session_id = start_session()
-                session = get_session(session_id)
-        else:
-            session_id = start_session()
-            session = get_session(session_id)
-
-        if session:
-            if "meta" not in session:
-                session["meta"] = {}
-            session["meta"]["pending_acoustic"] = {
-                "severity": acoustic_severity,
-                "emotion": acoustic_emotion,
-                "confidence": acoustic_confidence,
-                "anxiety_score": acoustic_features_dict.get("acoustic_anxiety_score", 0.0),
-                "pitch_mean": acoustic_features_dict.get("pitch_mean", 0.0),
-                "speech_rate": acoustic_features_dict.get("speech_rate", 0.0),
-                "pause_ratio": acoustic_features_dict.get("pause_ratio", 0.0),
-                "jitter": acoustic_features_dict.get("jitter", 0.0),
-                "shimmer": acoustic_features_dict.get("shimmer", 0.0),
-                "energy_mean": acoustic_features_dict.get("energy_mean", 0.0),
-            }
-
-        # --- Step 3: Transcription (hosted OpenAI) ---
-        # The upload's real container varies by platform: Android/desktop
-        # browsers record audio/webm, iOS Safari (14.3+, including the
-        # installed PWA) only supports audio/mp4. OpenAI's transcription
-        # API keys off the filename extension, so mismatching it against
-        # the actual container (e.g. always claiming ".webm" for an
-        # mp4-encoded iPhone recording) makes transcription fail on iOS.
-        # Derive the extension from what the browser actually sent.
+        # Derive extension from content type / filename
         _EXT_BY_CONTENT_TYPE = {
             "audio/webm": "webm",
             "audio/mp4": "mp4",
@@ -117,17 +68,84 @@ async def speech_to_text(
             ext = _EXT_BY_CONTENT_TYPE.get(base_type, "webm")
         suffix = f".{ext}"
 
-        try:
-            result = await asyncio.to_thread(
-                _get_voice_client().audio.transcriptions.create,
-                model=_STT_MODEL,
-                file=(f"audio{suffix}", audio_bytes),
-            )
-            transcript = getattr(result, "text", "").strip()
+        # Fetch baseline from session if available
+        baseline = None
+        if session and "meta" in session:
+            baseline = session["meta"].get("acoustic_baseline")
 
+        # ── Concurrently run Feature Extraction & STT Transcription ──────────
+        async def _extract():
+            try:
+                return await asyncio.to_thread(extract_features, audio_bytes, baseline=baseline)
+            except Exception as e:
+                print(f"[voice] Acoustic feature extraction error: {e}")
+                return {}
+
+        async def _transcribe():
+            try:
+                result = await asyncio.to_thread(
+                    _get_voice_client().audio.transcriptions.create,
+                    model=_STT_MODEL,
+                    file=(f"audio{suffix}", audio_bytes),
+                )
+                return getattr(result, "text", "").strip()
+            except Exception as e:
+                print(f"[voice] Transcription error: {e}")
+                raise HTTPException(status_code=500, detail="Transcription failed") from None
+
+        acoustic_features_dict, transcript = await asyncio.gather(_extract(), _transcribe())
+
+        acoustic_severity = map_acoustic_to_severity(
+            acoustic_features_dict.get("acoustic_anxiety_score", 0.0)
+        )
+        acoustic_confidence = acoustic_features_dict.get("acoustic_confidence", 0.0)
+        acoustic_emotion = acoustic_features_dict.get("acoustic_emotion", "neutral")
+
+        # ── Log to Supabase ──────────────────────────────────────────────────
+        try:
+            log_to_supabase(session_id=session_id or "unknown", features=acoustic_features_dict)
         except Exception:
-            print("[voice] Transcription failed")
-            raise HTTPException(status_code=500, detail="Transcription failed") from None
+            pass
+
+        # ── Update Session State & Baseline ──────────────────────────────────
+        if session:
+            if "meta" not in session:
+                session["meta"] = {}
+
+            # Adaptive baseline calibration during low-stress turns
+            dur = acoustic_features_dict.get("duration", 0.0)
+            p_mean = acoustic_features_dict.get("pitch_mean", 0.0)
+            if dur >= 1.2 and p_mean > 0 and acoustic_severity in ("Normal", "Low"):
+                old_base = session["meta"].get("acoustic_baseline") or {}
+                turn = session["meta"].get("acoustic_turn_count", 0)
+                alpha = 1.0 / (turn + 1) if turn < 4 else 0.2
+
+                cur_p_std = max(acoustic_features_dict.get("pitch_std", 15.0), 5.0)
+                cur_rate = max(acoustic_features_dict.get("speech_rate", 3.0), 0.5)
+
+                new_p_mean = (1 - alpha) * old_base.get("pitch_mean", p_mean) + alpha * p_mean
+                new_p_std = (1 - alpha) * old_base.get("pitch_std", cur_p_std) + alpha * cur_p_std
+                new_rate = (1 - alpha) * old_base.get("speech_rate", cur_rate) + alpha * cur_rate
+
+                session["meta"]["acoustic_baseline"] = {
+                    "pitch_mean": round(float(new_p_mean), 2),
+                    "pitch_std": round(float(new_p_std), 2),
+                    "speech_rate": round(float(new_rate), 2),
+                }
+                session["meta"]["acoustic_turn_count"] = turn + 1
+
+            session["meta"]["pending_acoustic"] = {
+                "severity": acoustic_severity,
+                "emotion": acoustic_emotion,
+                "confidence": acoustic_confidence,
+                "anxiety_score": acoustic_features_dict.get("acoustic_anxiety_score", 0.0),
+                "pitch_mean": acoustic_features_dict.get("pitch_mean", 0.0),
+                "speech_rate": acoustic_features_dict.get("speech_rate", 0.0),
+                "pause_ratio": acoustic_features_dict.get("pause_ratio", 0.0),
+                "jitter": acoustic_features_dict.get("jitter", 0.0),
+                "shimmer": acoustic_features_dict.get("shimmer", 0.0),
+                "energy_mean": acoustic_features_dict.get("energy_mean", 0.0),
+            }
 
         return {
             "transcript": transcript,

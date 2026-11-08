@@ -403,6 +403,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
                 acoustic_severity=acoustic_severity,
                 text_severity=severity,
                 acoustic_emotion=acoustic_emotion,
+                acoustic_confidence=acoustic_confidence,
             )
 
             severity_order = {"Normal": 0, "Low": 1, "Moderate": 2, "High": 3}
