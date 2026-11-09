@@ -1,8 +1,14 @@
 """Create a supervised fine-tuning job for GAIDA.
 
+WARNING: OpenAI is winding down self-serve fine-tuning. New organisations were
+blocked in 2026, and organisations that have not run inference on a fine-tuned
+model in the last 60 days are blocked from creating new jobs. New job creation
+ends for existing customers in January 2027. This script only works if your
+organisation still has access; otherwise use the Fireworks managed path or the
+retrieval/few-shot path described in QWEN3_TRAINING.md.
+
 The previous version targeted `gpt-3.5-turbo`, which OpenAI shut down on
-2026-10-23: job creation now fails immediately with that base. This version
-targets `gpt-4.1-mini-2025-04-14` — a base that is still fine-tunable and still
+2026-10-23. This version targets `gpt-4.1-mini-2025-04-14` — a base that still
 accepts the `temperature` + `max_tokens` call shape `gpt_agent.py` uses, so no
 runtime code changes are needed.
 
@@ -168,6 +174,13 @@ def main() -> int:
         return 1
 
     print("Dataset validation: OK")
+
+    print(
+        "\nWARNING: OpenAI is winding down self-serve fine-tuning. If this "
+        "organisation has not run inference on a fine-tuned model in the last "
+        "60 days, job creation will be rejected. Use the Fireworks managed "
+        "path or retrieval/few-shot instead (see QWEN3_TRAINING.md)."
+    )
 
     if not args.yes:
         answer = input("\nCreate the fine-tuning job now? This bills the account [y/N] ")

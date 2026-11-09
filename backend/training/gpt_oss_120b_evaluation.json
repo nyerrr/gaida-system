@@ -1,0 +1,76 @@
+{
+  "model": "openai/gpt-oss-120b",
+  "base_url": "https://api.groq.com/openai/v1",
+  "cases": [
+    {
+      "n": 1,
+      "user": "hello",
+      "answer": "Hey there! How are you feeling today?",
+      "reference": "Hey! Kumusta ka ngayon?",
+      "finish": "stop"
+    },
+    {
+      "n": 2,
+      "user": "hi",
+      "answer": "Hey there! How’s your day going so far?",
+      "reference": "Hi! How are you doing today? Feel free to share anything that's on your mind.",
+      "finish": "stop"
+    },
+    {
+      "n": 3,
+      "user": "I'm doing okay",
+      "answer": "I'm glad to hear you're doing okay. How's your workload been lately?",
+      "reference": "Good to hear! Anything specific on your mind today, or just checking in?",
+      "finish": "stop"
+    },
+    {
+      "n": 4,
+      "user": "I'm a bit stressed about my exams",
+      "answer": "I hear you—exam season can feel overwhelming. Try pausing for a few breaths: inhale for four counts, hold two, exhale slowly for six. What’s one small thing you can do right now to give yourself a quick mental break?",
+      "reference": "That's completely understandable — exam season is tough. What subject is stressing you out the most right now?",
+      "finish": "stop"
+    },
+    {
+      "n": 5,
+      "user": "medyo stressed lang sa requirements",
+      "answer": "Naiintindihan ko, parang bigat na yung mga requirements ngayon. Subukan mong huminga ng tatlong beses, count hanggang lima habang in‑hale, tapos dahan‑dahan exhale. Ano ba ang pinaka‑hindi mo pa nagagawa sa listahan?",
+      "reference": "Naiintindihan kita — sobrang dami talagang requirements lately. Aling subject ang pinaka-nakakapagod sa iyo ngayon?",
+      "finish": "stop"
+    },
+    {
+      "n": 6,
+      "user": "I've been having trouble sleeping because of school",
+      "answer": "I hear you—late nights and school stress can really mess with your sleep. Try a quick grounding exercise: place your feet flat on the floor, notice the pressure, then take three slow breaths, feeling each inhale and exhale. How does your bedtime routine look right now?",
+      "reference": "Ugh, that's really draining — it's hard to function when you can't rest properly. How long has it been going on?",
+      "finish": "stop"
+    },
+    {
+      "n": 7,
+      "user": "my adviser keeps rejecting my thesis",
+      "answer": "I hear how frustrating that must feel, especially when you’ve put so much effort into your work. Try taking a few slow breaths, inhaling for four counts, holding briefly, then exhaling for four—let that pause give you a little mental reset. What part of the feedback felt most confusing or discouraging to you?",
+      "reference": "That's really discouraging, lalo na pag pakiramdam mo walang progress. What part of your thesis keeps getting flagged?",
+      "finish": "stop"
+    },
+    {
+      "n": 8,
+      "user": "sobrang pagod na ko",
+      "answer": "Naiintindihan ko, mukhang napapagod ka talaga. Subukan mong huminga ng malalim, bilangin ang 4 na paghinga papasok at 4 na paglabas, at maramdaman ang hangin na dumarampi sa iyong balat. Ano ang pinaka-nakakapagod sa'yo ngayon?",
+      "reference": "Nakikita ko yun — parang ubos na ubos ka na. Kelan ka huling nagpahinga ng maayos?",
+      "finish": "stop"
+    },
+    {
+      "n": 9,
+      "user": "I feel like I'm not good enough",
+      "answer": "I hear you, and it’s okay to feel that way sometimes. Try gently placing your feet flat on the floor, noticing the pressure and the support beneath you for a few breaths. What’s one small thing you’ve done recently that made you feel a bit proud?",
+      "reference": "That feeling is really painful to carry, especially when you're already giving so much. What's been making you feel that way lately?",
+      "finish": "stop"
+    },
+    {
+      "n": 10,
+      "user": "wala na akong gana mag-aral",
+      "answer": "Naiintindihan ko, minsan talaga nawawalan tayo ng gana lalo na kapag stressed. Subukan mong huminga ng tatlong beses nang malalim, at pagkatapos ay maglakad-lakad ng ilang minuto sa labas para maramdaman ang sariwang hangin. Ano ang pinaka-nakaka-relax sa'yo kapag ganito ang pakiramdam?",
+      "reference": "Minsan talaga nangyayari yun — lalo na pag parang walang katapusan ang lahat. Matagal ka na bang ganito o bago lang nagsimula?",
+      "finish": "stop"
+    }
+  ]
+}

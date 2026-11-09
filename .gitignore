@@ -6,6 +6,11 @@ __pycache__/
 backend/training/embeddings.npy
 backend/training/embeddings_index.json
 
+# Generated fine-tuning artifacts (recreate with prepare_qwen_data.py / training)
+backend/training/qwen_data/
+backend/training/qwen3-gaida-lora/
+backend/training/*.safetensors
+
 # Virtual environment
 venv/
 env/

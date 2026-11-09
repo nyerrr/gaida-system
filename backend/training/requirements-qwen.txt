@@ -1,0 +1,7 @@
+# Install a CUDA-compatible PyTorch build separately for the GPU host first.
+transformers>=5.0.0
+datasets>=3.0.0
+trl>=0.26.0
+peft>=0.15.0
+accelerate>=1.0.0
+bitsandbytes>=0.45.0

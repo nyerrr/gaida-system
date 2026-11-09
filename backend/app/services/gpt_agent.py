@@ -3,6 +3,7 @@ import re
 import json
 import zlib
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from difflib import SequenceMatcher
 from dotenv import load_dotenv
@@ -18,9 +19,44 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_HF_TOKEN = os.getenv("HF_TOKEN")
-_LLM_BASE_URL = os.getenv("LLM_BASE_URL")
-LLM_MODEL = os.getenv("LLM_MODEL", "Qwen/Qwen3.5-9B")
+# The chat path accepts two naming conventions so a deployed service cannot
+# silently fall back to scripted replies just because the dashboard used the
+# other one:
+#   Hugging Face / generic: HF_TOKEN, LLM_BASE_URL, LLM_MODEL
+#   OpenAI (and older Render blueprints): OPENAI_API_KEY, OPENAI_BASE_URL,
+#                                        OPENAI_MODEL
+# A fine-tuned OpenAI model works with the OPENAI_* names alone; an open-weight
+# model works with HF_TOKEN + LLM_MODEL (+ LLM_BASE_URL for a non-default host).
+_LLM_API_KEY = (
+    os.getenv("LLM_API_KEY")
+    or os.getenv("HF_TOKEN")
+    or os.getenv("OPENAI_API_KEY")
+)
+_LLM_BASE_URL = os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+# A Hugging Face token is only meaningful against Hugging Face, so default the
+# base URL there when one was not given. Without this, an HF token would be sent
+# to api.openai.com and every call would fail.
+if not _LLM_BASE_URL and os.getenv("HF_TOKEN"):
+    _LLM_BASE_URL = "https://router.huggingface.co/v1"
+LLM_MODEL = (
+    os.getenv("LLM_MODEL")
+    or os.getenv("OPENAI_MODEL")
+    or "gpt-4.1-mini"
+)
+
+# Optional automatic fallback. When the fine-tuned host is down, rate-limited,
+# cold-starting, or the adapter was removed, the same request is retried against
+# this second OpenAI-compatible endpoint instead of dropping to the scripted
+# replies. Point it at the free/base model that already works (Groq in the
+# current deployment) so the fine-tune is an enhancement, never a single point
+# of failure.
+LLM_FALLBACK_MODEL = os.getenv("LLM_FALLBACK_MODEL")
+_LLM_FALLBACK_API_KEY = (
+    os.getenv("LLM_FALLBACK_API_KEY") or _LLM_API_KEY
+)
+_LLM_FALLBACK_BASE_URL = (
+    os.getenv("LLM_FALLBACK_BASE_URL") or os.getenv("LLM_FALLBACK_OPENAI_BASE_URL")
+)
 MAX_HISTORY_MESSAGES = 4
 
 # Re-balanced against the response flows below.
@@ -60,13 +96,124 @@ ECHO_HOLD_CHARS = 180
 # is the unsafe one, and the guard cannot tell which one it is fixing.
 ECHO_GUARD_EXEMPT = {"crisis"}
 
-client = None
-if OpenAI and _HF_TOKEN:
+@dataclass(frozen=True)
+class _LLMTarget:
+    """One OpenAI-compatible endpoint the chat path can send a request to."""
+
+    name: str
+    client: Any
+    model: str
+
+
+_client = None
+if OpenAI and _LLM_API_KEY:
     try:
-        client = OpenAI(api_key=_HF_TOKEN, base_url=_LLM_BASE_URL)
+        _client = OpenAI(api_key=_LLM_API_KEY, base_url=_LLM_BASE_URL)
+        logger.info(
+            "LLM chat target 'primary' configured: model=%s base_url=%s",
+            LLM_MODEL,
+            _LLM_BASE_URL or "https://api.openai.com/v1 (SDK default)",
+        )
     except Exception as e:
-        logger.error("Failed to initialize OpenAI client: %s", e)
-        client = None
+        logger.error("Failed to initialize primary LLM client: %s", e)
+        _client = None
+else:
+    logger.warning(
+        "Primary LLM chat target NOT configured: set HF_TOKEN or OPENAI_API_KEY "
+        "(and LLM_MODEL / OPENAI_MODEL)."
+    )
+
+_fallback_client = None
+if OpenAI and LLM_FALLBACK_MODEL and _LLM_FALLBACK_API_KEY:
+    try:
+        _fallback_client = OpenAI(
+            api_key=_LLM_FALLBACK_API_KEY,
+            base_url=_LLM_FALLBACK_BASE_URL,
+        )
+        logger.info(
+            "LLM chat target 'fallback' configured: model=%s base_url=%s",
+            LLM_FALLBACK_MODEL,
+            _LLM_FALLBACK_BASE_URL or "https://api.openai.com/v1 (SDK default)",
+        )
+    except Exception as e:
+        logger.error("Failed to initialize fallback LLM client: %s", e)
+        _fallback_client = None
+
+_LLM_TARGETS: list[_LLMTarget] = []
+if _client is not None:
+    _LLM_TARGETS.append(_LLMTarget("primary", _client, LLM_MODEL))
+if _fallback_client is not None:
+    _LLM_TARGETS.append(_LLMTarget("fallback", _fallback_client, LLM_FALLBACK_MODEL))
+
+# Kept as the module-level "is chat wired at all?" handle used by
+# _build_gpt_messages and the tests. When only a fallback is configured it
+# stands in for the primary so prompt construction still runs.
+client = _LLM_TARGETS[0].client if _LLM_TARGETS else None
+
+if not _LLM_TARGETS:
+    logger.warning(
+        "No LLM chat target configured. Chat will use scripted fallbacks."
+    )
+
+
+def _chat_complete(messages: list[dict[str, str]], temperature: float,
+                   max_tokens: int):
+    """Send a non-streaming request to the first target that answers.
+
+    Returns (response, target). Raises the last error when every target fails,
+    so the caller's existing error handling still sees a real exception.
+    """
+    last_error: Exception | None = None
+    for target in _LLM_TARGETS:
+        try:
+            response = target.client.chat.completions.create(
+                model=target.model,
+                messages=messages,
+                temperature=temperature,
+                **_completion_limit_kwargs(target.model, max_tokens),
+                **_reasoning_effort_kwargs(target.model),
+            )
+            return response, target
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "LLM target '%s' failed (%s): %s; trying next target",
+                target.name,
+                target.model,
+                exc,
+            )
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("No LLM chat target is configured")
+
+
+def _open_stream(messages: list[dict[str, str]], anxiety_level: str | None):
+    """Open a streaming response on the first target that accepts it."""
+    last_error: Exception | None = None
+    for target in _LLM_TARGETS:
+        try:
+            response = target.client.chat.completions.create(
+                model=target.model,
+                messages=messages,
+                temperature=0.75,
+                **_completion_limit_kwargs(
+                    target.model, _max_tokens_for(anxiety_level)
+                ),
+                stream=True,
+                **_reasoning_effort_kwargs(target.model),
+            )
+            return response, target
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "LLM stream target '%s' failed to start (%s): %s; trying next",
+                target.name,
+                target.model,
+                exc,
+            )
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("No LLM chat target is configured")
 
 
 def _load_tagged_examples() -> dict[str, list[dict[str, str]]]:
@@ -103,11 +250,135 @@ def _load_tagged_examples() -> dict[str, list[dict[str, str]]]:
 
 
 _TAGGED_EXAMPLES = _load_tagged_examples()
+# Kill switch for the dataset demonstrations. On by default because the replies
+# are supposed to follow the fine-tune data; set FINETUNE_FEWSHOT=0 to fall
+# back to the prompt/exemplars only (useful for A/B comparisons).
+_FEW_SHOT_ENABLED = os.getenv("FINETUNE_FEWSHOT", "1").strip().lower() not in {
+    "0", "false", "no", "off",
+}
+# Crisis is the one flow that must not receive dataset demonstrations. The
+# dataset's crisis replies carry their own hotline list and ending style, and
+# the existing design deliberately keeps crisis on the flow guide plus the
+# deterministic resource check instead of showing the model a second list it
+# could copy from. Injecting them would undo that.
+_FEW_SHOT_EXCLUDED_TAGS = {"[CRISIS DETECTED]"}
+
+if _TAGGED_EXAMPLES:
+    logger.info(
+        "Loaded %d fine-tune conversations from training/finetune.jsonl across "
+        "%d flows: %s",
+        sum(len(v) for v in _TAGGED_EXAMPLES.values()),
+        len(_TAGGED_EXAMPLES),
+        ", ".join(f"{k}={len(v)}" for k, v in sorted(_TAGGED_EXAMPLES.items())),
+    )
+else:
+    logger.warning(
+        "No fine-tune conversations loaded from training/finetune.jsonl; "
+        "replies will rely on the system prompt only."
+    )
 
 
-def _reasoning_effort_kwargs() -> dict[str, dict[str, str]]:
-    effort = os.getenv("LLM_REASONING_EFFORT")
-    return {"extra_body": {"reasoning_effort": effort}} if effort else {}
+# ─────────────────────────────────────────────────────────────────
+# FEW-SHOT SELECTION FROM THE FINE-TUNE DATASET
+# ─────────────────────────────────────────────────────────────────
+#
+# Tag matching alone picks the first three conversations in the file for a
+# flow, so a student who says something the dataset already covers can still
+# receive examples about a different situation, and every request in a flow
+# gets the same three. Character n-gram similarity also handles Tagalog forms
+# and common spelling variation. TF-IDF is built from local data, with no extra
+# network call.
+_EXAMPLE_INDEX: dict[str, tuple[Any, Any]] = {}
+
+
+def _example_query_text(example: dict[str, Any]) -> str:
+    return " ".join(
+        turn["content"] for turn in example["turns"] if turn["role"] == "user"
+    )
+
+
+def _get_example_index(tag: str) -> tuple[Any, Any] | None:
+    """Return (vectorizer, matrix) for one flow, or None when unavailable."""
+    if tag in _EXAMPLE_INDEX:
+        return _EXAMPLE_INDEX[tag]
+
+    examples = _TAGGED_EXAMPLES.get(tag, [])
+    if not examples:
+        return None
+
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
+        vectorizer = TfidfVectorizer(
+            analyzer="char_wb", ngram_range=(3, 5), min_df=1, sublinear_tf=True
+        )
+        matrix = vectorizer.fit_transform([_example_query_text(e) for e in examples])
+        _EXAMPLE_INDEX[tag] = (vectorizer, matrix)
+    except Exception as exc:  # scikit-learn missing, empty vocabulary, …
+        logger.warning("Falling back to file-order few-shot for %s: %s", tag, exc)
+        _EXAMPLE_INDEX[tag] = (None, None)
+    return _EXAMPLE_INDEX[tag]
+
+
+def _select_tagged_examples(
+    tag: str, user_message: str, limit: int = 3
+) -> list[dict[str, Any]]:
+    """Pick the dataset conversations closest to what the student just wrote."""
+    examples = _TAGGED_EXAMPLES.get(tag, [])
+    if not examples:
+        return []
+
+    index = _get_example_index(tag)
+    if index is None or index[0] is None:
+        return examples[:limit]
+
+    vectorizer, matrix = index
+    try:
+        from sklearn.metrics.pairwise import cosine_similarity
+
+        scores = cosine_similarity(vectorizer.transform([user_message]), matrix)[0]
+        ranked = scores.argsort()[::-1]
+        # No shared signal means no useful demonstration; don't fill the prompt
+        # with unrelated conversations merely to reach the example limit.
+        return [examples[int(i)] for i in ranked[:limit] if scores[int(i)] > 0]
+    except Exception as exc:
+        logger.warning("Similarity ranking failed for %s: %s", tag, exc)
+        return examples[:limit]
+
+
+def _reasoning_effort_kwargs(model: str | None = None) -> dict[str, dict[str, str]]:
+    effort = (os.getenv("LLM_REASONING_EFFORT") or "").strip().lower()
+    # Groq's GPT-OSS endpoints reject Qwen's `default` / `none` values with a
+    # 400. Use the provider's supported middle setting instead, so a dashboard
+    # value carried over from the previous Qwen model cannot break every reply.
+    if model and model.lower().startswith("openai/gpt-oss") and effort not in {
+        "low", "medium", "high",
+    }:
+        if effort:
+            logger.warning(
+                "LLM_REASONING_EFFORT=%r is unsupported by %s; using medium",
+                effort,
+                model,
+            )
+        effort = "medium"
+    if not effort:
+        return {}
+    extra_body = {"reasoning_effort": effort}
+    if model and model.lower().startswith("openai/gpt-oss"):
+        # Groq returns GPT-OSS reasoning separately; GAIDA only renders the
+        # final answer, so avoid returning that extra field to the client.
+        extra_body["include_reasoning"] = False
+    return {"extra_body": extra_body}
+
+
+def _completion_limit_kwargs(model: str, max_tokens: int) -> dict[str, int]:
+    """Give GPT-OSS room to reason and still produce a visible final answer."""
+    if model.lower().startswith("openai/gpt-oss"):
+        # The ordinary reply caps are 110–160 tokens. GPT-OSS spends some of
+        # its completion budget on reasoning, which can otherwise crowd out
+        # the final answer entirely.
+        return {"max_completion_tokens": max(512, max_tokens)}
+    return {"max_tokens": max_tokens}
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -127,6 +398,12 @@ PERSONALITY:
 - You pick up on emotional cues and respond to the FEELING behind the words, not just the words.
 - You ask ONE follow-up question at a time — never bombard the student.
 - You match the student's energy — if they're casual, be casual. If they're distressed, be calm and grounding.
+- A grounding exercise is a tool, not the default expression of care. For low
+  or moderate distress, do not prescribe breathing or another technique unless
+  the student asks for help or their situation clearly calls for it. Reflect a
+  specific detail and ask a situation-specific question when that is enough.
+- Do not reuse the same coping technique across unrelated situations. The
+  high-intensity flow has its own immediate-action instruction.
 - You explicitly name the intensity when appropriate: "That sounds really overwhelming" or
   "I can hear how stressed you are."
 - If they write in Tagalog or Taglish, respond naturally in the same language.
@@ -1481,18 +1758,61 @@ def _build_gpt_messages(
 
 
 def _add_few_shot_examples(messages: List[Dict[str, str]], user_message: str) -> List[Dict[str, str]]:
-    """Insert up to three cached demonstrations matching the system prompt tag."""
-    del user_message
+    """Insert dataset demonstrations matching the current response flow.
+
+    The severity tag lives in a *second* system message, not in
+    ``SYSTEM_PROMPT`` — scanning only ``messages[0]`` (as this used to) found
+    nothing and silently disabled the fine-tune demonstrations entirely. Scan
+    every system message, rank that flow's conversations against the student's
+    actual message, and insert them as example turns before the real
+    conversation so the model sees the dataset's register as part of its prefix.
+    """
     if not messages or messages[0].get("role") != "system":
         return messages
-    match = re.search(r"\[[^\]]*(?:ANXIETY DETECTED|CRISIS DETECTED|VENT MODE ACTIVE|LOSS DETECTED)[^\]]*\]", messages[0].get("content", ""))
-    if not match:
+
+    if not _FEW_SHOT_ENABLED:
         return messages
-    examples = _TAGGED_EXAMPLES.get(match.group(0), [])[:3]
-    if examples:
-        turns = [turn for example in examples for turn in example["turns"]]
-        return [messages[0], *turns, *messages[1:]]
-    return messages
+
+    tag = None
+    for message in messages:
+        if message.get("role") != "system":
+            continue
+        match = re.search(
+            r"\[[^\]]*(?:ANXIETY DETECTED|CRISIS DETECTED|VENT MODE ACTIVE|LOSS DETECTED)[^\]]*\]",
+            message.get("content", ""),
+        )
+        if match:
+            tag = match.group(0)
+            break
+    if not tag:
+        return messages
+
+    if tag in _FEW_SHOT_EXCLUDED_TAGS:
+        return messages
+
+    examples = _select_tagged_examples(tag, user_message)
+    if not examples:
+        return messages
+
+    # One conversation is usually two turns; cap the block so a few long
+    # examples cannot crowd out the real history or the response budget.
+    turns: List[Dict[str, str]] = []
+    for example in examples:
+        for turn in example["turns"]:
+            if len(turns) >= 6:
+                break
+            turns.append(turn)
+        if len(turns) >= 6:
+            break
+
+    if not turns:
+        return messages
+
+    insert_at = next(
+        (i for i, message in enumerate(messages) if message.get("role") != "system"),
+        len(messages),
+    )
+    return [*messages[:insert_at], *turns, *messages[insert_at:]]
 
 
 def _max_tokens_for(anxiety_level: str | None) -> int:
@@ -1596,8 +1916,8 @@ def generate_response_with_gpt(
     crisis_resources: str | None = None,
 ) -> Dict[str, Any]:
 
-    if not client:
-        logger.error("LLM client is not initialized")
+    if not _LLM_TARGETS:
+        logger.error("No LLM target is initialized")
         return {"response": None, "used": False}
 
     messages = _build_gpt_messages(
@@ -1611,14 +1931,10 @@ def generate_response_with_gpt(
         return {"response": None, "used": False}
     messages = _add_few_shot_examples(messages, user_message)
 
-    # ── Step 7: Call OpenAI ───────────────────────────────────────
+    # ── Step 7: Call the chat target (fine-tune first, fallback second) ──
     try:
-        resp = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=messages,
-            temperature=0.75,
-            max_tokens=_max_tokens_for(anxiety_level),
-            **_reasoning_effort_kwargs(),
+        resp, _target = _chat_complete(
+            messages, 0.75, _max_tokens_for(anxiety_level)
         )
 
         content = None
@@ -1643,12 +1959,10 @@ def generate_response_with_gpt(
             anxiety_level.lower() if anxiety_level else None
         )
         if _is_exemplar_echo(content, echo_flow):
-            retry = client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=_echo_retry_messages(messages, echo_flow or ""),
-                temperature=0.9,
-                max_tokens=_max_tokens_for(anxiety_level),
-                **_reasoning_effort_kwargs(),
+            retry, _retry_target = _chat_complete(
+                _echo_retry_messages(messages, echo_flow or ""),
+                0.9,
+                _max_tokens_for(anxiety_level),
             )
             retried = (
                 retry.choices[0].message.content
@@ -1711,7 +2025,7 @@ def stream_gpt_response(
     this path — a copy noticed later would mean replacing text already on their
     screen, which is worse than the copy itself.
     """
-    if not client:
+    if not _LLM_TARGETS:
         return
 
     messages = _build_gpt_messages(
@@ -1726,14 +2040,7 @@ def stream_gpt_response(
     messages = _add_few_shot_examples(messages, user_message)
 
     try:
-        resp = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=messages,
-            temperature=0.75,
-            max_tokens=_max_tokens_for(anxiety_level),
-            stream=True,
-            **_reasoning_effort_kwargs(),
-        )
+        resp, target = _open_stream(messages, anxiety_level)
 
         echo_flow = INTENT_FLOW_OVERRIDE.get((intent or "").lower()) or (
             anxiety_level.lower() if anxiety_level else None
@@ -1796,12 +2103,10 @@ def stream_gpt_response(
                 resp.close()
             except Exception:
                 pass
-            retry = client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=_echo_retry_messages(messages, echo_flow or ""),
-                temperature=0.9,
-                max_tokens=_max_tokens_for(anxiety_level),
-                **_reasoning_effort_kwargs(),
+            retry, _retry_target = _chat_complete(
+                _echo_retry_messages(messages, echo_flow or ""),
+                0.9,
+                _max_tokens_for(anxiety_level),
             )
             retried = (
                 retry.choices[0].message.content
@@ -1821,7 +2126,11 @@ def stream_gpt_response(
                 held = []
 
         if not full_text:
-            logger.warning("GPT stream returned empty response")
+            logger.warning(
+                "GPT stream returned empty response (model=%s finish_reason=%s)",
+                target.model,
+                finish_reason or "missing",
+            )
         else:
             # Hit the token cap mid-sentence. The already-streamed tokens were
             # shown live and can't be un-typed, but trim what gets returned

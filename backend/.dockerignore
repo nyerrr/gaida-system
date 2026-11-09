@@ -11,3 +11,7 @@ test_login.py
 .venv/
 *.log
 *.md
+# Trained adapters and generated splits are not needed at runtime; the app only
+# reads training/finetune.jsonl for few-shot retrieval.
+training/qwen_data/
+training/qwen3-gaida-lora/

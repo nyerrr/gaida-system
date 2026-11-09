@@ -33,7 +33,9 @@ COUNSELOR_PROTOCOLS = {
     Respond with warmth and gentle acknowledgment.
     - Validate their feeling without alarming them
     - Normalize what they are experiencing
-    - Offer one simple practical suggestion if appropriate
+    - Offer a practical suggestion only if they ask for help or a specific
+      action clearly fits what they described; do not default to a breathing
+      exercise or other generic coping technique
     - End with one open question to keep them talking
     - Do NOT mention the counselor or escalate
     """,
@@ -41,7 +43,8 @@ COUNSELOR_PROTOCOLS = {
     Respond with stronger empathy and grounded support.
     - Validate clearly that what they feel is real and matters
     - Reflect back what they shared to show you heard them
-    - Offer one specific coping suggestion relevant to what they described
+    - Offer a coping suggestion only when it directly fits their situation;
+      otherwise stay with what they shared and ask one focused question
     - Keep the tone calm and present
     - Do NOT invent grounding techniques involving specific objects or rooms
     - End with one focused question about how they are feeling right now

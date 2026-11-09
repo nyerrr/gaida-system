@@ -11,9 +11,31 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-      # Managed in the Render dashboard, not here: a fine-tuned model ID is
-      # account-specific and a blueprint `value` would overwrite it on every
-      # sync. When unset, the code falls back to gpt-4.1-mini.
+      - key: LLM_API_KEY
+        sync: false
+      # Chat model configuration. These must match what gpt_agent.py reads.
+      # A fine-tuned OpenAI model uses LLM_MODEL=<ft:...> with OPENAI_API_KEY
+      # above and no LLM_BASE_URL. An open-weight / hosted model (Qwen LoRA,
+      # vLLM, Ollama, Groq, OpenRouter, …) uses LLM_API_KEY (or HF_TOKEN) + LLM_BASE_URL +
+      # LLM_MODEL instead. Managed in the Render dashboard, not here, because
+      # they are account-specific and a blueprint `value` would overwrite them
+      # on every sync.
+      - key: HF_TOKEN
+        sync: false
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_REASONING_EFFORT
+        sync: false
+      # Optional automatic fallback used when the fine-tuned host is down.
+      - key: LLM_FALLBACK_BASE_URL
+        sync: false
+      - key: LLM_FALLBACK_API_KEY
+        sync: false
+      - key: LLM_FALLBACK_MODEL
+        sync: false
+      # Kept for the OpenAI fine-tuning scripts and hosted STT/TTS fallbacks.
       - key: OPENAI_MODEL
         sync: false
       - key: SUPABASE_URL
