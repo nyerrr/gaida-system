@@ -12,7 +12,7 @@ from app.analytics.voice_cleaning import (
 )
 
 MAX_ACOUSTIC_DURATION_SECONDS = 20
-FFMPEG_TIMEOUT_SECONDS = 12
+FFMPEG_TIMEOUT_SECONDS = 20
 
 def _convert_to_wav(
     audio_bytes: bytes,
