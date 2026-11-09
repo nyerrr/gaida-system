@@ -183,7 +183,7 @@ def _noise_profile(y: np.ndarray, sr: int):
     return None
 
 
-def clean_voice(y: np.ndarray, sr: int) -> np.ndarray:
+def clean_voice(y: np.ndarray, sr: int, denoise: bool = True) -> np.ndarray:
     """
     Denoise + normalize a mono waveform.
 
@@ -196,8 +196,10 @@ def clean_voice(y: np.ndarray, sr: int) -> np.ndarray:
     if y is None or len(y) == 0:
         return y
 
-    # 1) Background-noise removal (stationary spectral gating, conservative).
-    _nr_mod = _load_noisereduce()
+    # 1) Optional background-noise removal (stationary spectral gating).
+    # The interactive acoustic route skips this expensive step on Render;
+    # loudness normalization below still runs for comparable measurements.
+    _nr_mod = _load_noisereduce() if denoise else None
     if _nr_mod is not None:
         try:
             y = _nr_mod.reduce_noise(

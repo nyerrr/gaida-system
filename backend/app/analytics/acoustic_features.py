@@ -111,18 +111,28 @@ def extract_features(
             return _empty_features()
 
         # ── Voice cleaning: background-noise removal + loudness normalization
-        y = clean_voice(y, sr)
+        y = clean_voice(y, sr, denoise=False)
 
         features = {}
 
         # ── Pitch (F0) ──────────────────────────────────────────────────────
-        f0, voiced_flag, _ = librosa.pyin(
+        pitch_frame_length = 2048
+        pitch_hop_length = 512
+        f0 = librosa.yin(
             y,
             fmin=librosa.note_to_hz('C2'),
             fmax=librosa.note_to_hz('C7'),
-            sr=sr
+            sr=sr,
+            frame_length=pitch_frame_length,
+            hop_length=pitch_hop_length,
         )
-        voiced_f0 = f0[voiced_flag] if f0 is not None else np.array([])
+        pitch_rms = librosa.feature.rms(
+            y=y,
+            frame_length=pitch_frame_length,
+            hop_length=pitch_hop_length,
+        )[0]
+        voiced_mask = pitch_rms >= max(float(np.max(pitch_rms)) * 0.03, 1e-4)
+        voiced_f0 = f0[voiced_mask] if f0 is not None else np.array([])
         features['pitch_mean'] = float(np.mean(voiced_f0)) if len(voiced_f0) > 0 else 0.0
         features['pitch_std']  = float(np.std(voiced_f0))  if len(voiced_f0) > 0 else 0.0
 
