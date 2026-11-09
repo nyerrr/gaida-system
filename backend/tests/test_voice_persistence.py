@@ -16,7 +16,7 @@ def voice_client(monkeypatch):
     monkeypatch.setattr(
         voice,
         "extract_features",
-        lambda _audio, baseline=None: {
+        lambda _audio, baseline=None, max_duration_seconds=20: {
             "duration": 1.5,
             "acoustic_anxiety_score": 0.2,
             "acoustic_emotion": "neutral",

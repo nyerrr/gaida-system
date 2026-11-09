@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 from openai import OpenAI
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from fastapi.responses import Response
@@ -17,14 +18,38 @@ router = APIRouter(prefix="/audio", tags=["audio"])
 
 # ── Hosted transcription (OpenAI) — no local model, runs on fast GPUs ──
 _STT_MODEL = os.getenv("OPENAI_STT_MODEL", "gpt-4o-mini-transcribe")
+_STT_TIMEOUT_SECONDS = 25
+_MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024
+_ACOUSTIC_EXTRACTION_TIMEOUT_SECONDS = 25
+_ACOUSTIC_QUEUE_TIMEOUT_SECONDS = 2
+_ACOUSTIC_LOG_TIMEOUT_SECONDS = 10
+_ACOUSTIC_WORKER = threading.BoundedSemaphore(1)
 _openai_client = None
 
 
 def _get_voice_client():
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _openai_client = OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            timeout=_STT_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
     return _openai_client
+
+
+def _extract_acoustic_features(audio_bytes: bytes, baseline: dict | None) -> dict:
+    """Limit concurrent CPU-heavy extraction on small Render instances."""
+    if not _ACOUSTIC_WORKER.acquire(timeout=_ACOUSTIC_QUEUE_TIMEOUT_SECONDS):
+        raise TimeoutError("Acoustic extraction capacity is busy")
+    try:
+        return extract_features(
+            audio_bytes,
+            baseline=baseline,
+            max_duration_seconds=20,
+        )
+    finally:
+        _ACOUSTIC_WORKER.release()
 
 @router.post("/speech-to-text")
 async def speech_to_text(
@@ -46,7 +71,13 @@ async def speech_to_text(
         if content_type and not content_type.startswith("audio/") and not content_type.startswith("video/webm"):
             raise HTTPException(status_code=400, detail=f"File must be audio type. Got: {content_type}")
 
-        audio_bytes = await audio.read()
+        audio_bytes = await audio.read(_MAX_AUDIO_UPLOAD_BYTES + 1)
+
+        if len(audio_bytes) > _MAX_AUDIO_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Audio file is too large. Please record a shorter voice message.",
+            )
 
         if len(audio_bytes) == 0:
             raise HTTPException(status_code=400, detail="Empty audio file.")
@@ -76,7 +107,13 @@ async def speech_to_text(
         # ── Concurrently run Feature Extraction & STT Transcription ──────────
         async def _extract():
             try:
-                return await asyncio.to_thread(extract_features, audio_bytes, baseline=baseline)
+                return await asyncio.wait_for(
+                    asyncio.to_thread(_extract_acoustic_features, audio_bytes, baseline),
+                    timeout=_ACOUSTIC_EXTRACTION_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                print("[voice] Acoustic feature extraction timed out")
+                return {}
             except Exception as e:
                 print(f"[voice] Acoustic feature extraction error: {e}")
                 return {}
@@ -115,13 +152,22 @@ async def speech_to_text(
                 # Supabase's client is synchronous; keep its network request off
                 # the event loop. Log even when speech-to-text failed so a
                 # provider outage cannot silently discard acoustic data.
-                acoustic_log_saved = bool(await asyncio.to_thread(
-                    log_to_supabase,
-                    session_id=session_id or "unknown",
-                    features=acoustic_features_dict,
+                acoustic_log_saved = bool(await asyncio.wait_for(
+                    asyncio.to_thread(
+                        log_to_supabase,
+                        session_id=session_id or "unknown",
+                        features=acoustic_features_dict,
+                    ),
+                    timeout=_ACOUSTIC_LOG_TIMEOUT_SECONDS,
                 ))
+            except asyncio.TimeoutError:
+                print("[voice] Acoustic database write timed out")
             except Exception as e:
                 print(f"[voice] Acoustic database write failed: {e}")
+        if acoustic_log_saved:
+            print("[voice] Acoustic data saved to acoustic_logs")
+        else:
+            print("[voice] Acoustic data was not saved to acoustic_logs")
 
         if isinstance(transcription_result, Exception):
             if isinstance(transcription_result, HTTPException):

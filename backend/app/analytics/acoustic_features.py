@@ -11,7 +11,13 @@ from app.analytics.voice_cleaning import (
     emotion_energy_thresholds,
 )
 
-def _convert_to_wav(audio_bytes: bytes) -> bytes:
+MAX_ACOUSTIC_DURATION_SECONDS = 20
+FFMPEG_TIMEOUT_SECONDS = 12
+
+def _convert_to_wav(
+    audio_bytes: bytes,
+    max_duration_seconds: int = MAX_ACOUSTIC_DURATION_SECONDS,
+) -> bytes:
     """
     Convert any audio format (webm, ogg, mp3, etc.) to WAV using ffmpeg.
     Uses CapCut's bundled ffmpeg if system ffmpeg not in PATH.
@@ -40,6 +46,7 @@ def _convert_to_wav(audio_bytes: bytes) -> bytes:
             [
                 ffmpeg_cmd, "-y",
                 "-i", tmp_in_path,
+                "-t", str(max_duration_seconds),
                 "-ar", "16000",
                 "-ac", "1",
                 "-f", "wav",
@@ -48,6 +55,7 @@ def _convert_to_wav(audio_bytes: bytes) -> bytes:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=True,
+            timeout=FFMPEG_TIMEOUT_SECONDS,
         )
         with open(tmp_out_path, "rb") as f:
             return f.read()
@@ -61,23 +69,43 @@ def _convert_to_wav(audio_bytes: bytes) -> bytes:
 def _is_ffmpeg_available(cmd: str) -> bool:
     """Check if ffmpeg is available in PATH."""
     try:
-        subprocess.run([cmd, "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cmd, "-version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        )
         return True
     except Exception:
         return False
 
 
-def extract_features(audio_bytes: bytes, sample_rate: int = 16000, baseline: dict = None) -> dict:
+def extract_features(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    baseline: dict = None,
+    max_duration_seconds: int = MAX_ACOUSTIC_DURATION_SECONDS,
+) -> dict:
     try:
         # Try direct load first
         try:
             audio_buf = io.BytesIO(audio_bytes)
-            y, sr = librosa.load(audio_buf, sr=sample_rate, mono=True)
+            y, sr = librosa.load(
+                audio_buf,
+                sr=sample_rate,
+                mono=True,
+                duration=max_duration_seconds,
+            )
         except Exception:
             # Direct load failed — convert via ffmpeg first
-            wav_bytes = _convert_to_wav(audio_bytes)
+            wav_bytes = _convert_to_wav(audio_bytes, max_duration_seconds)
             audio_buf = io.BytesIO(wav_bytes)
-            y, sr = librosa.load(audio_buf, sr=sample_rate, mono=True)
+            y, sr = librosa.load(
+                audio_buf,
+                sr=sample_rate,
+                mono=True,
+                duration=max_duration_seconds,
+            )
 
         if len(y) == 0:
             return _empty_features()
