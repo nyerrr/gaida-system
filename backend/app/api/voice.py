@@ -93,7 +93,14 @@ async def speech_to_text(
                 print(f"[voice] Transcription error: {e}")
                 raise HTTPException(status_code=500, detail="Transcription failed") from None
 
-        acoustic_features_dict, transcript = await asyncio.gather(_extract(), _transcribe())
+        acoustic_result, transcription_result = await asyncio.gather(
+            _extract(), _transcribe(), return_exceptions=True
+        )
+        if isinstance(acoustic_result, Exception):
+            print(f"[voice] Acoustic feature extraction failed: {acoustic_result}")
+            acoustic_features_dict = {}
+        else:
+            acoustic_features_dict = acoustic_result
 
         acoustic_severity = map_acoustic_to_severity(
             acoustic_features_dict.get("acoustic_anxiety_score", 0.0)
@@ -102,10 +109,26 @@ async def speech_to_text(
         acoustic_emotion = acoustic_features_dict.get("acoustic_emotion", "neutral")
 
         # ── Log to Supabase ──────────────────────────────────────────────────
-        try:
-            log_to_supabase(session_id=session_id or "unknown", features=acoustic_features_dict)
-        except Exception:
-            pass
+        acoustic_log_saved = False
+        if acoustic_features_dict:
+            try:
+                # Supabase's client is synchronous; keep its network request off
+                # the event loop. Log even when speech-to-text failed so a
+                # provider outage cannot silently discard acoustic data.
+                acoustic_log_saved = bool(await asyncio.to_thread(
+                    log_to_supabase,
+                    session_id=session_id or "unknown",
+                    features=acoustic_features_dict,
+                ))
+            except Exception as e:
+                print(f"[voice] Acoustic database write failed: {e}")
+
+        if isinstance(transcription_result, Exception):
+            if isinstance(transcription_result, HTTPException):
+                raise transcription_result
+            print(f"[voice] Transcription failed: {transcription_result}")
+            raise HTTPException(status_code=500, detail="Transcription failed") from None
+        transcript = transcription_result
 
         # ── Update Session State & Baseline ──────────────────────────────────
         if session:
@@ -150,6 +173,7 @@ async def speech_to_text(
         return {
             "transcript": transcript,
             "session_id": session_id,
+            "acoustic_log_saved": acoustic_log_saved,
             "acoustic": {
                 "severity": acoustic_severity,
                 "emotion": acoustic_emotion,

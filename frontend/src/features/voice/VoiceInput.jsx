@@ -207,6 +207,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
   // ── Send audio to backend ─────────────────────────────────────────────────
   const extractAcousticsAndSetTranscript = async () => {
     setLoading(true);
+    setError(null);
     pushStatus("Extracting voice features...");
 
     try {
@@ -240,6 +241,9 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
       }
       const data = await res.json();
       if (!data.transcript) throw new Error("No speech detected.");
+      if (data.acoustic_log_saved === false) {
+        setError("Your transcript was sent, but its voice analysis could not be saved.");
+      }
 
       pushStatus("");
       setRecording(false);
