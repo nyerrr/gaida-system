@@ -157,6 +157,11 @@ async def speech_to_text(
                         log_to_supabase,
                         session_id=session_id or "unknown",
                         features=acoustic_features_dict,
+                        transcript=(
+                            transcription_result
+                            if isinstance(transcription_result, str)
+                            else None
+                        ),
                     ),
                     timeout=_ACOUSTIC_LOG_TIMEOUT_SECONDS,
                 ))

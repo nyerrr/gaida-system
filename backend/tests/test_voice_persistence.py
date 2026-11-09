@@ -52,8 +52,8 @@ def test_voice_route_reports_successful_acoustic_log(voice_client, monkeypatch):
     client, session_id = voice_client
     logged = {}
 
-    def save_log(*, session_id, features):
-        logged.update(session_id=session_id, features=features)
+    def save_log(*, session_id, features, transcript=None):
+        logged.update(session_id=session_id, features=features, transcript=transcript)
         return True
 
     monkeypatch.setattr(voice, "log_to_supabase", save_log)
@@ -65,6 +65,7 @@ def test_voice_route_reports_successful_acoustic_log(voice_client, monkeypatch):
     assert response.json()["acoustic_log_saved"] is True
     assert logged["session_id"] == session_id
     assert logged["features"]["duration"] == 1.5
+    assert logged["transcript"] == "I feel okay today"
 
 
 def test_voice_route_reports_failed_acoustic_log(voice_client, monkeypatch):

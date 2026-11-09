@@ -421,7 +421,7 @@ def _empty_features() -> dict:
         features[f'mfcc_{i}_std']  = 0.0
     return features
 
-def log_to_supabase(session_id: str, features: dict) -> bool:
+def log_to_supabase(session_id: str, features: dict, transcript: str = None) -> bool:
     """
     Persist extracted acoustic features + severity to Supabase.
     Call this right after extract_features() in your voice route.
@@ -455,6 +455,7 @@ def log_to_supabase(session_id: str, features: dict) -> bool:
             "acoustic_emotion":        features.get("acoustic_emotion"),
             "acoustic_confidence":     features.get("acoustic_confidence"),
             "severity":                severity,
+            "transcript":              transcript.strip() if isinstance(transcript, str) and transcript.strip() else None,
         }
 
         # Add all 13 MFCCs
