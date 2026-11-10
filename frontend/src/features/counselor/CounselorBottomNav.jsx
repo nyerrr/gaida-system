@@ -248,7 +248,6 @@ export default function CounselorBottomNav({
           background: 'var(--card)',
           borderTop: '1px solid var(--line)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          minHeight: '60px',
         }}
       >
         {PRIMARY_ITEMS.map((item) => {

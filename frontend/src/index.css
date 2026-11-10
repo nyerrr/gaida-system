@@ -463,11 +463,6 @@ nav[aria-label="Counselor mobile navigation"] {
   color: var(--brand);
 }
 
-body.filter-sheet-open .hotline-fab {
-  visibility: hidden;
-  pointer-events: none;
-}
-
 body.filter-sheet-open .counselor-bottom-sheet {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
 }
@@ -725,31 +720,11 @@ body.filter-sheet-open .counselor-bottom-sheet {
   margin-top: 16px;
 }
 
-.hotline-fab {
-  display: none;
-}
-
 @media (max-width: 900px) {
   .side { display: none; }
   .side.open { display: flex; }
   .kpis { grid-template-columns: 1fr 1fr; }
   .cd-grid { grid-template-columns: 1fr; }
-  .hotline-fab {
-    position: fixed;
-    right: 1rem;
-    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-    z-index: 25;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    box-shadow: 0 4px 18px rgb(0 0 0 / 20%);
-  }
-  .hotline-fab {
-    border: 2px solid rgb(255 255 255 / 85%);
-    border-radius: 999px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
   .alert-actions button {
     width: 100%;
     min-height: 44px;
@@ -1125,7 +1100,7 @@ body.filter-sheet-open .counselor-bottom-sheet {
   }
 
   .counselor-alerts-page {
-    padding-bottom: calc(var(--nav-h) + 4.75rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
   }
 
   .alert-legend {
