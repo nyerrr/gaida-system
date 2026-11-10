@@ -963,6 +963,24 @@ textarea:focus-visible,
     font-weight: 700;
   }
 
+  .alert-legend-item {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .alert-legend-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .alert-legend-description {
+    padding-left: 0.875rem;
+    color: var(--secondary);
+    font-size: 0.6875rem;
+  }
+
   .alert-legend-dot {
     width: 0.5rem;
     height: 0.5rem;
@@ -973,6 +991,77 @@ textarea:focus-visible,
     width: 100%;
     color: var(--secondary);
     font-size: 0.6875rem;
+  }
+
+  .alert-feed-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: -0.75rem 0 1rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .alert-feed-status p {
+    margin-top: 0.15rem;
+    color: var(--secondary);
+    line-height: 1.4;
+  }
+
+  .alert-feed-status strong {
+    color: var(--primary);
+  }
+
+  .alert-feed-status button {
+    min-height: 2.5rem;
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid currentColor;
+    border-radius: 0.5rem;
+    background: transparent;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .alert-feed-status-error {
+    border-color: var(--risk);
+    background: var(--risk-surface);
+    color: var(--risk);
+  }
+
+  .alert-feed-status-error button {
+    color: var(--risk);
+  }
+
+  .alert-feed-status-syncing {
+    background: var(--caution-surface);
+    color: var(--caution);
+  }
+
+  .alert-feed-status-ok {
+    color: var(--safe);
+  }
+
+  .alert-feed-status-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.4rem;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  @media (max-width: 560px) {
+    .alert-feed-status {
+      align-items: flex-start;
+    }
+
+    .alert-feed-status button {
+      min-width: 5.25rem;
+    }
   }
 
   .alert-empty-state {
@@ -1475,5 +1564,63 @@ textarea:focus-visible,
   .counselor-dashboard .chime-flash {
     outline: 3px solid var(--caution);
     background: var(--caution-surface) !important;
+  }
+}
+
+/* Alert severity legend remains structured on desktop as well as mobile. */
+.counselor-dashboard .alert-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 0.875rem;
+}
+
+.counselor-dashboard .alert-legend-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  border-left: 0.25rem solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+}
+
+.counselor-dashboard .alert-legend-item:nth-child(1) {
+  border-left-color: var(--red);
+}
+
+.counselor-dashboard .alert-legend-item:nth-child(2) {
+  border-left-color: var(--high);
+}
+
+.counselor-dashboard .alert-legend-item:nth-child(3) {
+  border-left-color: var(--amb);
+}
+
+.counselor-dashboard .alert-legend-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.counselor-dashboard .alert-legend-description {
+  padding-left: 0.875rem;
+  color: var(--secondary);
+  font-size: 0.75rem;
+}
+
+.counselor-dashboard .alert-legend-note {
+  grid-column: 1 / -1;
+  width: auto;
+  margin-top: 0.125rem;
+}
+
+@media (max-width: 640px) {
+  .counselor-dashboard .alert-legend {
+    grid-template-columns: 1fr;
   }
 }

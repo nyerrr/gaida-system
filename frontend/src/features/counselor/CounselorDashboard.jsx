@@ -934,7 +934,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
   );
 }
 
-function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewChat, onUpdateStatus, onAcknowledge, sessions }) {
+function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRetryAlerts, onViewChat, onUpdateStatus, onAcknowledge, sessions }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -1022,10 +1022,38 @@ function AlertsPage({ alerts, alertsLoading, alertsError, onRetryAlerts, onViewC
           </select>
         </div>
       </div>
-      <div className="alert-legend mb-4" aria-label="Alert color legend">
-        <span className="flex items-center gap-1.5"><span className="alert-legend-dot" style={{ background: P.red }} />Crisis <b>{visibleAlerts.filter((a) => a.severity === 'Crisis').length}</b></span>
-        <span className="flex items-center gap-1.5"><span className="alert-legend-dot" style={{ background: P.high }} />High <b>{visibleAlerts.filter((a) => a.severity === 'High').length}</b></span>
-        <span className="flex items-center gap-1.5"><span className="alert-legend-dot" style={{ background: P.amber }} />Moderate <b>{visibleAlerts.filter((a) => a.severity === 'Moderate').length}</b></span>
+      {alertsError ? (
+        <div className="alert-feed-status alert-feed-status-error" role="alert">
+          <div>
+            <strong>Alert feed unavailable</strong>
+            <p>{alerts.length > 0 ? 'Showing the last successful alert data. New alerts may not appear until the connection is restored.' : 'The system could not verify whether there are alerts.'}</p>
+          </div>
+          <button type="button" onClick={onRetryAlerts}>Retry now</button>
+        </div>
+      ) : alertsLoading ? (
+        <div className="alert-feed-status alert-feed-status-syncing" role="status">
+          <span className="alert-feed-status-dot" aria-hidden="true" />
+          <span>Checking for the latest alerts…</span>
+        </div>
+      ) : alertsLastSynced ? (
+        <div className="alert-feed-status alert-feed-status-ok" role="status">
+          <span className="alert-feed-status-dot" aria-hidden="true" />
+          <span>Alert feed synced {alertsLastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      ) : null}
+      <div className="alert-legend mb-4" aria-label="Alert severity legend">
+        <span className="alert-legend-item">
+          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.red }} />Crisis <b>{visibleAlerts.filter((a) => a.severity === 'Crisis').length}</b></span>
+          <span className="alert-legend-description">Immediate response</span>
+        </span>
+        <span className="alert-legend-item">
+          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.high }} />High <b>{visibleAlerts.filter((a) => a.severity === 'High').length}</b></span>
+          <span className="alert-legend-description">Urgent attention</span>
+        </span>
+        <span className="alert-legend-item">
+          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.amber }} />Moderate <b>{visibleAlerts.filter((a) => a.severity === 'Moderate').length}</b></span>
+          <span className="alert-legend-description">Monitor and follow up</span>
+        </span>
         <span className="alert-legend-note">Highest risk appears first</span>
       </div>
       {showSwipeHint && alerts.length > 0 && (
@@ -2397,6 +2425,7 @@ export default function CounselorDashboard() {
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [alertsError, setAlertsError] = useState(null);
+  const [alertsLastSynced, setAlertsLastSynced] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(null);
@@ -2487,6 +2516,7 @@ export default function CounselorDashboard() {
       if (data.alerts) {
         setAlertsError(null);
         setAlertsLoading(false);
+        setAlertsLastSynced(new Date());
         // Detect NEW pending alerts by ID (count-based logic missed a replaced
         // alert with the same count, and re-beeped every poll because the
         // effect ran on every 2s fetch).
@@ -3223,7 +3253,7 @@ export default function CounselorDashboard() {
         <main ref={mainRef} id="counselor-main" tabIndex="-1" className="flex-1 overflow-y-auto pb-32 lg:pb-6 no-scrollbar">
           <div className="w-full max-w-[1240px] mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} onNavigate={setActivePage} onAcknowledge={handleAcknowledge} onViewSession={setChatSessionId} />}
-            {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} />}
+            {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} alertsLastSynced={alertsLastSynced} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} />}
             {activePage === 'welfare'   && <WelfarePage welfare={welfare} welfareLoading={welfareLoading} welfareError={welfareError} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} onRefresh={fetchWelfare} />}
             {activePage === 'sessions' && (
               <SessionsPage
