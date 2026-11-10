@@ -2,8 +2,13 @@ from typing import Dict, Any
 import logging
 import re
 from app.services.session_manager import get_session, start_session, record_interaction
-from app.services.virtual_agent import detect_intent_and_level, _build_result
+from app.services.virtual_agent import (
+    detect_intent_and_level,
+    should_semantically_review,
+    _build_result,
+)
 from app.services.gpt_agent import (
+    classify_uncertain_message,
     ensure_crisis_resources,
     generate_response_with_gpt,
     stream_gpt_response,
@@ -24,10 +29,11 @@ CALMING_KEYWORDS = [
     "wala kang anuman", "sige", "sige salamat",
     "take care", "okay sige", "sige po",
     "maraming salamat", "pasensya na",
-    "better", "okay", "ok", "fine", "calm", "good", "thanks", "thank you",
+    "i am better", "i'm better", "im better", "doing better",
+    "okay", "ok", "fine", "calm", "good", "thanks", "thank you",
     "relieved", "relaxed", "happy", "magaan na", "okay na", "ayos na",
     "mas okay na", "feel better", "feeling better", "nakakagaan",
-    "panatag na", "hindi na", "wala na", "okay na ko", "okay na ako",
+    "panatag na", "okay na ko", "okay na ako",
     "want to continue", "continue this conversation", "keep talking",
     "more in the future", "hope we can", "looking forward",
     "i want to continue", "i want this to continue",
@@ -85,19 +91,20 @@ Do not act as if everything is fine, do not drop the urgent tone, and do not rep
 crisis resources unless they ask. Stay present and patient.
 """
 
-# Vague disclosures ("i give up", "i just want it all to stop") are warning signs
-# but not a stated intent to die. The detection layer alerts at HIGH and marks
-# the turn with clarify=True; this protocol turns that alert into a conversation
-# instead of a crisis script the student never asked for. If the answer names
-# death or self-harm, the next turn takes the normal crisis path.
+# Ambiguous disclosures ("i give up", "better off without me", "i don't want to
+# be here anymore") are warning signs but do not by themselves establish intent
+# to die. The detection layer alerts at HIGH and marks the turn with
+# clarify=True; this protocol turns that alert into a conversation instead of a
+# crisis script the student never asked for. If the answer names death or
+# self-harm, the next turn takes the normal crisis path.
 CLARIFY_PROTOCOL = """
-The student used a vague phrase like "I give up" or "I just want it all to stop."
-Do not assume they mean self-harm, and do not jump to a crisis script. First
-acknowledge the feeling plainly, then ask ONE gentle clarifying question about what
-"giving up" means for them right now (for example: "When you say you want to give
-up, do you mean the schoolwork, or something bigger?"). Listen to the answer before
-deciding what to do next. If they name death or self-harm, follow the crisis
-protocol immediately.
+The student used an ambiguous warning phrase, such as "I give up," "everyone
+would be better off without me," or "I don't want to be here anymore." Do not
+assume they mean self-harm, and do not jump to a full crisis script. First
+acknowledge the feeling plainly, then ask ONE gentle, direct question to clarify
+what they mean and whether they are thinking about harming themselves. Listen to
+the answer before deciding what to do next. If they confirm current suicidal
+thoughts or self-harm, follow the crisis protocol immediately.
 """
 
 # Explicit safety confirmations — a clear verbal/typed "I am safe / okay now" that
@@ -143,10 +150,20 @@ _CALMING_RE = re.compile(
     r"\b(?:" + "|".join(re.escape(kw) for kw in CALMING_KEYWORDS) + r")\b",
     re.IGNORECASE,
 )
+_CALMING_NEGATION_RE = re.compile(
+    r"\b(?:not|never|no longer|don't|dont|do not|doesn't|doesnt|does not|"
+    r"didn't|didnt|did not|isn't|isnt|is not|aren't|arent|are not|"
+    r"wasn't|wasnt|was not|won't|wont|will not|can't|cant|cannot|"
+    r"couldn't|couldnt|could not|hindi|di|dili)\b"
+    r"[^.!?;,\r\n]{0,32}\b(?:better|okay|ok|fine|calm|good|relieved|"
+    r"relaxed|happy|magaan|panatag)\b",
+    re.IGNORECASE,
+)
 
 
 def _detect_calming(text: str) -> bool:
-    return bool(_CALMING_RE.search(text or ""))
+    text = text or ""
+    return bool(_CALMING_RE.search(text) and not _CALMING_NEGATION_RE.search(text))
 
 
 def _detect_urgent(text: str) -> bool:
@@ -183,8 +200,43 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
         m.get("sender") == "user" for m in session.get("messages", [])
     )
 
+    # Whether THIS turn explicitly confirms the student is safe. Determines
+    # whether a post-crisis hold may be lifted.
+    safety_confirm = _is_safety_confirmation(user_message, session)
+
     # --- Step 2: Detect intent (always — even in vent mode for safety) ---
     detection = detect_intent_and_level(user_message)
+    if (
+        not session.get("meta", {}).get("counselor_active")
+        and not session.get("meta", {}).get("post_crisis")
+        and not safety_confirm
+        and should_semantically_review(user_message, detection)
+    ):
+        recent_user_messages = [
+            message.get("text", "")
+            for message in session.get("messages", [])
+            if message.get("sender") == "user" and message.get("text")
+        ]
+        semantic = classify_uncertain_message(user_message, recent_user_messages)
+        if semantic:
+            confidence_by_level = {
+                "Low": 0.55,
+                "Moderate": 0.73,
+                "High": 0.85,
+            }
+            semantic_detection = _build_result(
+                semantic["intent"],
+                confidence_by_level[semantic["severity"]],
+                clarify=semantic["clarify"],
+            )
+            if semantic_detection["severity"] != "Normal":
+                detection = semantic_detection
+                detection["semantic_review"] = True
+                logger.info(
+                    "Semantic review raised uncertain message to %s/%s",
+                    detection["severity"],
+                    detection["intent"],
+                )
     detected_intent = detection["intent"]
     raw_confidence = detection["confidence"]
     crisis_resources = detection["crisis_resources"]
@@ -200,10 +252,6 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     loss_flags = {
         k: v for k, v in (loss_result.get("flags") or {}).items() if v
     }
-
-    # Whether THIS turn explicitly confirms the student is safe. Determines
-    # whether a post-crisis hold may be lifted.
-    safety_confirm = _is_safety_confirmation(user_message, session)
 
     if vent_mode and (detected_intent == "suicidal" or raw_confidence >= 0.99):
         logger.warning("VENT MODE OVERRIDE: crisis detected in vent session %s", session_id)
@@ -337,6 +385,12 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
                     running_confidence = min(running_confidence, CAP_LOSS_PLAIN)
 
             running_confidence = round(running_confidence, 3)
+
+        # A semantic review is only requested for an otherwise Normal message,
+        # and its accepted result already cleared the confidence threshold.
+        # Preserve that current-turn evidence instead of smoothing it away.
+        if detection.get("semantic_review"):
+            running_confidence = max(running_confidence, raw_confidence)
 
         # First turn: the stored 0.3 is a placeholder, not real history. Without
         # this floor, a genuine Low reading is blended down with that baseline

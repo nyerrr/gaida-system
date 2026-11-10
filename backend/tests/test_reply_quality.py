@@ -250,11 +250,17 @@ def test_empty_reply_is_not_answered_for():
     "i took the panel and it went badly",
     "i looked at his profile again",
     "this book made me cry",
+    "everyone would be better off without me",
+    "I don't see the point anymore",
+    "I don't feel better",
+    "I am not okay",
+    "I do not feel good",
+    "wala na akong dahilan para mabuhay",
+    "hindi na ako magtatagal sa mundong to",
 ])
-def test_words_containing_ok_are_not_calming(message):
-    # "ok" was substring-matched, so it fired inside "broke", "took", "looked"
-    # and "book" — which read a breakup disclosure as the student calming down
-    # and produced a check-in reply to a bereavement.
+def test_contextual_words_are_not_calming(message):
+    # Calming detection must rely on an affirmative signal, not one positive-
+    # sounding word in an otherwise distressing sentence.
     assert _detect_calming(message) is False, message
 
 
@@ -262,11 +268,73 @@ def test_real_calming_signals_still_detected():
     for message in (
         "okay na talaga",
         "i feel better now",
+        "i'm doing better",
         "salamat",
         "i'm fine now, thanks",
         "nakakagaan na",
     ):
         assert _detect_calming(message) is True, message
+
+
+def test_semantic_classifier_parsing_is_bounded_and_validated():
+    parse = gpt_agent._parse_semantic_classification
+    result = parse(
+        '{"intent":"suicidal","risk_level":"crisis",'
+        '"confidence":0.96,"clarify":false}'
+    )
+    assert result == {
+        "intent": "suicidal",
+        "severity": "High",
+        "confidence": 0.96,
+        "clarify": True,
+    }
+    assert parse(
+        '{"intent":"neutral","risk_level":"high",'
+        '"confidence":0.99,"clarify":false}'
+    ) is None
+    assert parse(
+        '{"intent":"anxiety","risk_level":"moderate",'
+        '"confidence":0.4,"clarify":false}'
+    ) is None
+    assert parse("not json") is None
+
+
+def test_semantic_classifier_uses_configured_target_and_user_context(monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("LLM_SEMANTIC_DETECTION", "1")
+    monkeypatch.setattr(gpt_agent, "_LLM_TARGETS", [object()])
+    calls = {}
+
+    def fake_chat(messages, temperature, max_tokens, reasoning_effort=None):
+        calls["messages"] = messages
+        calls["temperature"] = temperature
+        calls["max_tokens"] = max_tokens
+        calls["reasoning_effort"] = reasoning_effort
+        response = SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content=(
+                '{"intent":"anxiety","risk_level":"moderate",'
+                '"confidence":0.88,"clarify":false}'
+            )))
+        ])
+        return response, SimpleNamespace(model="test-model")
+
+    monkeypatch.setattr(gpt_agent, "_chat_complete", fake_chat)
+    result = gpt_agent.classify_uncertain_message(
+        "I am not sure what to call this feeling.",
+        ["I have been withdrawing from my friends."],
+    )
+
+    payload = json.loads(calls["messages"][1]["content"])
+    assert payload["recent_user_messages"] == [
+        "I have been withdrawing from my friends."
+    ]
+    assert payload["current_message"] == "I am not sure what to call this feeling."
+    assert calls["temperature"] == 0.0
+    assert calls["max_tokens"] == 120
+    assert calls["reasoning_effort"] == "low"
+    assert result["severity"] == "Moderate"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -299,6 +367,111 @@ def test_breakup_gets_a_response_flow_not_a_checkin():
     assert turn["intent"] == "loss"
     assert turn["anxiety_level"] == "moderate"
     assert "Do NOT reframe the loss" in (turn["counselor_protocol"] or "")
+
+
+def test_passive_suicidal_signals_survive_router_and_raise_high():
+    for index, message in enumerate((
+        "I don't see the point anymore. I think everyone would be better off without me.",
+        "i don't want to be here anymore.",
+        "No one would notice if I was gone.",
+    )):
+        turn = _fresh_turn(message, f"SESS_PASSIVE_RISK_{index}")
+        assert turn["intent"] == "suicidal", (message, turn)
+        assert turn["severity"] == "High", (message, turn)
+        assert turn["anxiety_level"] == "high", (message, turn)
+        assert turn["clarify"] is True, (message, turn)
+
+
+def test_semantic_review_can_raise_only_unresolved_neutral_detection(monkeypatch):
+    from app.services import intent_router
+
+    message = (
+        "Sometimes everything feels strange and disconnected, and I do not "
+        "know how to explain what is happening."
+    )
+    monkeypatch.setattr(
+        intent_router,
+        "detect_intent_and_level",
+        lambda _message: _build_result("neutral", 0.3),
+    )
+    calls = []
+
+    def fake_semantic_review(current_message, recent_user_messages):
+        calls.append((current_message, recent_user_messages))
+        return {
+            "intent": "suicidal",
+            "severity": "High",
+            "confidence": 0.91,
+            "clarify": True,
+        }
+
+    monkeypatch.setattr(
+        intent_router, "classify_uncertain_message", fake_semantic_review
+    )
+    turn = _fresh_turn(message, "SESS_SEMANTIC_REVIEW")
+
+    assert turn["intent"] == "suicidal"
+    assert turn["severity"] == "High"
+    assert turn["clarify"] is True
+    assert calls == [(message, [])]
+
+
+def test_semantic_review_band_is_not_diluted_by_first_turn_smoothing(monkeypatch):
+    from app.services import intent_router
+
+    message = (
+        "I cannot describe the feeling, but everything has felt harder to "
+        "manage over the last few weeks."
+    )
+    monkeypatch.setattr(
+        intent_router,
+        "detect_intent_and_level",
+        lambda _message: _build_result("neutral", 0.3),
+    )
+    monkeypatch.setattr(
+        intent_router,
+        "classify_uncertain_message",
+        lambda *_args: {
+            "intent": "anxiety",
+            "severity": "Moderate",
+            "confidence": 0.86,
+            "clarify": False,
+        },
+    )
+
+    turn = _fresh_turn(message, "SESS_SEMANTIC_MODERATE")
+    assert turn["intent"] == "anxiety"
+    assert turn["severity"] == "Moderate"
+    assert turn["anxiety_level"] == "moderate"
+
+
+def test_semantic_review_does_not_run_on_explicit_or_short_messages(monkeypatch):
+    from app.services import intent_router
+
+    calls = []
+    monkeypatch.setattr(
+        intent_router,
+        "classify_uncertain_message",
+        lambda *args: calls.append(args),
+    )
+    crisis = _fresh_turn("I want to kill myself.", "SESS_SEMANTIC_EXPLICIT")
+    neutral = _fresh_turn("I have an upcoming exam.", "SESS_SEMANTIC_SHORT")
+
+    assert crisis["severity"] == "Crisis"
+    assert neutral["severity"] == "Normal"
+    assert calls == []
+
+
+def test_standalone_negative_wellbeing_is_low_not_normal():
+    for index, message in enumerate((
+        "I am not okay.",
+        "I don't feel better.",
+        "I do not feel good.",
+    )):
+        turn = _fresh_turn(message, f"SESS_NEGATIVE_WELLBEING_{index}")
+        assert turn["intent"] == "anxiety", (message, turn)
+        assert turn["severity"] == "Low", (message, turn)
+        assert turn["anxiety_level"] == "low", (message, turn)
 
 
 def test_loss_never_degrades_to_normal_severity():
@@ -540,6 +713,31 @@ def test_first_person_suicidal_thoughts_remain_crisis_disclosures():
         result = detect_intent_and_level(message)
         assert result["intent"] == "suicidal", (message, result)
         assert result["anxiety_level"] == "crisis", (message, result)
+
+
+def test_passive_suicidal_signals_get_high_and_a_clarifying_question():
+    from app.services.virtual_agent import detect_intent_and_level
+
+    for message in (
+        "I don’t see the point anymore. I think everyone would be better off without me.",
+        "i don't want to be here anymore.",
+        "I don't see the point anymore.",
+        "Everyone would be better off without me.",
+    ):
+        result = detect_intent_and_level(message)
+        assert result["intent"] == "suicidal", (message, result)
+        assert result["severity"] == "High", (message, result)
+        assert result["anxiety_level"] == "high", (message, result)
+        assert result["clarify"] is True, (message, result)
+
+
+def test_formal_existential_denial_variant_reaches_crisis():
+    from app.services.virtual_agent import detect_intent_and_level
+
+    result = detect_intent_and_level("I do not want to exist.")
+    assert result["intent"] == "suicidal"
+    assert result["severity"] == "Crisis"
+    assert result["anxiety_level"] == "crisis"
 
 
 def test_the_gold_key_suicidal_recall_is_what_we_measured():

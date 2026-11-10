@@ -185,6 +185,21 @@ KEYWORDS = {
         ("no point of living", 4.0),
         ("point of living anymore", 4.0),
         ("no point in living", 4.0),
+        # Passive death-wish / burdensomeness language is a high-risk signal,
+        # but does not state intent or a plan. Route it to High + clarify
+        # instead of letting the ML classifier label it Normal.
+        ("i don't see the point anymore", 3.5),
+        ("i dont see the point anymore", 3.5),
+        ("better off without me", 3.5),
+        ("no one would notice if i was gone", 3.5),
+        ("no one would notice if i were gone", 3.5),
+        ("nobody would notice if i was gone", 3.5),
+        ("nobody would notice if i were gone", 3.5),
+        ("no one would miss me", 3.5),
+        ("nobody would miss me", 3.5),
+        ("i don't want to be here anymore", 3.5),
+        ("i do not want to be here anymore", 3.5),
+        ("i dont want to be here anymore", 3.5),
         ("no point to life", 3.5),
         ("what's the point of living", 4.0),
         ("no reason to keep going", 3.5),
@@ -228,6 +243,8 @@ KEYWORDS = {
         ("there's no point anymore", 3.5),
         ("i can't go on", 3.5),
         ("i don't want to exist", 3.5),
+        ("i do not want to exist", 3.5),
+        ("i dont want to exist", 3.5),
         ("i want to disappear forever", 3.5),
         ("better off dead", 3.5),
 
@@ -554,6 +571,16 @@ _LETTER_ACTION_RE = re.compile(
     re.IGNORECASE,
 )
 _METHOD_CLAUSE_SPLIT_RE = re.compile(r"[,;:.!?\u2026\u2014\u2013\r\n]+")
+_CLEAR_SELF_DISTRESS_ONLY_RE = re.compile(
+    r"^(?:i(?: am|'m|m) not (?:really )?(?:okay|ok|fine|alright|all right)"
+    r"(?: right now| today)?|"
+    r"i (?:do not|don't|dont) feel (?:any )?(?:better|good|okay|ok|fine|well)"
+    r"(?: right now| today)?|"
+    r"i(?: am|'m|m) not doing well(?: right now| today)?|"
+    r"i feel worse(?: right now| today)?|"
+    r"i(?: am|'m|m) getting worse(?: right now| today)?)$",
+    re.IGNORECASE,
+)
 
 
 def _method_keyword_context(keyword: str, text: str) -> str:
@@ -896,6 +923,40 @@ def _match_suicidal_keyword(txt: str, tokens: set, raw_text: str | None = None):
     return found_soft
 
 
+def should_semantically_review(text: str, detection: dict) -> bool:
+    """Gate the extra LLM call to substantial, genuinely unresolved messages."""
+    if (
+        detection.get("intent") != "neutral"
+        or detection.get("severity") != "Normal"
+        or detection.get("confidence", 1) >= SEVERITY_LOW
+    ):
+        return False
+
+    normalized = _normalize_text(text)
+    if len(_tokenize(normalized)) < 6:
+        return False
+    if (
+        _is_safe_phrase(normalized)
+        or is_non_distress(text)
+        or is_academic_setback_without_distress(text)
+        or detect_loss(text).get("is_loss")
+        or _match_suicidal_keyword(
+            normalized, set(_tokenize(normalized)), text
+        )
+        or is_reported_self_harm(text)
+    ):
+        return False
+    if (
+        is_informational_self_harm_context(text)
+        and not has_current_first_person_self_harm_intent(text)
+        and not is_reported_self_harm(text)
+    ):
+        return False
+    if has_fiction_context(text) and not has_current_first_person_self_harm_intent(text):
+        return False
+    return True
+
+
 def detect_intent_and_level(text: str) -> dict:
     txt = _normalize_text(text)
     tokens = set(_tokenize(txt))
@@ -959,6 +1020,12 @@ def detect_intent_and_level(text: str) -> dict:
     # paged through to a counselor.
     if is_academic_setback_without_distress(text):
         return _build_result("stress", 0.50)
+
+    # Short, explicit negative well-being statements are distress disclosures,
+    # not neutral status updates or calming signals. Restrict this fallback to
+    # a standalone statement so stronger context continues through arbitration.
+    if _CLEAR_SELF_DISTRESS_ONLY_RE.search(txt):
+        return _build_result("anxiety", 0.55)
 
     # ── Step 2: ML classifier ─────────────────────────────────────────────────
     try:
