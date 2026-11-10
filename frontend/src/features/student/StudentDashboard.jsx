@@ -163,7 +163,7 @@ const CRISIS_HOTLINES = [
   },
   {
     name: 'UE Guidance and Counseling Office (Manila)',
-    number: '(02) 8735-5471 loc. 462 / 366',
+    number: '(02) 8735-5471 loc. 390',
     tel: '0287355471',
     desc: 'University counselors on campus (Mon-Fri 8:00 AM - 5:00 PM)',
     badge: 'UE Campus',

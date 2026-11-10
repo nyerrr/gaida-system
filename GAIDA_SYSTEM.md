@@ -398,9 +398,9 @@ Student message
       ▼
 5. MAP to anxiety level/severity         ← _build_result()
    confidence ≥ 0.99 → Crisis / Crisis   (score 5, crisis resources included)
-   confidence ≥ 0.75 → high   / High     (score 5)
-   confidence ≥ 0.60 → moderate / Moderate (score 3)
-   confidence ≥ 0.45 → low    / Low      (score 1)
+   confidence ≥ 0.76 → high   / High     (score 5)
+   confidence ≥ 0.71 → moderate / Moderate (score 3)
+   confidence ≥ 0.46 → low    / Low      (score 1)
    else              → normal / Normal   (score 0)
       │
       ▼

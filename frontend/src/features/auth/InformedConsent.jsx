@@ -108,7 +108,7 @@ const handleAccept = async (e) => {
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-              Researcher
+              Guidance, Counseling and Career Services Office (GCCSO)
             </span>
             {localStorage.getItem('student_id') && (
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
@@ -189,7 +189,7 @@ const handleAccept = async (e) => {
                 By accepting, you consent to text and interaction data being recorded during
                 your session, and to voice input being analyzed and transcribed in real time
                 if you choose to use it (the audio itself is not retained). This data may be
-                reviewed by the research team and by authorized counselors for assessment
+                reviewed by the GCCSO and authorized counselors for assessment
                 and support purposes.
               </p>
             </div>
@@ -211,7 +211,7 @@ const handleAccept = async (e) => {
                 You may withdraw consent and end your session at any time without penalty. You have the right 
                 to request access to your session data by contacting the guidance office. You may request 
                 deletion of your data, subject to university record-keeping requirements. You can review what 
-                data has been collected about you upon request by emailing guidance@ue.edu.ph.
+                data has been collected about you upon request by contacting the GCCSO at guidance@ue.edu.ph.
               </p>
             </div>
 
@@ -232,7 +232,7 @@ const handleAccept = async (e) => {
               <h3 className="font-semibold text-gray-900 mb-2">Questions or Concerns:</h3>
               <p>
                 If you have any questions about this consent form or GAIDA's data practices, please contact the 
-                University Guidance Office at guidance@ue.edu.ph or visit the Guidance Office at 2219 C.M. Recto 
+                Guidance, Counseling and Career Services Office (GCCSO) at guidance@ue.edu.ph or visit the GCCSO at 2219 C.M. Recto
                 Avenue, Sampaloc, Manila.
               </p>
             </div>

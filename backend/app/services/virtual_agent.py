@@ -991,7 +991,7 @@ def _build_result(
     # would read as indifference. Floored at the low band rather than capped:
     # the loss detector has already applied its own ceilings upstream.
     if intent == "loss":
-        confidence = max(confidence, 0.45)
+        confidence = max(confidence, 0.46)
 
     if confidence >= 0.99:
         return {
@@ -1005,17 +1005,17 @@ def _build_result(
             "clarify": clarify,
         }
 
-    if confidence >= 0.75:
+    if confidence >= 0.76:
         anxiety_level = "high"
         severity = "High"
         anxiety_score = 5
         protocol = COUNSELOR_PROTOCOLS["high"]
-    elif confidence >= 0.60:
+    elif confidence >= 0.71:
         anxiety_level = "moderate"
         severity = "Moderate"
         anxiety_score = 3
         protocol = COUNSELOR_PROTOCOLS["moderate"]
-    elif confidence >= 0.45:
+    elif confidence >= 0.46:
         anxiety_level = "low"
         severity = "Low"
         anxiety_score = 1

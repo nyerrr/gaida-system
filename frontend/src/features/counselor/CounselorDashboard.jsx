@@ -95,9 +95,9 @@ const formatDuration = (startedAt, now = Date.now()) => {
 
 const confidenceToSeverity = (c) => {
   if (c >= 0.99) return 'Crisis';
-  if (c >= 0.75) return 'High';
-  if (c >= 0.60) return 'Moderate';
-  if (c >= 0.45) return 'Low';
+  if (c >= 0.76) return 'High';
+  if (c >= 0.71) return 'Moderate';
+  if (c >= 0.46) return 'Low';
   return 'Normal';
 };
 
@@ -2117,10 +2117,10 @@ const typingThrottleRef = useRef(null);
 // ── Detection Page ────────────────────────────────────────────────────────────
 function DetectionPage() {
   const thresholds = [
-    { level: 'Normal', range: '< 0.45', color: P.textMuted, desc: 'GPT responds freely' },
-    { level: 'Low', range: '0.45 – 0.60', color: P.green, desc: 'Counselor protocol injected' },
-    { level: 'Moderate', range: '0.60 – 0.75', color: P.teal, desc: 'Stronger protocol injected' },
-    { level: 'High', range: '0.75 – 0.98', color: P.amber, desc: 'Counselor alert fired' },
+    { level: 'Normal', range: '< 0.46', color: P.textMuted, desc: 'GPT responds freely' },
+    { level: 'Low', range: '0.46 – 0.70', color: P.green, desc: 'Counselor protocol injected' },
+    { level: 'Moderate', range: '0.71 – 0.75', color: P.teal, desc: 'Stronger protocol injected' },
+    { level: 'High', range: '0.76 – 0.98', color: P.amber, desc: 'Counselor alert fired' },
     { level: 'Crisis', range: '0.99 – 1.00', color: P.red, desc: 'Immediate intervention' },
   ];
 

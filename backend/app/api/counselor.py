@@ -913,11 +913,11 @@ def get_active_sessions(user: dict = Depends(require_role("counselor"))):
             confidence = meta.get("running_confidence", 0.3)
 
             if not severity or severity == "Normal":
-                if confidence >= 0.75:
+                if confidence >= 0.76:
                     severity = "High"
-                elif confidence >= 0.60:
+                elif confidence >= 0.71:
                     severity = "Moderate"
-                elif confidence >= 0.45:
+                elif confidence >= 0.46:
                     severity = "Low"
                 else:
                     severity = "Normal"
@@ -1884,11 +1884,11 @@ def _sse_session_severity(session: dict) -> str:
     severity = meta.get("peak_severity") or meta.get("severity") or "Normal"
     confidence = meta.get("running_confidence", 0.3)
     if not severity or severity == "Normal":
-        if confidence >= 0.75:
+        if confidence >= 0.76:
             severity = "High"
-        elif confidence >= 0.60:
+        elif confidence >= 0.71:
             severity = "Moderate"
-        elif confidence >= 0.45:
+        elif confidence >= 0.46:
             severity = "Low"
         else:
             severity = "Normal"

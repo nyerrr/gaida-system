@@ -247,9 +247,9 @@ GAIDA assigns a level to messages using text and, when used, voice features. The
 | Level | Approximate confidence | What typically happens |
 |---|---|---|
 | **Normal** | Below 0.45 | GAIDA responds freely |
-| **Low** | 0.45 – 0.60 | A counselor-written support protocol is added to the reply |
-| **Moderate** | 0.60 – 0.75 | A stronger support protocol is added |
-| **High** | 0.75 – 0.98 | A counselor alert is fired and GAIDA may pause |
+| **Low** | 0.46 – 0.70 | A counselor-written support protocol is added to the reply |
+| **Moderate** | 0.71 – 0.75 | A stronger support protocol is added |
+| **High** | 0.76 – 0.98 | A counselor alert is fired and GAIDA may pause |
 | **Crisis** | 0.99 – 1.00 | Immediate intervention flow, alert, and hotline guidance |
 
 These levels are **support signals, not a diagnosis**. A “Normal” result does not prove that someone is safe, and a high result does not by itself confirm a condition.
@@ -317,7 +317,7 @@ The **Emergency Hotlines** button opens the current list:
 | **HOPELINE Philippines** | (02) 8804-4673 / 0917-558-4673 | 24/7 suicide prevention; toll-free for Globe/TM |
 | **In Touch Community Services** | (02) 8893-7603 / 0917-800-1123 | Free, confidential crisis counseling |
 | **Philippine National Emergency Hotline** | **911** | Immediate life-threatening emergencies |
-| **UE Guidance and Counseling Office (Manila)** | (02) 8735-5471 loc. 462 / 366 | Mon–Fri, 8:00 AM – 5:00 PM |
+| **UE Guidance and Counseling Office (Manila)** | (02) 8735-5471 loc. 390 | Mon–Fri, 8:00 AM – 5:00 PM |
 | **UE Guidance and Counseling Office (Caloocan)** | (02) 8367-4572 loc. 175 | Mon–Fri, 8:00 AM – 5:00 PM |
 
 ### 5.14 Privacy and data
