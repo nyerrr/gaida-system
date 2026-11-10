@@ -174,6 +174,59 @@ RETROSPECTIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_RISK_CLAUSE_SPLIT_RE = re.compile(
+    r"[,;:.!?\u2026\u2014\u2013\r\n]+|\b(?:but|pero|yet|however|although)\b",
+    re.IGNORECASE,
+)
+_CURRENT_FIRST_PERSON_SELF_HARM_RE = re.compile(
+    r"\b(?:i|i'm|im|i am|ako|ako'y)\s+"
+    r"(?:(?:really|just|still|na)\s+)?"
+    r"(?:want(?:\s+to)?|wanna|wish(?:\s+to)?|plan(?:ning)?\s+to|"
+    r"intend(?:ing)?\s+to|will|am\s+going\s+to|gonna|should|ready\s+to|"
+    r"might\s+as\s+well)\s+"
+    r"(?:just\s+)?(?:die|kill\s+(?:myself|my\s+self)|hurt myself|"
+    r"harm myself|cut myself|end my life|end it all|kms|"
+    r"off myself|end myself|"
+    r"be alive|live anymore)\b"
+    r"|\bi\s+(?:do not|don't|dont)\s+(?:want to|wanna)\s+live\b"
+    r"|\bi\s+(?:really\s+)?(?:am\s+|['’]?m\s+)?tired of living\b"
+    r"|\bi\s+feel like dying\b"
+    r"|\bgusto ko (?:na|nang) mamatay\b"
+    r"|\b(?:magpapakamatay|papatayin ko (?:na )?sarili ko)\b"
+    r"|\b(?:ma|mama)?matay na lang ako\b",
+    re.IGNORECASE,
+)
+_REPORTED_SPEECH_RE = re.compile(
+    r"\b(?:(?:my|our)\s+(?:friend|classmate|roommate|sister|brother|"
+    r"cousin|partner|parent)|someone|a friend|he|she|they|character|narrator)\b"
+    r"[^.!?\r\n]{0,50}\b(?:said|says|told|texted|wrote|writes|"
+    r"mentioned|confessed)\b",
+    re.IGNORECASE,
+)
+_REPORTED_SELF_HARM_RE = re.compile(
+    r"\b(?:i\s+(?:really\s+)?(?:want|wanna|wish|plan|intend)\s+(?:to\s+)?"
+    r"(?:die|kill myself|end my life|hurt myself)|"
+    r"(?:she|he|they)\s+(?:want|wants|wanted|plan|plans)\s+(?:to\s+)?"
+    r"(?:die|kill herself|kill himself|kill themselves)|"
+    r"kill\s+(?:myself|herself|himself|themselves)|suicid\w*|"
+    r"self[- ]harm)",
+    re.IGNORECASE,
+)
+_INFORMATIONAL_SELF_HARM_CONTEXT_RE = re.compile(
+    r"\b(?:essay|class|school|research|study|studying|lesson|assignment|"
+    r"presentation|prevention|awareness|definition|article|news|documentary|"
+    r"psychology|clinical|ideation|symptom|movie|film|show|character|story|"
+    r"novel|book|song|lyrics|poem)\b",
+    re.IGNORECASE,
+)
+_FIRST_PERSON_SUICIDAL_DISCLOSURE_RE = re.compile(
+    r"\b(?:i am|i'm|im|i feel|i have|i've been|i am having)\s+"
+    r"(?:currently\s+)?(?:suicidal|thinking about suicide|"
+    r"considering suicide|suicidal thoughts?)\b"
+    r"|\bi\s+(?:think|keep thinking|have been thinking)\s+about suicide\b",
+    re.IGNORECASE,
+)
+
 # Someone other than the speaker. Combined with the absence of a first-person
 # marker, this separates "sana mamatay na lang siya" (hostile speech about a
 # third party) from "mamamatay na lang ako" (a disclosure).
@@ -198,6 +251,30 @@ def has_joking_context(text: str) -> bool:
 def has_retrospective_context(text: str) -> bool:
     """True when the death-talk is placed in the past or a stated interval ago."""
     return bool(RETROSPECTIVE_RE.search(text or ""))
+
+
+def has_current_first_person_self_harm_intent(text: str) -> bool:
+    """True for an active first-person disclosure, not a past-tense recollection."""
+    if _FIRST_PERSON_SUICIDAL_DISCLOSURE_RE.search(text or ""):
+        return True
+    for clause in _RISK_CLAUSE_SPLIT_RE.split(text or ""):
+        if RETROSPECTIVE_RE.search(clause):
+            continue
+        if _CURRENT_FIRST_PERSON_SELF_HARM_RE.search(clause):
+            return True
+    return False
+
+
+def is_reported_self_harm(text: str) -> bool:
+    """True when a speaker attributes a self-harm disclosure to another person."""
+    text = text or ""
+    report = _REPORTED_SPEECH_RE.search(text)
+    return bool(report and _REPORTED_SELF_HARM_RE.search(text, report.end()))
+
+
+def is_informational_self_harm_context(text: str) -> bool:
+    """True when self-harm language is discussed as an academic/media topic."""
+    return bool(_INFORMATIONAL_SELF_HARM_CONTEXT_RE.search(text or ""))
 
 
 def is_self_referential(text: str) -> bool:
@@ -447,18 +524,16 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
     0.30–0.99 verdict + intent, shared by the hard path and the rule fallback.
 
     Order of precedence (safety first):
-      1. explicit-self-harm keyword → full crisis
-      2. third-person disclosure ("kill themselves") → HIGH unless fiction
-      3. joking context → neutral, no alert
-      4. third-party death wish ("sana mamatay siya") → anger, no alert
-      5. retrospective context ("i used to want to die") → sadness, no alert
-      6. soft give-up phrase + venting context → stress (false-positive guard)
-      7. fiction context → angry fiction (no alert; low risk)
-      8. hypothetical/hedged → HIGH (still real, but not a plan)
-      9. negated soft give-up ("i don't want to give up") → neutral
-     10. soft give-up phrase with no venting context → HIGH + clarify
+      1. informational self-harm mention → neutral
+      2. reported self-harm disclosure → HIGH unless fiction
+      3. third-person disclosure ("kill themselves") → HIGH unless fiction
+      4. joking, third-party, retrospective, and hypothetical context guards
+      5. soft give-up phrase + venting context → stress
+      6. fiction context → no alert
+      7. negated soft give-up ("i don't want to give up") → neutral
+      8. ambiguous soft give-up phrase → HIGH + clarify
 
-    Step 10 used to escalate a bare give-up phrase to a full Crisis. That
+    A bare give-up phrase used to escalate to a full Crisis. That
     over-reacted to ambiguous language: "i just want to give up" is a genuine
     warning sign, but not the same as a stated intent to die. It now alerts at
     HIGH and asks a clarifying question, while an explicit death statement
@@ -469,6 +544,22 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
     crisis script the student never asked for.
     """
     text = text or ""
+
+    if (
+        any(
+            k in {"suicide", "suicidal", "self-harm", "self harm"}
+            for k in matched_keywords
+        )
+        and is_informational_self_harm_context(text)
+        and not has_current_first_person_self_harm_intent(text)
+        and not is_reported_self_harm(text)
+    ):
+        return {"intent": "neutral", "confidence": 0.3}
+
+    if is_reported_self_harm(text):
+        if has_fiction_context(text):
+            return {"intent": "neutral", "confidence": 0.3}
+        return {"intent": "suicidal", "confidence": 0.85}
 
     # Third-person suicide disclosure: "my friend said she wants to kill
     # herself" / "my cousin killed himself". Not first-person intent, but a
@@ -488,7 +579,10 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
         # Checked here rather than in NEGATIVE_CONTEXTS because that list is
         # only consulted on the ML branch — a keyword match bypassed it, which
         # is how "i used to want to die lol" became a crisis.
-        if has_joking_context(text):
+        if (
+            has_joking_context(text)
+            and not has_current_first_person_self_harm_intent(text)
+        ):
             return {"intent": "neutral", "confidence": 0.3}
         if is_third_party_death_wish(text):
             return {"intent": "anger", "confidence": 0.55}
@@ -584,6 +678,7 @@ _POSITIVE_COPING_MARKERS = (
     "doing fine", "doing okay", "doing ok", "i'm fine", "im fine",
     "okay na ako", "ok na ako", "i'm okay", "im okay",
     "proud of", "looking forward", "excited",
+    "decided to focus", "decided to prioritize", "decided to prioritise",
     "trying to relax", "try to relax", "to relax myself", "relax myself",
     "stay focused", "staying focused", "keep focused",
     "taking a break", "take a break", "taking it one", "one at a time",
