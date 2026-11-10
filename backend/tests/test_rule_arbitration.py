@@ -183,6 +183,23 @@ def test_self_directed_anger_survives_the_reported_anger_guard():
         assert detect_intent_and_level(message)["intent"] == expected, message
 
 
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        ("I don't want to be a burden to them", "anxiety"),
+        ("I have a lingering worry about spending the money", "anxiety"),
+        ("Will it be successful? Will it be a failure?", "anxiety"),
+        ("I'm questioning if this course is still for me", "anxiety"),
+        ("Every time we talk, we are gonna start to argue again", "anxiety"),
+        ("I'm struggling to manage my time between work and school", "stress"),
+        ("It didn't work out as I expected", "sadness"),
+    ],
+)
+def test_common_indirect_distress_phrases_use_rules(message, expected):
+    result = detect_intent_and_level(message)
+    assert result["intent"] == expected, (message, result)
+
+
 def test_anger_never_pages_a_counselor():
     """Anger is capped in _build_result so a rant is never an incident."""
     for message in [

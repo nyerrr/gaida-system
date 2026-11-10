@@ -545,7 +545,8 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
 # only makes the guard quieter, never louder.
 DISTRESS_SIGNAL_RE = re.compile(
     r"\b("
-    r"worry|worries|worrying|worried|anxious|anxiety|nervous|nerbiyos|"
+    r"worry|worries|worrying|worried|struggl\w*|uncertain|"
+    r"anxious|anxiety|nervous|nerbiyos|"
     r"panic|panicky|panicking|overthink|overthinking|overwhelmed|overwhelming|"
     r"kaba|kinakabahan|kakabahan|takot|natatakot|scared|afraid|fear|fearful|"
     r"terrified|restless|racing|pounding|shaking|trembling|nanginginig|"
@@ -555,6 +556,7 @@ DISTRESS_SIGNAL_RE = re.compile(
     r"feel(?:ing)? (?:so |a little |really |very |kinda )?(?:down|low|blue)|"
     r"a little down|losing interest|lose interest|"
     r"hurt|hurts|sakit|broken|heartbroken|"
+    r"argu(?:e|ing|ment)|"
     r"worthless|failure|ashamed|disappointed|meaningless|numb|"
     r"no energy|no motivation|exhausted|drained|"
     r"can'?t function|can'?t get out|can'?t get up|can'?t concentrate|"
