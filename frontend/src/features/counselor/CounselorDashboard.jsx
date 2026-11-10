@@ -3018,29 +3018,29 @@ export default function CounselorDashboard() {
           <button type="button" onClick={() => setDashboardNotice('')} className="shrink-0 font-semibold underline">Dismiss</button>
         </div>
       )}
-      {mobileNavOpen && (
-        <div
-          className="fixed inset-0 z-40"
-          style={{ background: 'rgba(34,48,58,0.45)', backdropFilter: 'blur(2px)' }}
-          onPointerDown={closeMobileNav}
-          aria-hidden="true"
-        />
-      )}
-
       {/* Single combined panel: on phones this is the profile/utility drawer
           (navigation lives in the bottom bar and its sheet); on desktop it
           stays as the full collapsible navigation rail. */}
-      <aside
-        ref={drawerRef}
-        className={`
-          side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-[60] flex flex-col shadow-lg transition-all duration-300
-          ${mobileNavOpen ? '' : 'lg:z-30'}
-          w-[84vw] max-w-[320px] ${expanded ? 'lg:w-64' : 'lg:w-20'}
-          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
-        `}
-        style={{ background: 'var(--side)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      {createPortal(
+        <div className="counselor-portal" data-theme={dashboardTheme}>
+          {mobileNavOpen && (
+            <div
+              className="counselor-drawer-backdrop fixed inset-0"
+              onPointerDown={closeMobileNav}
+              aria-hidden="true"
+            />
+          )}
+          <aside
+            ref={drawerRef}
+            className={`
+              side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-[60] flex flex-col shadow-lg transition-all duration-300
+              ${mobileNavOpen ? '' : 'lg:z-30'}
+              w-[84vw] max-w-[320px] ${expanded ? 'lg:w-64' : 'lg:w-20'}
+              ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
+            `}
+            style={{ background: 'var(--side)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
         {/* ── Zone 1: profile ───────────────────────────────────────────── */}
         {/* Mobile drawer profile: full name, status dot on the avatar corner,
             and only the counselor ID inside the badge. */}
@@ -3408,7 +3408,10 @@ export default function CounselorDashboard() {
             </button>
           </div>
         </div>
-      </aside>
+          </aside>
+        </div>,
+        document.body,
+      )}
 
       <a className="counselor-skip-link" href="#counselor-main">
         Skip to main content
@@ -3514,14 +3517,8 @@ export default function CounselorDashboard() {
         welfareCount={welfare.length}
         sessionsCount={sessions.length}
         drawerOpen={mobileNavOpen}
+        theme={dashboardTheme}
       />
-
-      {activePage !== 'alerts' && (
-        <button type="button" className="fab hotline-fab" onClick={openHotlines}>
-          <NavIcon id="hotline" size={18} />
-          <span>Crisis hotlines</span>
-        </button>
-      )}
 
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />

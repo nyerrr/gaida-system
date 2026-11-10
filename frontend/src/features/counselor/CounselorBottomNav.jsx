@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const P = {
   navy: 'var(--side)',
@@ -29,6 +30,7 @@ export default function CounselorBottomNav({
   welfareCount = 0,
   sessionsCount = 0,
   drawerOpen = false,
+  theme = 'light',
 }) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
@@ -151,16 +153,16 @@ export default function CounselorBottomNav({
   return (
     <>
       {/* "More" Slide-up Sheet */}
-      {moreMenuOpen && (
-        <>
+      {moreMenuOpen && createPortal(
+        <div className="counselor-portal" data-theme={theme}>
           <div
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity lg:hidden"
+            className="counselor-sheet-backdrop fixed inset-0"
             onClick={() => setMoreMenuOpen(false)}
             aria-hidden="true"
           />
 
           <div
-            className="counselor-more-sheet fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl shadow-2xl p-4 transition-transform lg:hidden"
+            className="counselor-more-sheet counselor-bottom-sheet fixed bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl p-4 transition-transform lg:hidden"
             style={{
               background: P.surface,
               borderTop: `1px solid ${P.border}`,
@@ -234,7 +236,8 @@ export default function CounselorBottomNav({
             </div>
 
           </div>
-        </>
+        </div>,
+        document.body,
       )}
 
       {/* Fixed Bottom Bar */}
