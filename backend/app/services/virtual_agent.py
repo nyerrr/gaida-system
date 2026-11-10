@@ -11,9 +11,12 @@ from app.services.crisis_guards import (
     contains_harm_keyword,
     has_fiction_context,
     has_hypothetical_context,
+    has_current_first_person_self_harm_intent,
     has_venting_context,
     is_academic_setback_without_distress,
+    is_informational_self_harm_context,
     is_non_distress,
+    is_reported_self_harm,
     is_self_referential,
     is_soft_venting_phrase,
     is_third_party_death_wish,
@@ -499,6 +502,142 @@ EXPLICIT_SELF_HARM_RE = re.compile(
     re.IGNORECASE,
 )
 
+_CONTEXT_SENSITIVE_CRISIS_KEYWORDS = frozenset({
+    "suicide", "suicidal",
+    "swallow", "swallowed", "pills", "my pills", "overdose", "overdosed",
+    "tablets", "take all these pills", "jump off", "jumping off", "jumped off",
+    "the bridge", "highest building", "top of the building", "rooftop", "noose",
+    "goodbye letter", "farewell letter", "goodnight letter", "last letter",
+    "i've decided", "i have decided", "nothing can stop me", "no one can stop me",
+    "nobody can stop me", "no one can stop",
+})
+_INGESTION_ACTION_RE = re.compile(
+    r"\b(?:swallow\w*|ingest\w*|overdos\w*|take|took|taking)\b",
+    re.IGNORECASE,
+)
+_INGESTION_OBJECT_RE = re.compile(
+    r"\b(?:pills?|tablets?|meds?|medicine|medication|vitamins?|supplements?)\b",
+    re.IGNORECASE,
+)
+_ROUTINE_MEDICATION_RE = re.compile(
+    r"\b(?:every day|every morning|every night|daily|prescribed|"
+    r"prescription|vitamins?|supplements?)\b",
+    re.IGNORECASE,
+)
+_INGESTION_PLAN_RE = re.compile(
+    r"\b(?:all|whole|tonight|right now|to die|end my life|"
+    r"going to|gonna|will|plan(?:ning)? to|intend(?:ing)? to)\b",
+    re.IGNORECASE,
+)
+_DANGEROUS_JUMP_LOCATION_RE = re.compile(
+    r"\b(?:bridge|building|roof|rooftop|ledge|window|cliff|height)\b",
+    re.IGNORECASE,
+)
+_SAFE_JUMP_LOCATION_RE = re.compile(
+    r"\b(?:bus|train|plane|boat|diving board|trampoline)\b",
+    re.IGNORECASE,
+)
+_JUMP_ACTION_RE = re.compile(r"\bjump\w*\b", re.IGNORECASE)
+_JUMP_PLAN_RE = re.compile(
+    r"\b(?:thinking of|planning to|plan to|going to|gonna|will|want to|"
+    r"intend to|ready to|tonight|today)\b",
+    re.IGNORECASE,
+)
+_METHOD_RISK_CONTEXT_RE = re.compile(
+    r"\b(?:give up|no point (?:of|in) living|end my life|want to die|"
+    r"kill myself|suicid\w*|ready to die|no one can stop me|"
+    r"wala nang makakapigil|wala nang pag-asa)\b",
+    re.IGNORECASE,
+)
+_LETTER_ACTION_RE = re.compile(
+    r"\b(?:wrote|written|writing|finished|prepared|left|leaving)\b",
+    re.IGNORECASE,
+)
+_METHOD_CLAUSE_SPLIT_RE = re.compile(r"[,;:.!?\u2026\u2014\u2013\r\n]+")
+
+
+def _method_keyword_context(keyword: str, text: str) -> str:
+    """Return crisis/high/ignore for method terms that are unsafe on their own."""
+    if keyword not in _CONTEXT_SENSITIVE_CRISIS_KEYWORDS:
+        return "crisis"
+
+    text = _normalize_text(text)
+    clauses = _METHOD_CLAUSE_SPLIT_RE.split(text)
+
+    for clause in clauses:
+        if keyword not in clause:
+            continue
+        if keyword in {"suicide", "suicidal"}:
+            if is_reported_self_harm(clause):
+                if is_informational_self_harm_context(clause):
+                    return "ignore"
+                return "high"
+            if has_current_first_person_self_harm_intent(clause):
+                return "crisis"
+            if is_informational_self_harm_context(clause):
+                return "ignore"
+            return "high"
+        if (
+            has_current_first_person_self_harm_intent(clause)
+            or _METHOD_RISK_CONTEXT_RE.search(clause)
+            or _has_explicit_self_harm_context(clause)
+        ):
+            return "crisis"
+
+        if keyword in {"swallow", "swallowed", "pills", "my pills", "overdose",
+                       "overdosed", "tablets", "take all these pills"}:
+            if _ROUTINE_MEDICATION_RE.search(clause):
+                return "ignore"
+            if (
+                keyword in {"overdose", "overdosed"}
+                and re.search(r"\boverdosed?\b|\boverdosing\b", clause)
+                and is_self_referential(clause)
+            ):
+                return "high"
+            if (
+                _INGESTION_ACTION_RE.search(clause)
+                and _INGESTION_OBJECT_RE.search(clause)
+            ):
+                if _INGESTION_PLAN_RE.search(clause):
+                    return "crisis"
+                return "high"
+            return "ignore"
+
+        if keyword in {"jump off", "jumping off", "jumped off", "the bridge",
+                       "highest building", "top of the building", "rooftop"}:
+            if _SAFE_JUMP_LOCATION_RE.search(clause):
+                return "ignore"
+            if (
+                _JUMP_ACTION_RE.search(clause)
+                and _DANGEROUS_JUMP_LOCATION_RE.search(clause)
+            ):
+                return "high" if re.search(r"\bjumped\b", clause) else "crisis"
+            return "ignore"
+
+        if keyword in {
+            "goodbye letter", "farewell letter", "goodnight letter", "last letter"
+        }:
+            if _LETTER_ACTION_RE.search(clause) and is_self_referential(clause):
+                return "crisis"
+            return "ignore"
+
+        # "I've decided" and "nothing can stop me" need an actual self-harm
+        # signal in the same clause; ordinary goals are not crisis disclosures.
+        return "ignore"
+
+    return "ignore"
+
+
+def _has_explicit_self_harm_context(text: str) -> bool:
+    if (
+        is_informational_self_harm_context(text)
+        and not has_current_first_person_self_harm_intent(text)
+        and not is_reported_self_harm(text)
+    ):
+        return False
+    return bool(EXPLICIT_SELF_HARM_RE.search(text or ""))
+
+
 # The confidence the crisis bypass requires, and the ML vote that earns it.
 #
 # These exist because of a measured failure. Scored against the 120-message
@@ -643,6 +782,12 @@ def _context_override_for_suicidal(text: str):
     Explicit self-referential phrases are never downgraded here — they would
     have been caught by the hard path already.
     """
+    if (
+        is_informational_self_harm_context(text)
+        and not has_current_first_person_self_harm_intent(text)
+        and not is_reported_self_harm(text)
+    ):
+        return {"intent": "neutral", "confidence": 0.3}
     if has_fiction_context(text):
         return {"intent": "anger", "confidence": 0.55}
     if has_venting_context(text):
@@ -692,6 +837,12 @@ def _match_suicidal_keyword(txt: str, tokens: set, raw_text: str | None = None):
                         break
 
         if not matched:
+            continue
+        if (
+            kw in _CONTEXT_SENSITIVE_CRISIS_KEYWORDS
+            and _method_keyword_context(kw, raw_text if raw_text is not None else txt)
+            == "ignore"
+        ):
             continue
         if negated_harm and contains_harm_keyword(kw):
             continue
@@ -754,7 +905,19 @@ def detect_intent_and_level(text: str) -> dict:
     #    mamatay" must still be caught). Context guards below tune the level. ──
     crisis_kw = _match_suicidal_keyword(txt, tokens, text)
 
+    # A reported disclosure like "my friend said, 'I want to die'" may contain
+    # first-person words inside the quote, but it is not the student's own
+    # statement. Keep it alertable while avoiding a Crisis hold.
+    if not crisis_kw and is_reported_self_harm(text):
+        crisis_kw = "reported self-harm"
+
     if crisis_kw:
+        if (
+            crisis_kw in _CONTEXT_SENSITIVE_CRISIS_KEYWORDS
+            and _method_keyword_context(crisis_kw, text) == "high"
+        ):
+            return _build_result("suicidal", 0.85)
+
         # A known frustration phrase ("i give up on this assignment") is not a
         # crisis even though the new bare "give up" keyword matches it. Checked
         # here because the crisis path deliberately runs before the safe-phrase
@@ -872,7 +1035,7 @@ def detect_intent_and_level(text: str) -> dict:
         # (explicit vocabulary) or a very confident one stays untouchable.
         _ungrounded_suicidal = (
             ml_intent == "suicidal"
-            and not EXPLICIT_SELF_HARM_RE.search(text)
+            and not _has_explicit_self_harm_context(text)
             and ml_confidence < ML_SUICIDAL_STRONG
         )
 
@@ -952,7 +1115,7 @@ def detect_intent_and_level(text: str) -> dict:
         if (
             ml_intent == "suicidal"
             and neg_multiplier >= 1.0
-            and EXPLICIT_SELF_HARM_RE.search(text)
+            and _has_explicit_self_harm_context(text)
             and not negated_death_wish(text)
         ):
             scaled_confidence = max(scaled_confidence, 0.85)
@@ -980,7 +1143,7 @@ def detect_intent_and_level(text: str) -> dict:
             ml_intent == "suicidal"
             and neg_multiplier >= 1.0
             and ml_confidence >= ML_SUICIDAL_FLOOR
-            and EXPLICIT_SELF_HARM_RE.search(text)
+            and _has_explicit_self_harm_context(text)
             and not is_third_party_death_wish(text)
             and not negated_death_wish(text)
         ):
