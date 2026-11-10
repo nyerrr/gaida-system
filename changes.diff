@@ -1,0 +1,234 @@
+diff --git a/frontend/src/features/counselor/CounselorBottomNav.jsx b/frontend/src/features/counselor/CounselorBottomNav.jsx
+index 30b973f..a3deea6 100644
+--- a/frontend/src/features/counselor/CounselorBottomNav.jsx
++++ b/frontend/src/features/counselor/CounselorBottomNav.jsx
+@@ -1,4 +1,5 @@
+ import { useState } from 'react';
++import { createPortal } from 'react-dom';
+ 
+ const P = {
+   navy: 'var(--side)',
+@@ -29,6 +30,7 @@ export default function CounselorBottomNav({
+   welfareCount = 0,
+   sessionsCount = 0,
+   drawerOpen = false,
++  theme = 'light',
+ }) {
+   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+ 
+@@ -151,16 +153,16 @@ export default function CounselorBottomNav({
+   return (
+     <>
+       {/* "More" Slide-up Sheet */}
+-      {moreMenuOpen && (
+-        <>
++      {moreMenuOpen && createPortal(
++        <div className="counselor-portal" data-theme={theme}>
+           <div
+-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity lg:hidden"
++            className="counselor-sheet-backdrop fixed inset-0"
+             onClick={() => setMoreMenuOpen(false)}
+             aria-hidden="true"
+           />
+ 
+           <div
+-            className="counselor-more-sheet fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl shadow-2xl p-4 transition-transform lg:hidden"
++            className="counselor-more-sheet counselor-bottom-sheet fixed bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl p-4 transition-transform lg:hidden"
+             style={{
+               background: P.surface,
+               borderTop: `1px solid ${P.border}`,
+@@ -234,7 +236,8 @@ export default function CounselorBottomNav({
+             </div>
+ 
+           </div>
+-        </>
++        </div>,
++        document.body,
+       )}
+ 
+       {/* Fixed Bottom Bar */}
+diff --git a/frontend/src/features/counselor/CounselorDashboard.jsx b/frontend/src/features/counselor/CounselorDashboard.jsx
+index a1cd170..5e1de14 100644
+--- a/frontend/src/features/counselor/CounselorDashboard.jsx
++++ b/frontend/src/features/counselor/CounselorDashboard.jsx
+@@ -3018,29 +3018,29 @@ export default function CounselorDashboard() {
+           <button type="button" onClick={() => setDashboardNotice('')} className="shrink-0 font-semibold underline">Dismiss</button>
+         </div>
+       )}
+-      {mobileNavOpen && (
+-        <div
+-          className="fixed inset-0 z-40"
+-          style={{ background: 'rgba(34,48,58,0.45)', backdropFilter: 'blur(2px)' }}
+-          onPointerDown={closeMobileNav}
+-          aria-hidden="true"
+-        />
+-      )}
+-
+       {/* Single combined panel: on phones this is the profile/utility drawer
+           (navigation lives in the bottom bar and its sheet); on desktop it
+           stays as the full collapsible navigation rail. */}
+-      <aside
+-        ref={drawerRef}
+-        className={`
+-          side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-[60] flex flex-col shadow-lg transition-all duration-300
+-          ${mobileNavOpen ? '' : 'lg:z-30'}
+-          w-[84vw] max-w-[320px] ${expanded ? 'lg:w-64' : 'lg:w-20'}
+-          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
+-        `}
+-        style={{ background: 'var(--side)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+-        onClick={(e) => e.stopPropagation()}
+-      >
++      {createPortal(
++        <div className="counselor-portal" data-theme={dashboardTheme}>
++          {mobileNavOpen && (
++            <div
++              className="counselor-drawer-backdrop fixed inset-0"
++              onPointerDown={closeMobileNav}
++              aria-hidden="true"
++            />
++          )}
++          <aside
++            ref={drawerRef}
++            className={`
++              side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-[60] flex flex-col shadow-lg transition-all duration-300
++              ${mobileNavOpen ? '' : 'lg:z-30'}
++              w-[84vw] max-w-[320px] ${expanded ? 'lg:w-64' : 'lg:w-20'}
++              ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
++            `}
++            style={{ background: 'var(--side)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
++            onClick={(e) => e.stopPropagation()}
++          >
+         {/* ── Zone 1: profile ───────────────────────────────────────────── */}
+         {/* Mobile drawer profile: full name, status dot on the avatar corner,
+             and only the counselor ID inside the badge. */}
+@@ -3408,7 +3408,10 @@ export default function CounselorDashboard() {
+             </button>
+           </div>
+         </div>
+-      </aside>
++          </aside>
++        </div>,
++        document.body,
++      )}
+ 
+       <a className="counselor-skip-link" href="#counselor-main">
+         Skip to main content
+@@ -3514,15 +3517,9 @@ export default function CounselorDashboard() {
+         welfareCount={welfare.length}
+         sessionsCount={sessions.length}
+         drawerOpen={mobileNavOpen}
++        theme={dashboardTheme}
+       />
+ 
+-      {activePage !== 'alerts' && (
+-        <button type="button" className="fab hotline-fab" onClick={openHotlines}>
+-          <NavIcon id="hotline" size={18} />
+-          <span>Crisis hotlines</span>
+-        </button>
+-      )}
+-
+       {chatSessionId && (
+         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
+       )}
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index b59120d..a42a090 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -3,6 +3,7 @@
+ @tailwind utilities;
+ 
+ :root {
++  --nav-h: 3.75rem;
+   --canvas: #f5f7f9;
+   --surface: #fff;
+   --sidebar: #1e3040;
+@@ -483,6 +484,9 @@ body.filter-sheet-open .counselor-bottom-sheet {
+   --ambbg: var(--caution-surface);
+   --grn: var(--safe);
+   --grnbg: var(--safe-surface);
++  --high: #c2410c;
++  --accent-soft: #e6f0f5;
++  --panel: var(--border);
+   position: fixed;
+   inset: 0;
+   z-index: 55;
+@@ -523,6 +527,42 @@ body.filter-sheet-open .counselor-bottom-sheet {
+   box-shadow: 0 1px 2px rgb(36 55 70 / 4%);
+ }
+ 
++.counselor-portal[data-theme='dark'] {
++  --canvas: #14212c;
++  --surface: #1d2d3a;
++  --primary: #edf3f8;
++  --secondary: #b9c7d3;
++  --border: #405362;
++  --risk: #ffaaa9;
++  --risk-surface: #42282f;
++  --caution: #f4d18a;
++  --caution-surface: #3b3323;
++  --safe: #9ed6b1;
++  --safe-surface: #233b31;
++  --neutral: #aed4f0;
++  --high: #fdba74;
++  --accent-soft: #2a4153;
++  --panel: var(--border);
++  --bg: var(--canvas);
++  --card: var(--surface);
++  --ink: var(--primary);
++  --mut: var(--secondary);
++  --line: var(--border);
++  --red: var(--risk);
++  --redbg: var(--risk-surface);
++  --amb: var(--caution);
++  --ambbg: var(--caution-surface);
++  --grn: var(--safe);
++  --grnbg: var(--safe-surface);
++  color-scheme: dark;
++}
++
++.counselor-drawer-backdrop {
++  z-index: 55;
++  background: rgb(34 48 58 / 45%);
++  backdrop-filter: blur(2px);
++}
++
+ .counselor-dashboard .kpi {
+   min-height: 136px;
+   border-radius: 0.75rem;
+@@ -1003,7 +1043,7 @@ body.filter-sheet-open .counselor-bottom-sheet {
+   .counselor-mobile-page button,
+   .counselor-mobile-page a,
+   nav[aria-label="Counselor mobile navigation"] button {
+-    min-height: 44px;
++    min-height: 48px;
+     touch-action: manipulation;
+     transition: transform 200ms ease, opacity 200ms ease, background-color 200ms ease;
+   }
+@@ -1049,8 +1089,8 @@ body.filter-sheet-open .counselor-bottom-sheet {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+-    min-width: 44px;
+-    min-height: 44px;
++    min-width: 48px;
++    min-height: 48px;
+     border: 1px solid #dce7ea;
+     border-radius: 0.75rem;
+     background: #fff;
+@@ -1090,7 +1130,7 @@ body.filter-sheet-open .counselor-bottom-sheet {
+   }
+ 
+   .counselor-alerts-page {
+-    padding-bottom: calc(76px + 60px + env(safe-area-inset-bottom, 0px));
++    padding-bottom: calc(var(--nav-h) + 4.75rem + env(safe-area-inset-bottom, 0px));
+   }
+ 
+   .alert-legend {
+@@ -1378,6 +1418,7 @@ body.filter-sheet-open .counselor-bottom-sheet {
+ 
+   nav[aria-label="Counselor mobile navigation"] {
+     z-index: 50 !important;
++    min-height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+   }
+ 
+   .counselor-filter-options {
