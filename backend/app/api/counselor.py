@@ -1097,7 +1097,7 @@ def get_resolved_sessions(user: dict = Depends(require_role("counselor"))):
 
         return {"sessions": result, "count": len(result)}
     except Exception as e:
-        return {"sessions": [], "error": str(e)}
+        raise HTTPException(status_code=503, detail="Resolved cases service unavailable") from e
 
 
 # ===========================================================================
@@ -1507,7 +1507,7 @@ def get_analytics_overview(user: dict = Depends(require_role("counselor"))):
             "total_alerts": len(alerts.data),
         }
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=503, detail="Analytics service unavailable") from e
 
 
 @router.get("/analytics/reports")
@@ -1587,7 +1587,7 @@ def get_analytics_reports(user: dict = Depends(require_role("counselor"))):
             ],
         }
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=503, detail="Reports service unavailable") from e
 
 
 # ===========================================================================

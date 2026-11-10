@@ -347,20 +347,35 @@ def start_research_session(
     start_session(user_id=participant_id, session_id=session_id)
 
     try:
-        supabase.table("sessions").update({
+        research_metadata = {
             "is_research": True,
             "is_anonymous": payload.anonymous,
             "participant_code": code_used,  # None for identified participants
             **demographics,
-        }).eq("session_token", session_id).execute()
-        tagged_session = (
+        }
+        update_result = (
             supabase.table("sessions")
-            .select("session_token, is_research")
+            .update(research_metadata)
             .eq("session_token", session_id)
-            .limit(1)
             .execute()
         )
-        if not tagged_session.data or tagged_session.data[0].get("is_research") is not True:
+        tagged = bool(
+            update_result.data
+            and update_result.data[0].get("is_research") is True
+        )
+        if not tagged:
+            tagged_session = (
+                supabase.table("sessions")
+                .select("session_token, is_research")
+                .eq("session_token", session_id)
+                .limit(1)
+                .execute()
+            )
+            tagged = bool(
+                tagged_session.data
+                and tagged_session.data[0].get("is_research") is True
+            )
+        if not tagged:
             raise RuntimeError("Research session row was not tagged")
     except Exception:
         # Never issue a usable session token for a session that could not be

@@ -497,6 +497,13 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError, onNavigate
           <button type="button" className="btn ghost" onClick={() => onNavigate('alerts')}>Review alert</button>
         </div>
       )}
+      {alertsError && (
+        <div className="dashboard-data-warning" role="alert">
+          <strong>Alert status needs verification</strong>
+          <span>{alerts.length > 0 ? 'The dashboard is showing the last alert data received. New alerts may be delayed.' : 'The alert service could not be reached, so an empty count does not confirm safety.'}</span>
+          <button type="button" onClick={() => onNavigate('alerts')}>Open Alerts</button>
+        </div>
+      )}
       {crisisAlert && (
         <section className="crisis" aria-live="polite" aria-label="Crisis alert">
           <div>
@@ -1161,6 +1168,11 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
 // what actually makes it visible to a counselor.
 function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMarkChecked, onRefresh }) {
   const pull = usePullToRefresh(onRefresh);
+  const sortedWelfare = [...welfare].sort((a, b) => {
+    const severityRank = { Crisis: 0, High: 1, Moderate: 2 };
+    return (severityRank[a.peak_severity] ?? 3) - (severityRank[b.peak_severity] ?? 3)
+      || (Number(b.idle_minutes) || 0) - (Number(a.idle_minutes) || 0);
+  });
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page counselor-welfare-page" aria-busy={welfareLoading} style={pull.style}>
       {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
@@ -1171,8 +1183,9 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
         </p>
       </div>
       {welfareError && (
-        <div role="alert" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          <p>{welfareError}</p>
+        <div role="alert" className="dashboard-data-warning mb-4">
+          <strong>Welfare checks may be out of date</strong>
+          <span>{welfare.length > 0 ? 'Showing the last successful results.' : welfareError}</span>
           <button type="button" onClick={onRefresh} className="mt-2 rounded-lg border border-amber-700 px-3 py-1.5 font-semibold">Retry</button>
         </div>
       )}
@@ -1182,10 +1195,11 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
         </p>
       )}
       {welfare.length > 0 ? (
-        welfare.map((w) => {
+        sortedWelfare.map((w) => {
           const sc = severityColor(w.peak_severity);
+          const isOverdue = Number(w.idle_minutes) >= 30;
           return (
-            <div key={w.session_id} className="p-4 rounded-r-xl mb-3" style={{ borderLeft: `4px solid ${P.red}`, background: P.redSoft }}>
+            <div key={w.session_id} className="p-4 rounded-r-xl mb-3" style={{ borderLeft: `4px solid ${isOverdue ? P.red : P.amber}`, background: isOverdue ? P.redSoft : P.amberSoft }}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1194,6 +1208,9 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white" style={{ background: P.navyLight }}>
                       Silent {w.idle_minutes}m
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: isOverdue ? P.red : P.amber, color: '#FFFFFF' }}>
+                      {isOverdue ? 'Overdue' : 'Due for check'}
                     </span>
                   </div>
                   <p className="text-xs font-semibold mb-1" style={{ color: P.textSecondary }}>Session: {w.session_id.slice(0, 16)}...</p>
@@ -1222,12 +1239,21 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
 // ── Active Sessions Page ──────────────────────────────────────────────────────
 function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySessions, onViewChat, lastUpdated }) {
   const [now, setNow] = useState(() => Date.now());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('all');
   const pull = usePullToRefresh(onRetrySessions);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const visibleSessions = sessions.filter((session) => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch = !query || session.session_id.toLowerCase().includes(query) || (session.intent || '').toLowerCase().includes(query);
+    const matchesSeverity = severityFilter === 'all' || session.severity === severityFilter;
+    return matchesSearch && matchesSeverity;
+  });
 
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page" style={pull.style}>
@@ -1251,18 +1277,34 @@ function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySession
             </button>
           )}
         </div>
+      ) : sessionsError ? (
+        <div className="dashboard-data-warning mb-4" role="alert">
+          <strong>Active sessions may be out of date</strong>
+          <span>Showing the last successful session list. New sessions may not appear.</span>
+          <button type="button" onClick={onRetrySessions}>Refresh sessions</button>
+        </div>
       ) : sessions.length === 0 ? (
         <EmptyState icon="◉" title="No active sessions" sub="Sessions appear here when students are chatting" />
       ) : (
         <Card className="overflow-hidden">
-          <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: `1px solid ${P.border}` }}>
-            <span className="text-sm font-semibold" style={{ color: P.textPrimary }}>Sessions ({sessions.length})</span>
-            <span className="text-xs" style={{ color: P.textMuted }}>
-              {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Auto-refreshing...'}
-            </span>
+          <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-2" style={{ borderBottom: `1px solid ${P.border}` }}>
+            <span className="text-sm font-semibold" style={{ color: P.textPrimary }}>Sessions ({visibleSessions.length} of {sessions.length})</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="active-session-search" className="sr-only">Search active sessions</label>
+              <input id="active-session-search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search ID or intent" className="min-h-[40px] w-40 rounded-lg border px-2.5 text-xs" style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }} />
+              <label htmlFor="active-session-severity" className="sr-only">Filter active sessions by severity</label>
+              <select id="active-session-severity" value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="min-h-[40px] rounded-lg border px-2.5 text-xs" style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}>
+                <option value="all">All severity</option>
+                <option value="Crisis">Crisis</option>
+                <option value="High">High</option>
+                <option value="Moderate">Moderate</option>
+                <option value="Low">Low</option>
+              </select>
+              <span className="text-xs" style={{ color: P.textMuted }}>{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Auto-refreshing...'}</span>
+            </div>
           </div>
           <div>
-            {sessions.map((s, idx) => {
+            {visibleSessions.map((s, idx) => {
               const sc = severityColor(s.severity);
               return (
                 <div
@@ -1300,6 +1342,9 @@ function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySession
                 </div>
               );
             })}
+            {visibleSessions.length === 0 && (
+              <p className="px-5 py-10 text-center text-sm" style={{ color: P.textMuted }}>No sessions match these filters.</p>
+            )}
           </div>
         </Card>
       )}
@@ -2175,6 +2220,9 @@ function DetectionPage() {
       </div>
       <Card className="p-4 sm:p-5">
         <h3 className="text-sm font-semibold mb-3" style={{ color: P.textPrimary }}>Anxiety Level Thresholds</h3>
+        <p className="mb-4 text-xs leading-relaxed" style={{ color: P.textSecondary }}>
+          These are support signals, not a medical diagnosis. Higher levels trigger stronger counselor review and safety procedures.
+        </p>
 
         {/* Mobile cards keep each threshold readable at one-hand width. */}
         <div className="sm:hidden">
@@ -2212,6 +2260,7 @@ function ReportsPage({ connection, lastUpdated }) {
   const [reports, setReports] = useState(null);
   const [reportsError, setReportsError] = useState('');
   const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsLastUpdated, setReportsLastUpdated] = useState(null);
   const [reportPeriod, setReportPeriod] = useState('7d');
   const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
   const periodOptions = [
@@ -2243,6 +2292,7 @@ function ReportsPage({ connection, lastUpdated }) {
           setReportsError('Reports could not load. Monthly Trends and Severity Breakdown are unavailable.');
         } else {
           setReports(data);
+          setReportsLastUpdated(new Date());
         }
       })
       .catch((err) => {
@@ -2279,6 +2329,11 @@ function ReportsPage({ connection, lastUpdated }) {
           {lastUpdated && (
             <span className="mut">
               Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          {reportsLastUpdated && (
+            <span className="mut">
+              Reports synced {reportsLastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
           <button type="button" className="btn ghost" onClick={loadReports}>
@@ -3374,18 +3429,21 @@ function ResolvedCasesPage() {
 
   useEffect(() => {
     apiFetch(`${BACKEND}/api/counselor/sessions/resolved`)
-      .then(r => r.json())
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.detail || 'Resolved cases are temporarily unavailable.');
+        return data;
+      })
       .then(data => {
         if (data && data.error) {
-          console.error('Resolved cases backend error:', data.error);
-          setCasesError('Unable to load resolved cases right now. Please try again later.');
+          throw new Error(data.error);
         } else if (data.sessions) {
           setCases(data.sessions);
         }
       })
       .catch((err) => {
         console.error('Resolved cases fetch error:', err);
-        setCasesError('Unable to load resolved cases right now. Please try again later.');
+        setCasesError(err.message || 'Unable to load resolved cases right now. Please try again later.');
       })
       .finally(() => setLoading(false));
   }, [casesRequestVersion]);

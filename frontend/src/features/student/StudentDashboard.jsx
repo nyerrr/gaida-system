@@ -526,6 +526,7 @@ export default function StudentDashboard() {
   const [showSettings,      setShowSettings]      = useState(false);
   const [requestingCounselor, setRequestingCounselor] = useState(false);
   const [counselorRequested,  setCounselorRequested]  = useState(false);
+  const [counselorRequestError, setCounselorRequestError] = useState('');
   const [streamingStarted,    setStreamingStarted]    = useState(false);
   const [showCrisisHotlines,  setShowCrisisHotlines]  = useState(false);
   const [playingTTSIndex,     setPlayingTTSIndex]     = useState(null);
@@ -1176,6 +1177,7 @@ export default function StudentDashboard() {
 
   const handleRequestCounselor = async () => {
     if (requestingCounselor) return;
+    setCounselorRequestError('');
 
     // If the student hasn't sent a message yet there is no session to attach
     // the counselor request to. Auto-create one first so the button always
@@ -1195,6 +1197,7 @@ export default function StudentDashboard() {
         setSessionId(sessionId);
       } catch (e) {
         console.error('Start session error:', e);
+        setCounselorRequestError("We couldn't start a counselor session. Check your connection and try again.");
         setMessages(prev => [...prev, {
           role: 'system',
           text: "Couldn't reach the counselor right now. Try sending a message first.",
@@ -1219,6 +1222,7 @@ export default function StudentDashboard() {
         }]);
       } else {
         const errMsg = data.error || data.detail || 'Could not notify counselor at this time.';
+        setCounselorRequestError(errMsg);
         setMessages(prev => [...prev, {
           role: 'system',
           text: `Counselor request failed: ${errMsg}`,
@@ -1226,6 +1230,7 @@ export default function StudentDashboard() {
       }
     } catch (e) {
       console.error('Request counselor error:', e);
+      setCounselorRequestError('Network error. Check your connection, then try again.');
       setMessages(prev => [...prev, {
         role: 'system',
         text: 'Network error requesting counselor. Please check your connection or try again.',
@@ -1723,12 +1728,25 @@ export default function StudentDashboard() {
 
         {/* Talk to a Counselor */}
         <div className="p-5" style={{ borderBottom: `1px solid ${theme.border}` }}>
+          {counselorRequestError && !counselorRequested && !counselorActive && (
+            <div className="mb-3 rounded-2xl px-3 py-2.5 text-xs" role="alert" style={{ background: '#FBEDEA', border: '1px solid #F0D2CA', color: '#B0472F' }}>
+              <div>{counselorRequestError}</div>
+              <button type="button" onClick={handleRequestCounselor} className="mt-2 font-semibold underline">Try again</button>
+            </div>
+          )}
           {counselorRequested || counselorActive ? (
             <div
-              className="w-full py-3 px-3 text-sm rounded-full text-center font-medium"
+              className="w-full py-3 px-3 text-sm rounded-2xl text-center font-medium"
               style={{ background: theme.card, border: `1px solid ${theme.border}`, color: theme.textSecondary }}
             >
-              {counselorActive ? 'A counselor is with you' : 'Counselor notified'}
+              <div className="font-semibold" style={{ color: theme.textPrimary }}>
+                {counselorActive ? 'A counselor is with you' : 'Counselor notified'}
+              </div>
+              <div className="mt-1 text-xs" style={{ color: theme.textMuted }}>
+                {counselorActive
+                  ? 'You can continue typing here. Your counselor can see this conversation.'
+                  : 'Please stay on this page. A counselor will join as soon as possible.'}
+              </div>
             </div>
           ) : (
             <button

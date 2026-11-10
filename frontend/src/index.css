@@ -429,6 +429,38 @@ textarea:focus-visible,
   min-height: 4rem;
 }
 
+.dashboard-data-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--amb);
+  border-radius: 0.75rem;
+  background: var(--ambbg);
+  color: var(--amb);
+  font-size: 0.8125rem;
+}
+
+.dashboard-data-warning strong {
+  color: var(--ink);
+}
+
+.dashboard-data-warning span {
+  flex: 1 1 18rem;
+}
+
+.dashboard-data-warning button {
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+}
+
 .counselor-dashboard .side {
   padding: 1.25rem 0.75rem;
 }
