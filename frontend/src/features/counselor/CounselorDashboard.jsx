@@ -201,6 +201,13 @@ const getAlertStatusLabel = (alert) => {
   return 'New';
 };
 
+const getFocusableElements = (container) => {
+  if (!container) return [];
+  const elements = [...container.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+  const visible = elements.filter((element) => element.getClientRects().length > 0);
+  return visible.length ? visible : elements;
+};
+
 const isPendingAlert = (alert) => getAlertStatusLabel(alert) !== 'Resolved';
 
 function FocusTooltip({ children, label, className = '' }) {
@@ -981,6 +988,21 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
         if (event.key === 'Escape') {
           event.preventDefault();
           closeFilterSheet();
+          return;
+        }
+        if (event.key !== 'Tab') return;
+        const sheet = filterSheetRef.current;
+        if (!sheet) return;
+        const focusable = getFocusableElements(sheet);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === sheet)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === sheet)) {
+          event.preventDefault();
+          first.focus();
         }
       };
       document.addEventListener('keydown', onKeyDown);
@@ -2974,6 +2996,20 @@ export default function CounselorDashboard() {
       if (e.key === 'Escape') {
         e.preventDefault();
         closeMobileNav();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const drawer = drawerRef.current;
+      const focusable = getFocusableElements(drawer);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -3032,6 +3068,9 @@ export default function CounselorDashboard() {
           )}
           <aside
             ref={drawerRef}
+            role={mobileNavOpen ? 'dialog' : undefined}
+            aria-modal={mobileNavOpen ? 'true' : undefined}
+            aria-label={mobileNavOpen ? 'Counselor navigation' : undefined}
             className={`
               side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-[60] flex flex-col shadow-lg transition-all duration-300
               ${mobileNavOpen ? '' : 'lg:z-30'}
@@ -3511,6 +3550,7 @@ export default function CounselorDashboard() {
 
       {/* Counselor Mobile Bottom Navigation (Canvas Student-inspired) */}
       <CounselorBottomNav
+        key={mobileNavOpen ? 'drawer-open' : 'drawer-closed'}
         activePage={activePage}
         setActivePage={setActivePage}
         pendingCount={pendingCount}

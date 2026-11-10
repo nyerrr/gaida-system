@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 const P = {
@@ -33,6 +33,43 @@ export default function CounselorBottomNav({
   theme = 'light',
 }) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreTriggerRef = useRef(null);
+  const moreSheetRef = useRef(null);
+
+  useEffect(() => {
+    if (!moreMenuOpen || drawerOpen) return undefined;
+    const trigger = moreTriggerRef.current;
+    const frame = window.requestAnimationFrame(() => {
+      moreSheetRef.current?.querySelector('[data-more-initial-focus]')?.focus();
+    });
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMoreMenuOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const elements = [...(moreSheetRef.current?.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])') || [])];
+      const visible = elements.filter((element) => element.getClientRects().length > 0);
+      const focusable = visible.length ? visible : elements;
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', onKeyDown, true);
+      if (!drawerOpen && trigger?.isConnected) trigger.focus();
+    };
+  }, [moreMenuOpen, drawerOpen]);
 
   // The side drawer is the active navigation surface while it is open; keeping
   // the bottom bar mounted underneath it would leave a second, tappable nav
@@ -162,6 +199,7 @@ export default function CounselorBottomNav({
           />
 
           <div
+            ref={moreSheetRef}
             className="counselor-more-sheet counselor-bottom-sheet fixed bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl p-4 transition-transform lg:hidden"
             style={{
               background: P.surface,
@@ -181,7 +219,9 @@ export default function CounselorBottomNav({
                 <h2 className="counselor-sheet-title">Additional workspace views</h2>
               </div>
               <button
+                type="button"
                 onClick={() => setMoreMenuOpen(false)}
+                data-more-initial-focus
                 className="flex h-12 w-12 items-center justify-center rounded-lg text-base text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                 aria-label="Close menu"
               >
@@ -288,6 +328,7 @@ export default function CounselorBottomNav({
 
         {/* More button */}
         <button
+          ref={moreTriggerRef}
           onClick={() => tap(() => setMoreMenuOpen(!moreMenuOpen))}
           aria-expanded={moreMenuOpen}
           aria-current={isMoreActive ? 'page' : undefined}
