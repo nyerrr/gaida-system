@@ -455,6 +455,93 @@ def test_past_tense_and_jokes_are_still_toned_down():
         assert detect_intent_and_level(message)["anxiety_level"] != "crisis", message
 
 
+def test_joking_tone_does_not_cancel_a_direct_current_self_harm_disclosure():
+    from app.services.virtual_agent import detect_intent_and_level
+
+    for message in (
+        "I want to kill myself lol",
+        "I want to kill myself, just kidding",
+        "I will kms lol",
+        "magpapakamatay na ako haha",
+    ):
+        result = detect_intent_and_level(message)
+        assert result["intent"] == "suicidal", (message, result)
+        assert result["anxiety_level"] == "crisis", (message, result)
+
+
+def test_reported_first_person_death_wish_is_high_not_a_crisis_hold():
+    from app.services.virtual_agent import detect_intent_and_level
+
+    for message in (
+        "My friend said, 'I want to die'",
+        "My friend told me she wants to die",
+    ):
+        result = detect_intent_and_level(message)
+        assert result["intent"] == "suicidal", (message, result)
+        assert result["anxiety_level"] == "high", (message, result)
+
+
+def test_method_words_need_self_harm_context():
+    from app.services.virtual_agent import detect_intent_and_level
+
+    ordinary = (
+        "I take my pills every morning",
+        "I swallowed my vitamins",
+        "I have pills in my bag",
+        "I've decided to focus on school",
+        "Nothing can stop me from applying",
+        "I jumped off the bus at my stop",
+    )
+    for message in ordinary:
+        result = detect_intent_and_level(message)
+        assert result["anxiety_level"] not in ("high", "crisis"), (
+            message,
+            result,
+        )
+
+    ingestion = detect_intent_and_level("I swallowed some pills")
+    assert ingestion["intent"] == "suicidal"
+    assert ingestion["anxiety_level"] == "high"
+
+    overdose = detect_intent_and_level("I overdosed")
+    assert overdose["intent"] == "suicidal"
+    assert overdose["anxiety_level"] == "high"
+
+    planned_jump = detect_intent_and_level(
+        "I've been thinking of jumping off the bridge"
+    )
+    assert planned_jump["intent"] == "suicidal"
+    assert planned_jump["anxiety_level"] == "crisis"
+
+
+def test_academic_or_media_mentions_of_suicide_are_not_self_disclosures():
+    from app.services.virtual_agent import detect_intent_and_level
+
+    for message in (
+        "I am writing an essay about suicide prevention",
+        "My class is learning about suicide",
+        "We watched a movie about suicide",
+        "I want to research self-harm for class",
+        "The character says, 'I want to die' in my story",
+    ):
+        result = detect_intent_and_level(message)
+        assert result["intent"] == "neutral", (message, result)
+        assert result["anxiety_level"] is None, (message, result)
+
+
+def test_first_person_suicidal_thoughts_remain_crisis_disclosures():
+    from app.services.virtual_agent import detect_intent_and_level
+
+    for message in (
+        "I am suicidal",
+        "I have suicidal thoughts",
+        "I'm thinking about suicide",
+    ):
+        result = detect_intent_and_level(message)
+        assert result["intent"] == "suicidal", (message, result)
+        assert result["anxiety_level"] == "crisis", (message, result)
+
+
 def test_the_gold_key_suicidal_recall_is_what_we_measured():
     """All 24 gold suicidal messages, not just the 15 that used to fail. The
     gold key is user-owned ground truth; this reads it rather than restating
