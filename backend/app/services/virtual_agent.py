@@ -598,6 +598,43 @@ def _get_negative_context_multiplier(txt: str) -> float:
     return multiplier
 
 
+# Panic has no class of its own in the ML training labels, so "i am panicking
+# right now" is voted anger 3/3 (the Neural Network is 0.859 confident) even
+# though nothing in the message is angry. The label selects the response flow,
+# so it has to be corrected to anxiety. The strength is taken from the model
+# (or a mid-band default when it abstains) rather than from a rule match, so a
+# single panic phrase does not jump straight to High.
+PANIC_DISCLOSURE_RE = re.compile(
+    r"\bpanic(?:king|ked|ky)?\b|\bin a panic\b",
+    re.IGNORECASE,
+)
+# Breathing distress has no pronoun to read ("can't breathe"), so it counts as
+# self-disclosure on its own.
+BREATHING_DISTRESS_RE = re.compile(
+    r"\bcannot\b|\bcan\W{0,2}t (?:breathe|get enough air)\b|"
+    r"\bhard to breathe\b|\bdifficulty breathing\b|"
+    r"\bshort(?:ness)? of breath\b|\bgasping for air\b|"
+    r"\bsuffocating\b|\bchoking\b",
+    re.IGNORECASE,
+)
+_PANIC_SELF_RE = re.compile(
+    r"\b(i|im|i'm|i am|me|myself|ako|akin|ako'y|hindi ko|di ko)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_panic_disclosure(text: str) -> bool:
+    """A first-person panic attack or acute breathing distress.
+
+    A bare panic word needs first-person context so "she had a panic attack" /
+    "my friend panicked" is not re-labelled as the student's.
+    """
+    text = text or ""
+    if BREATHING_DISTRESS_RE.search(text):
+        return True
+    return bool(PANIC_DISCLOSURE_RE.search(text)) and bool(_PANIC_SELF_RE.search(text))
+
+
 def _context_override_for_suicidal(text: str):
     """When ML flags suicidal language but no explicit self-harm keyword matched
     (the rule hard-path already caught those), decide whether context actually
@@ -766,6 +803,33 @@ def detect_intent_and_level(text: str) -> dict:
         ml_result = classify_intent(text)
         ml_intent = ml_result["intent"]
         ml_confidence = ml_result["confidence"]
+
+        # Panic is an anxiety presentation even when the classifier calls it
+        # anger. Keep the model's confidence as the strength so the turn lands
+        # at Moderate, not High: one panic phrase is not an alert-level event.
+        # The floor is what makes "Moderate, not High" true in both directions —
+        # the 0.3 + 0.7x scaling can land a real breathing complaint just under
+        # the Moderate boundary, and acute breathlessness is not a Low.
+        # An explicitly angry message that merely mentions panic is left alone.
+        if _is_panic_disclosure(text):
+            try:
+                from app.services.rule_intent import analyze_with_rules as _panic_rules
+
+                if _panic_rules(text).get("intent") != "anger":
+                    _panic_neg = _get_negative_context_multiplier(txt)
+                    _panic_base = (
+                        ml_confidence if ml_intent in ("anxiety", "anger") else 0.5
+                    )
+                    _panic_conf = round(
+                        max(
+                            SEVERITY_MODERATE,
+                            min(0.98, 0.3 + 0.7 * (_panic_base * _panic_neg)),
+                        ),
+                        3,
+                    )
+                    return _build_result("anxiety", _panic_conf)
+            except Exception:
+                pass
 
         # A `neutral` vote is not evidence that the student is fine — it is the
         # classifier failing to find a signal, and the gold key shows exactly
@@ -973,6 +1037,16 @@ def detect_intent_and_level(text: str) -> dict:
     return _build_result("neutral", 0.3)
 
 
+# Severity band boundaries used by _build_result. These are mirrored in
+# app/api/counselor.py (the dashboard's confidence heuristic, twice) and in
+# frontend/src/features/counselor/CounselorDashboard.jsx (`confidenceToSeverity`
+# and the Detection page legend). Change all of them together, or the dashboard
+# will label a session differently from the band that actually fired.
+SEVERITY_HIGH = 0.76
+SEVERITY_MODERATE = 0.71
+SEVERITY_LOW = 0.46
+
+
 def _build_result(
     intent: str,
     confidence: float,
@@ -991,9 +1065,9 @@ def _build_result(
     # would read as indifference. Floored at the low band rather than capped:
     # the loss detector has already applied its own ceilings upstream.
     if intent == "loss":
-        confidence = max(confidence, 0.46)
+        confidence = max(confidence, SEVERITY_LOW)
 
-    if confidence >= 0.99:
+    if confidence >= CRISIS_CONFIDENCE:
         return {
             "intent": intent,
             "confidence": confidence,
@@ -1005,17 +1079,17 @@ def _build_result(
             "clarify": clarify,
         }
 
-    if confidence >= 0.76:
+    if confidence >= SEVERITY_HIGH:
         anxiety_level = "high"
         severity = "High"
         anxiety_score = 5
         protocol = COUNSELOR_PROTOCOLS["high"]
-    elif confidence >= 0.71:
+    elif confidence >= SEVERITY_MODERATE:
         anxiety_level = "moderate"
         severity = "Moderate"
         anxiety_score = 3
         protocol = COUNSELOR_PROTOCOLS["moderate"]
-    elif confidence >= 0.46:
+    elif confidence >= SEVERITY_LOW:
         anxiety_level = "low"
         severity = "Low"
         anxiety_score = 1

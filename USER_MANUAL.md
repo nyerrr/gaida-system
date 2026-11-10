@@ -246,9 +246,9 @@ GAIDA assigns a level to messages using text and, when used, voice features. The
 
 | Level | Approximate confidence | What typically happens |
 |---|---|---|
-| **Normal** | Below 0.45 | GAIDA responds freely |
-| **Low** | 0.46 – 0.70 | A counselor-written support protocol is added to the reply |
-| **Moderate** | 0.71 – 0.75 | A stronger support protocol is added |
+| **Normal** | Below 0.46 | GAIDA responds freely |
+| **Low** | 0.46 – 0.71 | A counselor-written support protocol is added to the reply |
+| **Moderate** | 0.71 – 0.76 | A stronger support protocol is added |
 | **High** | 0.76 – 0.98 | A counselor alert is fired and GAIDA may pause |
 | **Crisis** | 0.99 – 1.00 | Immediate intervention flow, alert, and hotline guidance |
 

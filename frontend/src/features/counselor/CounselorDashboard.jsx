@@ -2191,8 +2191,8 @@ const typingThrottleRef = useRef(null);
 function DetectionPage() {
   const thresholds = [
     { level: 'Normal', range: '< 0.46', color: P.textMuted, desc: 'GPT responds freely' },
-    { level: 'Low', range: '0.46 – 0.70', color: P.green, desc: 'Counselor protocol injected' },
-    { level: 'Moderate', range: '0.71 – 0.75', color: P.teal, desc: 'Stronger protocol injected' },
+    { level: 'Low', range: '0.46 – 0.71', color: P.green, desc: 'Counselor protocol injected' },
+    { level: 'Moderate', range: '0.71 – 0.76', color: P.teal, desc: 'Stronger protocol injected' },
     { level: 'High', range: '0.76 – 0.98', color: P.amber, desc: 'Counselor alert fired' },
     { level: 'Crisis', range: '0.99 – 1.00', color: P.red, desc: 'Immediate intervention' },
   ];

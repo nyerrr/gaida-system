@@ -39,11 +39,40 @@ URGENT_PHYSICAL_KEYWORDS = [
     "shaking uncontrollably", "trembling uncontrollably", "nanginginig na grabe",
     "hyperventilating", "hyperventilation",
     "panic attack", "panicattack",
+    # Active panic itself, without the word "attack". Panic is not a physical
+    # emergency like chest pain, but it does need at least the Moderate band
+    # (a silent listing, not an alert), which is what this path guarantees.
+    "panicking", "panicked", "panicky", "in a panic",
     "cant control my breathing", "cant control breathing",
     "palpitations", "heart racing",
+    "hard to breathe", "difficulty breathing",
+    "shortness of breath", "short of breath",
+    "cant get enough air", "gasping for air",
+    "suffocating", "choking",
     "sikip sa puso", "hirap huminga",
     "di makahininga",
 ]
+
+
+def _urgent_normalize(text: str) -> str:
+    """Lowercase and strip punctuation so "can;t", "can’t" and "can't" all
+    become "cant". Speech-to-text and hurried typing put arbitrary punctuation
+    inside contractions; without this, "i can;t breathe" missed the urgent
+    physical check entirely and a panic turn was logged as Low."""
+    txt = (text or "").lower().replace("’", "'")
+    txt = re.sub(r"[^a-z0-9\s]", "", txt)
+    return re.sub(r"\s+", " ", txt).strip()
+
+
+_URGENT_NORMALIZED = [_urgent_normalize(kw) for kw in URGENT_PHYSICAL_KEYWORDS]
+
+# "my"/"ko" are deliberately absent: they also appear in reports about someone
+# else ("my friend is stressed"), and the first-turn floor is only meant to
+# protect the student's own disclosure from being smoothed into Normal.
+_FIRST_PERSON_RE = re.compile(
+    r"\b(i|im|i'm|i am|me|myself|ako|akin|ako'y)\b",
+    re.IGNORECASE,
+)
 
 # Instructs GAIDA to hold at High/Crisis until the student explicitly confirms
 # they are safe — otherwise a single calm message after a crisis would
@@ -121,8 +150,8 @@ def _detect_calming(text: str) -> bool:
 
 
 def _detect_urgent(text: str) -> bool:
-    txt = text.lower()
-    return any(kw in txt for kw in URGENT_PHYSICAL_KEYWORDS)
+    txt = _urgent_normalize(text)
+    return any(kw in txt for kw in _URGENT_NORMALIZED)
 
 def _scaled_boost(raw_confidence: float, base_multiplier: float, threshold: float = 0.5) -> float:
     """Scales the boost so confidence just above threshold gets minimal boost,
@@ -147,6 +176,12 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     else:
         session_id = start_session(user_id, session_id=session_id)
         session = get_session(session_id)
+
+    # At this point the current message has not been recorded yet, so an empty
+    # user history means this is the first turn of the session.
+    is_first_turn = not any(
+        m.get("sender") == "user" for m in session.get("messages", [])
+    )
 
     # --- Step 2: Detect intent (always — even in vent mode for safety) ---
     detection = detect_intent_and_level(user_message)
@@ -267,7 +302,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
 
             if _detect_urgent(user_message):
                 running_confidence = (previous_confidence * 0.4) + (boosted_raw * 0.6)
-                running_confidence = max(running_confidence, 0.60)
+                running_confidence = max(running_confidence, 0.71)
             else:
                 running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
 
@@ -302,6 +337,19 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
                     running_confidence = min(running_confidence, CAP_LOSS_PLAIN)
 
             running_confidence = round(running_confidence, 3)
+
+        # First turn: the stored 0.3 is a placeholder, not real history. Without
+        # this floor, a genuine Low reading is blended down with that baseline
+        # ("i am panicking right now" raw 0.55 -> 0.375) and the very first
+        # thing a student says is logged Normal. The floor only lifts a Normal
+        # result to Low when the detector itself saw at least Low — it never
+        # creates an alert, and later turns still use the history blend.
+        if (
+            is_first_turn
+            and raw_confidence >= 0.46
+            and _FIRST_PERSON_RE.search(user_message)
+        ):
+            running_confidence = max(running_confidence, 0.46)
 
         # Grief sits just below suicidal and just above anxiety. Grief is the
         # situation; anxiety, stress and sadness are usually what it feels like
@@ -367,7 +415,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     # De-escalation clearance: NEVER silently drop a High/Crisis session to
     # Low or Normal. Hold the last known high level and ask the student to
     # confirm they are safe before any de-escalation is allowed.
-    holding_clearance = post_crisis and not safety_confirm and running_confidence < 0.75
+    holding_clearance = post_crisis and not safety_confirm and running_confidence < 0.76
     if holding_clearance:
         prev_sev = session.get("meta", {}).get("peak_severity", "High")
         hold_confidence = 0.99 if prev_sev == "Crisis" else 0.80

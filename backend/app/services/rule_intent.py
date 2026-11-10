@@ -262,6 +262,20 @@ KEYWORDS: Dict[str, List[tuple]] = {
         ("racing mind", 1.8),
         ("feel panicky", 2.0),
         ("panicky", 1.8),
+        # Inflections of "panic" were invisible to the token matcher: the
+        # keyword "panic" is five letters and "panicking" is nine, so the
+        # anchored fuzzy matcher refuses the match. "i am panicking right now"
+        # therefore read as neutral and the classifier's (wrong) anger vote won.
+        ("panicking", 2.0),
+        ("panicked", 2.0),
+        ("in a panic", 1.8),
+        ("difficulty breathing", 2.0),
+        ("hard to breathe", 2.0),
+        ("shortness of breath", 2.0),
+        ("short of breath", 2.0),
+        ("can't get enough air", 2.0),
+        ("cant get enough air", 2.0),
+        ("gasping for air", 2.0),
         ("kakaisip", 1.5),
         ("nahihilo sa kakaisip", 2.0),
         ("mapigilan ang takot", 2.0),

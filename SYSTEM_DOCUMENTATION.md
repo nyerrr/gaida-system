@@ -242,7 +242,7 @@ Feedback (added by **[NEW — uncommitted] `2026_09_add_message_feedback.sql`**)
    - Keyword / rule matcher (topic: academic, relationship, bullying, family, self-harm, vent, crisis…).
    - ML classifier (`ml_classifier`) predicts emotion + severity with a confidence score.
    - Confidence is **running-averaged** across the session and mapped to a 5-level severity band:
-     `≥0.99 Crisis · ≥0.75 High · ≥0.60 Moderate · ≥0.45 Low · else Normal`.
+     `≥0.99 Crisis · ≥0.76 High · ≥0.71 Moderate · ≥0.46 Low · else Normal`.
    - Segment-level record (`text_segmenter.py`): the message is split into sentence segments; each
      segment gets a lexicon **sentiment** score and **distress-word flags** (anxiety/stress/sadness/
      crisis cues). Analysis-only — it never changes intent, severity, or alerting — and is stored per

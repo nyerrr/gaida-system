@@ -389,7 +389,7 @@ Student message
         → confidence drops toward 0.3  (faster if after a crisis)
    • REPEATED intent (same as previous, e.g. anxiety→anxiety)  → ×1.3 boost
    • RELATED intent  (anxiety ↔ stress ↔ sadness, etc.)        → ×1.15 boost
-   • URGENT PHYSICAL (can't breathe, chest tight, panic attack) → floor 0.60
+   • URGENT PHYSICAL (can't breathe, chest tight, panic attack) → floor 0.71
    • running = 0.7×history + 0.3×current  (never drops below half of previous)
    • INTENT PRIORITY lock: intent can only escalate in severity order:
         neutral < academic < loneliness < anger < stress < sadness < anxiety < suicidal
