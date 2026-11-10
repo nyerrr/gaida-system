@@ -184,10 +184,6 @@ const NAV_GROUPS = [
   { label: 'Follow-up', ids: ['welfare', 'resolved', 'reports'] },
 ];
 
-const closeSidebarTooltip = (event) => {
-  if (event.key === 'Escape') event.currentTarget.blur();
-};
-
 const getAlertStatusLabel = (alert) => {
   const status = String(alert?.status || '').toLowerCase();
   if (['reviewed', 'resolved', 'closed', 'done'].includes(status)) return 'Resolved';
@@ -834,7 +830,7 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
       }}
       onPointerCancel={() => { pointerStart.current = null; }}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="alert-row-layout flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.text}`} style={{ background: sc.hex }}>{a.severity}</span>
@@ -3340,9 +3336,13 @@ function ResolvedCasesPage() {
     ongoing:     'Ongoing',
   };
 
-  useEffect(() => {
+  const retryLoadCases = () => {
     setLoading(true);
     setCasesError('');
+    setCasesRequestVersion((version) => version + 1);
+  };
+
+  useEffect(() => {
     apiFetch(`${BACKEND}/api/counselor/sessions/resolved`)
       .then(r => r.json())
       .then(data => {
@@ -3430,7 +3430,7 @@ function ResolvedCasesPage() {
         <div className="counselor-error-state" style={{ color: P.textSecondary }}>
           <p className="text-sm font-medium">Could not load resolved cases.</p>
           <p className="text-xs mt-1 text-red-500">Please try again later.</p>
-          <button type="button" className="btn ghost mt-4" onClick={() => setCasesRequestVersion((version) => version + 1)}>Retry</button>
+          <button type="button" className="btn ghost mt-4" onClick={retryLoadCases}>Retry</button>
         </div>
       ) : cases.length === 0 ? (
         <EmptyState icon="✓" title="No resolved cases yet" sub="Sessions marked as resolved will appear here" />

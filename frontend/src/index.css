@@ -571,6 +571,14 @@ textarea:focus-visible,
     width: 100%;
     min-height: 44px;
   }
+
+  .alert-row-layout {
+    flex-direction: column;
+  }
+
+  .alert-row-layout > .flex-1 {
+    width: 100%;
+  }
 }
 
 @layer components {
