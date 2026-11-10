@@ -621,9 +621,13 @@ body.filter-sheet-open .counselor-bottom-sheet {
 }
 
 .counselor-portal .nav {
-  min-height: 2.75rem;
+  min-height: 3rem;
   border-radius: 0.5rem;
   color: #d6e0ea;
+}
+
+.counselor-portal .side :is(button, a) {
+  min-height: 3rem;
 }
 
 .counselor-portal .nav.on {
@@ -1407,16 +1411,16 @@ body.filter-sheet-open .counselor-bottom-sheet {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 44px;
+    min-height: 3rem;
     margin-bottom: 0.5rem;
   }
 
   .counselor-filter-title-row h2 { margin: 0; }
 
   .counselor-bottom-sheet .counselor-sheet-close {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: 3rem;
+    min-width: 3rem;
+    height: 3rem;
     justify-content: center;
     padding: 0;
     border: 0;
@@ -1494,10 +1498,11 @@ body.filter-sheet-open .counselor-bottom-sheet {
   .counselor-sheet-handle {
     display: block;
     position: relative;
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
-    flex: 0 0 44px;
+    width: 3rem;
+    min-width: 3rem;
+    height: 3rem;
+    min-height: 3rem;
+    flex: 0 0 3rem;
     margin: 0 auto 0.25rem;
     padding: 0;
     border: 0;
@@ -1528,6 +1533,7 @@ body.filter-sheet-open .counselor-bottom-sheet {
     align-items: center;
     justify-content: space-between;
     width: 100%;
+    min-height: 3rem;
     padding: 0.75rem 0.25rem;
     border: 0;
     border-bottom: 1px solid var(--line);
@@ -1557,9 +1563,10 @@ body.filter-sheet-open .counselor-bottom-sheet {
 
 .dashboard-topbar .counselor-icon-button {
   display: inline-flex;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
+  width: 3rem;
+  min-width: 3rem;
+  height: 3rem;
+  min-height: 3rem;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);

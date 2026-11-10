@@ -182,7 +182,7 @@ export default function CounselorBottomNav({
               </div>
               <button
                 onClick={() => setMoreMenuOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-lg text-base text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                className="flex h-12 w-12 items-center justify-center rounded-lg text-base text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                 aria-label="Close menu"
               >
                 ✕

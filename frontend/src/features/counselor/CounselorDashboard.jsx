@@ -3085,7 +3085,7 @@ export default function CounselorDashboard() {
                 type="button"
                 data-drawer-initial-focus
                 onClick={closeMobileNav}
-                className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+                className="absolute right-3 top-3 flex h-12 w-12 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 title="Close menu"
                 aria-label="Close menu"
               >
@@ -3105,7 +3105,7 @@ export default function CounselorDashboard() {
               ref={sidebarProfileRef}
               type="button"
               onClick={() => { if (!mobileNavOpen) setExpanded(!expanded); }}
-              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ background: P.accent, boxShadow: `0 0 0 3px ${P.navyLight}` }}
               title={mobileNavOpen ? `${counselor.name || 'Counselor'} — Guidance Counselor` : expanded ? 'Collapse sidebar' : 'Expand sidebar'}
               aria-label={mobileNavOpen ? 'Counselor profile' : 'Toggle sidebar'}
@@ -3149,7 +3149,7 @@ export default function CounselorDashboard() {
               <button
                 type="button"
                 onClick={closeMobileNav}
-                className="-mr-1 mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+                className="-mr-1 mt-0.5 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 title="Close menu"
                 aria-label="Close menu"
               >
@@ -3430,7 +3430,7 @@ export default function CounselorDashboard() {
               ref={menuButtonRef}
               type="button"
               onClick={(e) => openMobileNav(e.currentTarget)}
-              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ background: P.accent, boxShadow: `0 0 0 2px ${P.navyLight}` }}
               title="Open profile and utilities"
               aria-label="Open profile and utilities"
