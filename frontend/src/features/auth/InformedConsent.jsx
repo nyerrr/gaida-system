@@ -85,7 +85,7 @@ const handleAccept = async (e) => {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 md:p-8 w-full max-w-2xl my-4 max-h-[95dvh] overflow-y-auto no-scrollbar">
+      <div className="relative z-10 my-4 flex min-h-0 max-h-[95dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6 md:p-8">
         {/* Top Back Navigation */}
         <div className="mb-4">
           <button
@@ -119,7 +119,7 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Consent Content - Scrollable */}
-        <div role="region" aria-label="Consent terms" tabIndex={0} className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[40dvh] sm:max-h-96 overflow-y-auto no-scrollbar border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#608AB6]">
+        <div role="region" aria-label="Consent terms" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 no-scrollbar focus:outline-none focus:ring-2 focus:ring-[#608AB6] sm:mb-6 sm:max-h-96 sm:p-6">
           <div className="space-y-4 text-sm text-gray-700">
             {/* Purpose */}
             <div>
@@ -209,7 +209,7 @@ const handleAccept = async (e) => {
               <h3 className="font-semibold text-gray-900 mb-2">Rights:</h3>
               <p>
                 You may withdraw consent and end your session at any time without penalty. You have the right 
-                to request access to your session data by contacting the guidance office. You may request 
+                to request access to your session data by contacting the GCCSO. You may request
                 deletion of your data, subject to university record-keeping requirements. You can review what 
                 data has been collected about you upon request by contacting the GCCSO at guidance@ue.edu.ph.
               </p>
@@ -222,7 +222,7 @@ const handleAccept = async (e) => {
                 Your session data is intended to be retained for counseling continuity and
                 quality improvement purposes. Automatic, scheduled deletion after a fixed
                 period is not yet implemented in the system; until it is, data is retained
-                until you request deletion (see "Rights" above) or the guidance office
+                until you request deletion (see "Rights" above) or the GCCSO
                 removes it in line with university record-keeping policy.
               </p>
             </div>

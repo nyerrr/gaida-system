@@ -54,6 +54,33 @@ body {
   background: var(--bg);
   color: var(--ink);
   font: 400 14px/1.5 Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+/* Keep interactive controls comfortable on touch devices without changing
+   the existing visual scale on desktop. */
+button,
+[role='button'],
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 900px) {
+  button,
+  [role='button'],
+  a {
+    touch-action: manipulation;
+  }
+}
+
+input,
+select,
+textarea {
+  line-height: 1.4;
+}
+
+textarea {
+  field-sizing: content;
 }
 
 button:focus-visible,
@@ -234,6 +261,7 @@ textarea:focus-visible,
 .mut {
   color: var(--mut);
   font-size: 14px;
+  line-height: 1.45;
 }
 
 .btn {
@@ -250,6 +278,37 @@ textarea:focus-visible,
   text-decoration: none;
   text-align: center;
   cursor: pointer;
+}
+
+/* Numeric values should not shift when a digit changes width. */
+.kpi b,
+.kpi-change,
+.badge,
+.status-tag,
+.alert-row .text-xs,
+.counselor-dashboard .text-right {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Avoid clipped content behind phone cutouts and home indicators. */
+.counselor-dashboard,
+.student-dashboard {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Interactive controls should communicate that they can be used. */
+button:not(:disabled),
+a[href],
+select,
+label[for] {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
 }
 
 .btn.ghost {
@@ -300,6 +359,7 @@ textarea:focus-visible,
 .kpi b {
   display: block;
   font-size: 26px;
+  line-height: 1.15;
 }
 
 .kpi.risk b {
@@ -341,6 +401,7 @@ textarea:focus-visible,
   padding-bottom: env(safe-area-inset-bottom, 0px);
   border-top: 1px solid var(--line);
   background: var(--card);
+  padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
 }
 
 .tabbar a {
@@ -1510,6 +1571,7 @@ textarea:focus-visible,
   gap: 0.75rem;
   padding: 1rem 0.5rem 0;
   border-bottom: 1px solid var(--border);
+  contain: layout paint;
 }
 
 .chart-skeleton span {
@@ -1535,6 +1597,23 @@ textarea:focus-visible,
   color: var(--secondary);
   font-size: 12px;
   line-height: 1.35;
+}
+
+/* Keep consent and informational copy readable on wide screens. */
+[role='region'][aria-label*='consent' i] p {
+  max-width: 70ch;
+  line-height: 1.65;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .safety-note {

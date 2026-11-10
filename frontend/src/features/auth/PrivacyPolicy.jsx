@@ -43,7 +43,7 @@ export default function PrivacyPolicy() {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 md:p-8 w-full max-w-2xl max-h-[95dvh] overflow-y-auto">
+      <div className="relative z-10 flex min-h-0 max-h-[95dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6 md:p-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-6">
           <div className="flex-1 min-w-0">
@@ -59,7 +59,7 @@ export default function PrivacyPolicy() {
 
         {/* Consent Content - Scrollable (scrollbar visually hidden, keyboard/mouse scrollable) */}
         <div
-          className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6 max-h-[50dvh] sm:max-h-96 overflow-y-auto no-scrollbar border border-gray-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#608AB6]"
+          className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 no-scrollbar focus:outline-none focus-visible:ring-1 focus-visible:ring-[#608AB6] sm:mb-6 sm:max-h-96 sm:p-6"
           tabIndex={0}
           role="region"
           aria-label="Privacy and consent content"
@@ -119,10 +119,12 @@ export default function PrivacyPolicy() {
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">Limitations:</h3>
               <p>
-                GAIDA is an assistive tool and does not replace professional mental health care. It is designed 
-                to support early anxiety detection and facilitate counselor intervention, not provide medical 
-                diagnosis or treatment. If you are experiencing a mental health emergency, please contact your 
-                university counseling center immediately or call emergency services.
+                GAIDA is an assistive tool and does not replace professional mental health care. It is designed
+                to support early anxiety detection and facilitate counselor intervention, not provide medical
+                diagnosis or treatment. Language support is currently restricted to English, Tagalog, and
+                Taglish; detection accuracy may decrease with other regional Philippine dialects. If you are
+                experiencing a mental health emergency, please contact your university counseling center
+                immediately or call emergency services.
               </p>
             </div>
 
@@ -133,8 +135,8 @@ export default function PrivacyPolicy() {
                 By accepting, you consent to text and interaction data being recorded during
                 your session, and to voice input being analyzed and transcribed in real time
                 if you choose to use it (the audio itself is not retained). This data may be
-                reviewed by the research team and by authorized counselors for assessment
-                and support purposes.
+                reviewed by authorized counselors and the Guidance, Counseling and Career
+                Services Office (GCCSO) for assessment and support purposes.
               </p>
             </div>
 
@@ -153,7 +155,7 @@ export default function PrivacyPolicy() {
               <h3 className="font-semibold text-gray-900 mb-2">Rights:</h3>
               <p>
                 You may withdraw consent and end your session at any time without penalty. You have the right 
-                to request access to your session data by contacting the guidance office. You may request 
+                to request access to your session data by contacting the GCCSO. You may request
                 deletion of your data, subject to university record-keeping requirements. You can review what 
                 data has been collected about you upon request by contacting the GCCSO at guidance@ue.edu.ph.
               </p>
@@ -166,7 +168,7 @@ export default function PrivacyPolicy() {
                 Your session data is intended to be retained for counseling continuity and
                 quality improvement purposes. Automatic, scheduled deletion after a fixed
                 period is not yet implemented in the system; until it is, data is retained
-                until you request deletion (see "Rights" above) or the guidance office
+                until you request deletion (see "Rights" above) or the GCCSO
                 removes it in line with university record-keeping policy.
               </p>
             </div>
