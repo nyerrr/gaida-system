@@ -147,7 +147,7 @@ export default function ForgotPassword() {
             <span>·</span>
             <Link to="/counselor-login" className="hover:text-red-700 transition-colors font-medium">Counselor Portal</Link>
             <span>·</span>
-            <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">Privacy & Consent</Link>
+            <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">Informed Consent</Link>
           </div>
         </div>
       </div>

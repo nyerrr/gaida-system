@@ -1,17 +1,17 @@
 import { useState } from 'react';
 
 const P = {
-  navy: '#22303A',
-  navyLight: '#33454F',
-  surface: '#FFFFFF',
-  border: '#DCE7EA',
-  panel: '#EEF4F6',
-  accent: '#5E8FBD',
-  accentSoft: '#DCEAF3',
-  red: '#B0472F',
-  textPrimary: '#2E3B44',
-  textSecondary: '#5C6F78',
-  textMuted: '#8FA3AC',
+  navy: 'var(--side)',
+  navyLight: 'var(--line)',
+  surface: 'var(--card)',
+  border: 'var(--line)',
+  panel: 'var(--bg)',
+  accent: 'var(--brand)',
+  accentSoft: 'color-mix(in srgb, var(--brand) 18%, var(--card))',
+  red: 'var(--red)',
+  textPrimary: 'var(--ink)',
+  textSecondary: 'var(--mut)',
+  textMuted: 'var(--mut)',
 };
 
 /**
@@ -28,8 +28,14 @@ export default function CounselorBottomNav({
   pendingCount = 0,
   welfareCount = 0,
   sessionsCount = 0,
+  drawerOpen = false,
 }) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+
+  // The side drawer is the active navigation surface while it is open; keeping
+  // the bottom bar mounted underneath it would leave a second, tappable nav
+  // layer at the bottom edge of the screen.
+  if (drawerOpen) return null;
 
   const isMoreActive =
     activePage === 'welfare' ||
@@ -165,7 +171,7 @@ export default function CounselorBottomNav({
             aria-modal="true"
           >
             {/* Sheet Handle */}
-            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-3" />
+            <div className="w-10 h-1 rounded-full mx-auto mb-3" style={{ background: P.border }} />
 
             <div className="flex items-center justify-between pb-3 mb-3 border-b" style={{ borderColor: P.border }}>
               <div>
@@ -197,7 +203,7 @@ export default function CounselorBottomNav({
                     <div
                       className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{
-                        background: active ? P.accent : '#FFFFFF',
+                        background: active ? P.accent : P.surface,
                         color: active ? '#FFFFFF' : P.textSecondary,
                         border: `1px solid ${P.border}`,
                       }}
@@ -205,7 +211,7 @@ export default function CounselorBottomNav({
                       {item.icon}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold" style={{ color: active ? P.accentDark : P.textPrimary }}>
+                      <p className="text-xs font-semibold" style={{ color: active ? P.accent : P.textPrimary }}>
                         {item.label}
                       </p>
                       <p className="text-[11px] truncate" style={{ color: P.textSecondary }}>
@@ -234,7 +240,7 @@ export default function CounselorBottomNav({
       {/* Fixed Bottom Bar */}
       <nav
         aria-label="Counselor mobile navigation"
-        className="tabbar fixed bottom-0 left-0 right-0 z-30 lg:hidden flex items-center justify-around shadow-lg"
+        className="tabbar fixed bottom-0 left-0 right-0 z-50 lg:hidden flex items-center justify-around shadow-lg"
         style={{
           background: 'var(--card)',
           borderTop: '1px solid var(--line)',

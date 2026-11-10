@@ -31,6 +31,9 @@
   --grn: var(--safe);
   --grnbg: var(--safe-surface);
   --sideink: #d6e0ea;
+  --high: #c2410c;
+  --accent-soft: #e6f0f5;
+  --panel: var(--border);
   color-scheme: light;
 }
 
@@ -47,6 +50,8 @@
   --safe: #9ed6b1;
   --safe-surface: #233b31;
   --neutral: #aed4f0;
+  --high: #fdba74;
+  --accent-soft: #2a4153;
   color-scheme: dark;
 }
 
@@ -402,6 +407,7 @@ textarea:disabled {
   border-top: 1px solid var(--line);
   background: var(--card);
   padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
+  color: var(--mut);
 }
 
 .tabbar a {
@@ -435,6 +441,55 @@ textarea:disabled {
   color: var(--brand);
   font-weight: 700;
 }
+
+.counselor-dashboard .tabbar {
+  border-top-color: var(--line);
+  background: var(--card);
+  color: var(--mut);
+  box-shadow: 0 -4px 16px rgb(0 0 0 / 12%);
+}
+
+nav[aria-label="Counselor mobile navigation"] {
+  z-index: 50 !important;
+}
+
+.counselor-dashboard .tabbar button {
+  color: var(--mut);
+}
+
+.counselor-dashboard .tabbar button.on {
+  background: color-mix(in srgb, var(--brand) 18%, var(--card));
+  color: var(--brand);
+}
+
+body.filter-sheet-open .hotline-fab {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.filter-sheet-open .counselor-bottom-sheet {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.counselor-portal {
+  --bg: var(--canvas);
+  --card: var(--surface);
+  --ink: var(--primary);
+  --mut: var(--secondary);
+  --line: var(--border);
+  --red: var(--risk);
+  --redbg: var(--risk-surface);
+  --amb: var(--caution);
+  --ambbg: var(--caution-surface);
+  --grn: var(--safe);
+  --grnbg: var(--safe-surface);
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+}
+
+.counselor-portal > * { pointer-events: auto; }
 
 .counselor-skip-link {
   position: fixed;
@@ -647,8 +702,8 @@ textarea:disabled {
   .hotline-fab {
     position: fixed;
     right: 1rem;
-    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
-    z-index: 35;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    z-index: 25;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -1035,7 +1090,7 @@ textarea:disabled {
   }
 
   .counselor-alerts-page {
-    padding-bottom: 5.5rem;
+    padding-bottom: calc(76px + 60px + env(safe-area-inset-bottom, 0px));
   }
 
   .alert-legend {
@@ -1297,23 +1352,64 @@ textarea:disabled {
   .counselor-sheet-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 40;
-    background: rgb(34 48 58 / 45%);
+    z-index: 55;
+    background: rgb(0 0 0 / 52%);
   }
 
   .counselor-bottom-sheet {
     position: fixed;
     right: 0;
-    bottom: 0;
+    bottom: 0 !important;
     left: 0;
-    z-index: 50;
+    z-index: 60 !important;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    max-height: 80dvh;
     padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid #dce7ea;
+    border-top: 1px solid var(--line);
     border-radius: 1.25rem 1.25rem 0 0;
-    background: #fff;
+    background: var(--card);
+    color: var(--ink);
     box-shadow: 0 -8px 30px rgb(34 48 58 / 18%);
-    max-height: min(36rem, calc(100dvh - 4rem));
+    overflow: hidden;
+  }
+
+  nav[aria-label="Counselor mobile navigation"] {
+    z-index: 50 !important;
+  }
+
+  .counselor-filter-options {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .counselor-bottom-sheet .counselor-sheet-handle,
+  .counselor-bottom-sheet h2 {
+    flex: 0 0 auto;
+  }
+
+  .counselor-filter-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    margin-bottom: 0.5rem;
+  }
+
+  .counselor-filter-title-row h2 { margin: 0; }
+
+  .counselor-bottom-sheet .counselor-sheet-close {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0.65rem;
   }
 
   .counselor-more-sheet {
@@ -1385,16 +1481,34 @@ textarea:disabled {
   }
 
   .counselor-sheet-handle {
+    display: block;
+    position: relative;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    margin: 0 auto 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .counselor-sheet-handle::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
     width: 2.5rem;
     height: 0.25rem;
-    margin: 0 auto 1rem;
     border-radius: 999px;
-    background: #dce7ea;
+    background: var(--border);
+    content: "";
+    transform: translate(-50%, -50%);
   }
 
   .counselor-bottom-sheet h2 {
     margin: 0 0 0.5rem;
-    color: #2e3b44;
+    color: var(--ink);
     font-size: 1.25rem;
   }
 
@@ -1405,10 +1519,15 @@ textarea:disabled {
     width: 100%;
     padding: 0.75rem 0.25rem;
     border: 0;
-    border-bottom: 1px solid #eef4f6;
+    border-bottom: 1px solid var(--line);
     background: transparent;
-    color: #2e3b44;
+    color: var(--ink);
     text-align: left;
+  }
+
+  .counselor-filter-portal .counselor-bottom-sheet button {
+    border-bottom-color: color-mix(in srgb, currentColor 14%, transparent);
+    color: inherit;
   }
 
   .counselor-bottom-sheet button.selected {
@@ -1425,7 +1544,23 @@ textarea:disabled {
   border-color: var(--border);
 }
 
+.dashboard-topbar .counselor-icon-button {
+  display: inline-flex;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+}
+
 .counselor-dashboard[data-theme='dark'] {
+  --high: #fdba74;
+  --accent-soft: #2a4153;
   --canvas: #14212c;
   --surface: #1d2d3a;
   --primary: #edf3f8;
@@ -1438,6 +1573,36 @@ textarea:disabled {
   --safe: #9ed6b1;
   --safe-surface: #233b31;
   --neutral: #aed4f0;
+  --bg: var(--canvas);
+  --card: var(--surface);
+  --ink: var(--primary);
+  --mut: var(--secondary);
+  --line: var(--border);
+  --red: var(--risk);
+  --redbg: var(--risk-surface);
+  --amb: var(--caution);
+  --ambbg: var(--caution-surface);
+  --grn: var(--safe);
+  --grnbg: var(--safe-surface);
+  color-scheme: dark;
+}
+
+.counselor-portal[data-theme='dark'] {
+  --canvas: #14212c;
+  --surface: #1d2d3a;
+  --primary: #edf3f8;
+  --secondary: #b9c7d3;
+  --border: #405362;
+  --risk: #ffaaa9;
+  --risk-surface: #42282f;
+  --caution: #f4d18a;
+  --caution-surface: #3b3323;
+  --safe: #9ed6b1;
+  --safe-surface: #233b31;
+  --neutral: #aed4f0;
+  --high: #fdba74;
+  --accent-soft: #2a4153;
+  --panel: var(--border);
   --bg: var(--canvas);
   --card: var(--surface);
   --ink: var(--primary);

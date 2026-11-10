@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 
 /**
- * Public Privacy & Consent Information page.
+ * Public Informed Consent information page.
  * Contains the complete informed consent and privacy disclosure text from GAIDA,
  * formatted for unauthenticated, public review before login.
  *
@@ -23,7 +23,7 @@ export default function PrivacyPolicy() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-slate-50" style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px))' }}>
       {/* Decorative Background Pattern */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <div className="absolute top-20 left-20 w-96 h-96 border-4 border-red-200 rotate-45 rounded-3xl"></div>
@@ -43,15 +43,15 @@ export default function PrivacyPolicy() {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 flex min-h-0 max-h-[95dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6 md:p-8">
+      <div className="relative z-10 flex min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6 md:p-8" style={{ maxHeight: 'calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))' }}>
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-6">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Privacy & Consent</h1>
-            <p className="text-xs text-gray-500 mt-1">Please review the guidelines below before beginning your session</p>
+        <div className="mb-4 flex flex-col gap-2 sm:mb-5">
+          <div className="min-w-0">
+            <h1 className="whitespace-nowrap text-xl font-bold text-gray-900 sm:text-2xl md:text-3xl">Informed Consent</h1>
+            <p className="mt-1 text-xs text-[var(--secondary)]">Please review the guidelines below before beginning your session</p>
           </div>
-          <div className="sm:text-right flex-shrink-0">
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200 inline-block">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-block rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
               Guidance, Counseling and Career Services Office (GCCSO)
             </span>
           </div>
@@ -59,10 +59,10 @@ export default function PrivacyPolicy() {
 
         {/* Consent Content - Scrollable (scrollbar visually hidden, keyboard/mouse scrollable) */}
         <div
-          className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 no-scrollbar focus:outline-none focus-visible:ring-1 focus-visible:ring-[#608AB6] sm:mb-6 sm:max-h-96 sm:p-6"
+          className="mb-4 min-h-0 max-h-[40dvh] flex-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] sm:mb-5 sm:p-6"
           tabIndex={0}
           role="region"
-          aria-label="Privacy and consent content"
+          aria-label="Informed consent content"
         >
           <div className="space-y-4 text-sm text-gray-700">
             {/* Purpose */}
@@ -197,7 +197,7 @@ export default function PrivacyPolicy() {
         </div>
 
         {/* Footer Note */}
-        <p className="text-xs text-gray-500 text-center mt-4">
+        <p className="mt-3 text-center text-sm text-[var(--secondary)]">
           This is an informational document. Participating in counseling sessions requires explicit informed consent after signing in.
         </p>
       </div>

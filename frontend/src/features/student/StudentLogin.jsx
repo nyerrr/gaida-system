@@ -389,7 +389,7 @@ export default function StudentLogin() {
             </Link>
             <span>·</span>
             <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">
-              Privacy & Consent
+              Informed Consent
             </Link>
           </div>
         </div>

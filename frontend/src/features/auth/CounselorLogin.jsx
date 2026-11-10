@@ -274,7 +274,7 @@ export default function CounselorLogin() {
           <div className="flex justify-center gap-4 text-xs text-gray-500">
             <Link to="/student-login" className="hover:text-red-700 transition-colors font-medium">Student Portal</Link>
             <span>·</span>
-            <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">Privacy & Consent</Link>
+            <Link to="/informed-consent" className="hover:text-red-700 transition-colors font-medium">Informed Consent</Link>
           </div>
         </div>
       </div>

@@ -8,6 +8,8 @@ export default function InformedConsent() {
   const [isChecked, setIsChecked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [consentError, setConsentError] = useState('');
+  const [termsRead, setTermsRead] = useState(false);
+  const [termsAtEnd, setTermsAtEnd] = useState(false);
 
   const createSessionId = () => {
     const cryptoApi = globalThis.crypto;
@@ -65,7 +67,7 @@ const handleAccept = async (e) => {
   };
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 p-3 sm:p-4 relative overflow-y-auto no-scrollbar">
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-slate-50" style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px))' }}>
       {/* Decorative Background Pattern */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <div className="absolute top-10 sm:top-20 left-10 sm:left-20 w-64 sm:w-96 h-64 sm:h-96 border-4 border-red-200 rotate-45 rounded-3xl"></div>
@@ -85,7 +87,7 @@ const handleAccept = async (e) => {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 my-4 flex min-h-0 max-h-[95dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6 md:p-8">
+      <div className="relative z-10 flex min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6 md:p-8" style={{ maxHeight: 'calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))' }}>
         {/* Top Back Navigation */}
         <div className="mb-4">
           <button
@@ -101,17 +103,17 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-6">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Informed Consent</h1>
-            <p className="text-xs text-gray-500 mt-1">Please review the guidelines below before beginning your session</p>
+        <div className="mb-4 flex flex-col gap-2 sm:mb-5">
+          <div className="min-w-0">
+            <h1 className="whitespace-nowrap text-xl font-bold text-gray-900 sm:text-2xl md:text-3xl">Informed Consent</h1>
+            <p className="mt-1 text-xs text-[var(--secondary)]">Please review the guidelines below before beginning your session</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
               Guidance, Counseling and Career Services Office (GCCSO)
             </span>
             {localStorage.getItem('student_id') && (
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
+              <span className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={{ color: 'var(--brand)', borderColor: 'var(--brand)', background: '#f3f4f6' }}>
                 {localStorage.getItem('student_id')}
               </span>
             )}
@@ -119,7 +121,19 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Consent Content - Scrollable */}
-        <div role="region" aria-label="Consent terms" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 no-scrollbar focus:outline-none focus:ring-2 focus:ring-[#608AB6] sm:mb-6 sm:max-h-96 sm:p-6">
+        <div className="relative mb-3 h-[34dvh] max-h-96 min-h-0 flex-none overflow-hidden sm:mb-4">
+        <div
+          role="region"
+          aria-label="Consent terms"
+          tabIndex={0}
+          onScroll={(event) => {
+            const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+            const atEnd = scrollTop + clientHeight >= scrollHeight - 8;
+            setTermsAtEnd(atEnd);
+            if (atEnd) setTermsRead(true);
+          }}
+          className="h-full min-h-0 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 no-scrollbar focus:outline-none focus:ring-2 focus:ring-[var(--brand)] sm:p-6"
+        >
           <div className="space-y-4 text-sm text-gray-700">
             {/* Purpose */}
             <div>
@@ -238,21 +252,26 @@ const handleAccept = async (e) => {
             </div>
           </div>
         </div>
+        {!termsAtEnd && <div className="pointer-events-none absolute inset-x-px bottom-px h-14 rounded-b-lg bg-gradient-to-b from-transparent to-gray-50" aria-hidden="true" />}
+        {!termsAtEnd && <p className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-xs font-medium text-[var(--secondary)]" aria-hidden="true">Scroll to continue</p>}
+        </div>
 
         {/* Consent Checkbox */}
-        <div className="mb-6">
-          <label className="flex items-start gap-3 cursor-pointer group">
+        <div className="mb-3">
+          <label className={`flex items-start gap-3 ${termsRead ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
             <input
               type="checkbox"
               checked={isChecked}
-              onChange={(e) => setIsChecked(e.target.checked)}
-              className="mt-1 w-5 h-5 text-red-700 border-gray-300 rounded focus:ring-red-600 cursor-pointer"
+              aria-disabled={!termsRead}
+              onChange={(e) => { if (termsRead) setIsChecked(e.target.checked); }}
+              className={`mt-1 h-5 w-5 rounded border-gray-300 text-[var(--brand)] focus:ring-[var(--brand)] ${termsRead ? 'cursor-pointer' : 'cursor-not-allowed'}`}
             />
             <span className="text-sm text-gray-700 select-none">
               I have read and understood the terms above. I consent to participate in this session 
               and agree to the collection, use, and storage of my data as described.
             </span>
           </label>
+          {!termsRead && <p className="ml-8 mt-1 text-xs text-[var(--secondary)]">Scroll to the end of the terms to enable this box.</p>}
         </div>
 
         {/* Action Buttons */}
@@ -262,11 +281,7 @@ const handleAccept = async (e) => {
             type="button"
             onClick={handleAccept}
             disabled={!isChecked || isSubmitting}
-            className={`flex-1 py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl font-semibold transition-all duration-200 text-sm sm:text-base ${
-              isChecked
-                ? 'text-white shadow-md hover:shadow-lg active:scale-[0.98] bg-[#608AB6] hover:bg-[#52769c]'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
+            className="flex-1 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:py-3 sm:text-base"
           >
             {isSubmitting ? 'Saving consent…' : 'I Accept - Start Session'}
           </button>
@@ -280,7 +295,7 @@ const handleAccept = async (e) => {
         </div>
 
         {/* Footer Note */}
-        <p className="text-xs text-gray-500 text-center mt-4">
+        <p className="mt-2 text-center text-xs text-[var(--secondary)]">
           By clicking "I Accept", you acknowledge that you have read and agree to the terms outlined above.
         </p>
       </div>

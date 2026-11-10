@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine
@@ -64,7 +65,7 @@ const severityRank = (s) => SEVERITY_RANK[s] || 0;
 const sortBySeverity = (list) => [...list].sort((a, b) => {
   const diff = severityRank(b.severity) - severityRank(a.severity);
   if (diff !== 0) return diff;
-  return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+  return new Date(a.first_alerted_at || a.timestamp || 0) - new Date(b.first_alerted_at || b.timestamp || 0);
 });
 
 const severityColor = (s) => {
@@ -184,6 +185,15 @@ const NAV_GROUPS = [
   { label: 'Follow-up', ids: ['welfare', 'resolved', 'reports'] },
 ];
 
+// Mobile drawer: four primary rows mirror the bottom bar, with the remaining
+// workspace views grouped behind "More".
+const DRAWER_PRIMARY_ITEMS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'alerts', label: 'Alerts' },
+  { id: 'sessions', label: 'Sessions' },
+];
+const DRAWER_MORE_IDS = ['welfare', 'detection', 'reports', 'resolved'];
+
 const getAlertStatusLabel = (alert) => {
   const status = String(alert?.status || '').toLowerCase();
   if (['reviewed', 'resolved', 'closed', 'done'].includes(status)) return 'Resolved';
@@ -235,6 +245,8 @@ function NavIcon({ id, size = 18 }) {
       return <svg {...common}><path d="M9 12l2 2 4-4" /><path d="M12 2.94a11.96 11.96 0 0 1-8.62 3.04A12.02 12.02 0 0 0 3 9c0 5.59 3.82 10.29 9 11.62C17.18 19.29 21 14.59 21 9c0-1.04-.13-2.05-.38-3.02A11.96 11.96 0 0 1 12 2.94z" /></svg>;
     case 'theme':
       return <svg {...common}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>;
+    case 'more':
+      return <svg {...common}><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /><circle cx="5" cy="12" r="1.4" /></svg>;
     case 'collapse':
       return <svg {...common}><polyline points="15 18 9 12 15 6" /></svg>;
     case 'logout':
@@ -941,14 +953,54 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
   );
 }
 
-function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRetryAlerts, onViewChat, onUpdateStatus, onAcknowledge, sessions }) {
+function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRetryAlerts, onViewChat, onUpdateStatus, onAcknowledge, sessions, theme }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef(null);
+  const filterSheetRef = useRef(null);
+  const closeFilterSheet = useCallback(() => setFilterOpen(false), []);
   const [showSwipeHint, setShowSwipeHint] = useState(() => {
     try { return !localStorage.getItem('gaida:alert-swipe-hint'); } catch { return true; }
   });
   const pull = usePullToRefresh(onRetryAlerts);
+  useEffect(() => {
+    document.body.classList.toggle('filter-sheet-open', filterOpen);
+    const main = document.getElementById('counselor-main');
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousMainOverflow = main?.style.overflowY ?? '';
+    const returnFocusTarget = filterButtonRef.current;
+
+    if (filterOpen) {
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      if (main) main.style.overflowY = 'visible';
+      filterSheetRef.current?.focus();
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeFilterSheet();
+        }
+      };
+      document.addEventListener('keydown', onKeyDown);
+      return () => {
+        document.removeEventListener('keydown', onKeyDown);
+        document.body.classList.remove('filter-sheet-open');
+        document.body.style.overflow = previousBodyOverflow;
+        document.documentElement.style.overflow = previousHtmlOverflow;
+        if (main) main.style.overflowY = previousMainOverflow;
+        returnFocusTarget?.focus();
+      };
+    }
+
+    return () => {
+      document.body.classList.remove('filter-sheet-open');
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      if (main) main.style.overflowY = previousMainOverflow;
+    };
+  }, [filterOpen, closeFilterSheet]);
   // Tick every 30 seconds so escalation badges update without a poll.
   const [, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -967,9 +1019,11 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
     return matchTerm && matchSev;
   });
 
-  const pending = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'New'));
-  const acknowledged = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Acknowledged'));
-  const resolved = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Resolved'));
+  const overdue = sortBySeverity(filtered.filter((a) => getEscalationState(a).level === 'overdue'));
+  const overdueIds = new Set(overdue.map((a) => a.session_id));
+  const pending = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'New' && !overdueIds.has(a.session_id)));
+  const acknowledged = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Acknowledged' && !overdueIds.has(a.session_id)));
+  const resolved = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Resolved' && !overdueIds.has(a.session_id)));
 
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page counselor-alerts-page" aria-busy={alertsLoading} style={pull.style}>
@@ -1009,7 +1063,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
             style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
           />
           <label htmlFor="alerts-severity-filter" className="sr-only">Filter alerts by severity</label>
-          <button type="button" className="counselor-filter-button" onClick={() => setFilterOpen(true)}>
+          <button ref={filterButtonRef} type="button" className="counselor-filter-button" onClick={() => setFilterOpen(true)}>
             Filter{severityFilter !== 'all' ? `: ${severityFilter}` : ''}
           </button>
           <select
@@ -1094,6 +1148,15 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
         </div>
       ) : (
         <>
+          {overdue.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full" style={{ background: P.red }} />
+                <h3 className="text-sm font-semibold" style={{ color: P.red }}>Overdue ({overdue.length})</h3>
+              </div>
+              {overdue.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
+            </div>
+          )}
           {pending.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-3">
@@ -1133,28 +1196,44 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
           )}
         </>
       )}
-      {filterOpen && (
-        <>
-          <div className="counselor-sheet-backdrop" onClick={() => setFilterOpen(false)} aria-hidden="true" />
-          <div className="counselor-bottom-sheet" role="dialog" aria-label="Filter alerts">
-            <div className="counselor-sheet-handle" />
-            <h2>Filter alerts</h2>
-            {['all', 'crisis', 'high', 'moderate', 'requested'].map((value) => (
-              <button
-                type="button"
-                key={value}
-                className={severityFilter === value ? 'selected' : ''}
-                onClick={() => { setSeverityFilter(value); setFilterOpen(false); }}
-              >
-                {value === 'all' ? 'All severities' : value[0].toUpperCase() + value.slice(1)}
-                <span className="filter-count">
-                  {value === 'all' ? visibleAlerts.length : visibleAlerts.filter((a) => a.severity?.toLowerCase() === value).length}
-                </span>
-                <span>{severityFilter === value ? '✓' : '›'}</span>
+      {filterOpen && createPortal(
+        <div className="counselor-portal counselor-filter-portal" data-theme={theme}>
+          <div className="counselor-sheet-backdrop" onClick={closeFilterSheet} aria-hidden="true" />
+          <div
+            ref={filterSheetRef}
+            className="counselor-bottom-sheet"
+            role="dialog"
+            aria-label="Filter alerts"
+            aria-modal="true"
+            tabIndex={-1}
+            style={{ background: P.surface, color: P.textPrimary, borderColor: P.border }}
+          >
+            <button type="button" className="counselor-sheet-handle" aria-label="Close filter alerts" onClick={closeFilterSheet} />
+            <div className="counselor-filter-title-row">
+              <h2 style={{ color: P.textPrimary }}>Filter alerts</h2>
+              <button type="button" className="counselor-sheet-close" aria-label="Close filter alerts" onClick={closeFilterSheet}>
+                <NavIcon id="close" size={18} />
               </button>
-            ))}
+            </div>
+            <div className="counselor-filter-options">
+              {['all', 'crisis', 'high', 'moderate', 'requested'].map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  className={severityFilter === value ? 'selected' : ''}
+                  onClick={() => { setSeverityFilter(value); closeFilterSheet(); }}
+                >
+                  {value === 'all' ? 'All severities' : value[0].toUpperCase() + value.slice(1)}
+                  <span className="filter-count">
+                    {value === 'all' ? visibleAlerts.length : visibleAlerts.filter((a) => a.severity?.toLowerCase() === value).length}
+                  </span>
+                  <span>{severityFilter === value ? '✓' : '›'}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -2512,6 +2591,7 @@ export default function CounselorDashboard() {
   // On desktop the same panel is a persistent rail, so `expanded` controls
   // its width; on mobile this controls whether it slides in from the left.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [drawerMoreOpen, setDrawerMoreOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
   // Pending alerts that have already rung the dashboard (everything except Moderate),
@@ -2522,6 +2602,7 @@ export default function CounselorDashboard() {
   // close, and lock the real scroll container (not just <body>) while open.
   const mainRef = useRef(null);
   const menuButtonRef = useRef(null);
+  const drawerRef = useRef(null);
   const sidebarProfileRef = useRef(null);
   const lastTriggerRef = useRef(null);
   // Mirror latest alerts for the 5-minute reminder check (must happen in an
@@ -2863,6 +2944,7 @@ export default function CounselorDashboard() {
 
   const openMobileNav = (trigger) => {
     lastTriggerRef.current = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
+    setDrawerMoreOpen(DRAWER_MORE_IDS.includes(activePage));
     setMobileNavOpen(true);
   };
 
@@ -2879,7 +2961,7 @@ export default function CounselorDashboard() {
       // Prefer the element that opened the drawer, then the mobile trigger,
       // then the sidebar avatar if the viewport crossed into desktop while the
       // drawer was open (the mobile trigger is display:none there).
-      const target = [lastTriggerRef.current, menuButtonRef.current, sidebarProfileRef.current]
+      const target = [menuButtonRef.current, lastTriggerRef.current, sidebarProfileRef.current]
         .find((el) => el && el.isConnected && el.offsetParent !== null);
       target?.focus?.();
     });
@@ -2914,6 +2996,20 @@ export default function CounselorDashboard() {
     };
   }, [mobileNavOpen, closeMobileNav]);
 
+  // Move keyboard focus into the drawer when it opens. The close button is the
+  // first intentional stop; the fallback keeps this working if that control is
+  // ever hidden at a breakpoint.
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const drawer = drawerRef.current;
+      const first = drawer?.querySelector('[data-drawer-initial-focus]')
+        || drawer?.querySelector('button, a[href], [tabindex]:not([tabindex="-1"])');
+      first?.focus?.();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mobileNavOpen]);
+
   return (
     <div data-theme={dashboardTheme} className={`counselor-dashboard h-[100dvh] min-h-0 flex overflow-hidden w-full ${chimeFlash ? 'chime-flash-active' : ''}`} style={{ background: P.bg, color: 'var(--ink)' }}>
       {dashboardNotice && (
@@ -2935,13 +3031,14 @@ export default function CounselorDashboard() {
           (navigation lives in the bottom bar and its sheet); on desktop it
           stays as the full collapsible navigation rail. */}
       <aside
+        ref={drawerRef}
         className={`
-          side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-50 flex flex-col shadow-lg transition-all duration-300
+          side ${mobileNavOpen ? 'open' : ''} ${panelWide ? 'side-wide' : ''} fixed top-0 left-0 h-full z-[60] flex flex-col shadow-lg transition-all duration-300
           ${mobileNavOpen ? '' : 'lg:z-30'}
           w-[84vw] max-w-[320px] ${expanded ? 'lg:w-64' : 'lg:w-20'}
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
         `}
-        style={{ background: 'var(--side)' }}
+        style={{ background: 'var(--side)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Zone 1: profile ───────────────────────────────────────────── */}
@@ -2986,6 +3083,7 @@ export default function CounselorDashboard() {
             {mobileNavOpen && (
               <button
                 type="button"
+                data-drawer-initial-focus
                 onClick={closeMobileNav}
                 className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
                 title="Close menu"
@@ -3065,6 +3163,75 @@ export default function CounselorDashboard() {
         <div
           className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 pl-2 pr-3 overscroll-contain no-scrollbar"
         >
+          {/* Phone drawer navigation: the same four primary destinations as the
+              bottom bar, plus the remaining views behind "More". */}
+          <nav className="space-y-1 lg:hidden" aria-label="Counselor drawer navigation">
+            {DRAWER_PRIMARY_ITEMS.map((item) => {
+              const active = activePage === item.id;
+              const badgeCount = item.id === 'alerts' ? pendingCount : 0;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => { setActivePage(item.id); closeMobileNav(); }}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={item.label}
+                  className={`nav ${active ? 'on' : ''} px-3`}
+                >
+                  <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                    <NavIcon id={item.id} size={18} />
+                  </span>
+                  <span className={`${ROW_TEXT} whitespace-nowrap`}>{item.label}</span>
+                  {badgeCount > 0 && <span className="cnt">{badgeCount}</span>}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => setDrawerMoreOpen((open) => !open)}
+              aria-expanded={drawerMoreOpen}
+              aria-controls="counselor-drawer-more"
+              aria-current={DRAWER_MORE_IDS.includes(activePage) ? 'page' : undefined}
+              className={`nav ${DRAWER_MORE_IDS.includes(activePage) ? 'on' : ''} px-3`}
+            >
+              <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                <NavIcon id="more" size={18} />
+              </span>
+              <span className={`${ROW_TEXT} whitespace-nowrap`}>More</span>
+              <span
+                aria-hidden="true"
+                className={`text-[11px] transition-transform duration-200 ${drawerMoreOpen ? 'rotate-180' : ''}`}
+              >
+                ⌄
+              </span>
+            </button>
+
+            {drawerMoreOpen && (
+              <div id="counselor-drawer-more" className="space-y-1">
+                {DRAWER_MORE_IDS.map((id) => {
+                  const navItem = NAV.find((item) => item.id === id);
+                  const active = activePage === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => { setActivePage(id); closeMobileNav(); }}
+                      aria-current={active ? 'page' : undefined}
+                      aria-label={navItem.label}
+                      className={`nav ${active ? 'on' : ''} px-3`}
+                    >
+                      <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+                        <NavIcon id={id} size={18} />
+                      </span>
+                      <span className={`${ROW_TEXT} whitespace-nowrap`}>{navItem.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </nav>
+
           <nav className="hidden space-y-3 lg:block" aria-label="Workspace navigation">
             {NAV_GROUPS.map((group, groupIndex) => (
               <div key={group.label} className={!panelWide && groupIndex > 0 ? 'collapsed-sidebar-group-divider' : ''}>
@@ -3099,10 +3266,10 @@ export default function CounselorDashboard() {
             <div>
               {panelWide && <p className="grp">Settings</p>}
               <div className="space-y-1">
-                <Link to="/privacy" state={{ from: 'counselor' }} className={`nav ${panelWide ? 'px-3' : 'justify-center px-0'}`} title={!panelWide ? 'Privacy and Consent' : undefined} aria-label="Privacy and Consent">
+                <Link to="/privacy" state={{ from: 'counselor' }} className={`nav ${panelWide ? 'px-3' : 'justify-center px-0'}`} title={!panelWide ? 'Informed Consent' : undefined} aria-label="Informed Consent">
                   <span className="flex h-[18px] w-[18px] items-center justify-center"><NavIcon id="privacy" size={18} /></span>
-                  {panelWide && <span className={ROW_TEXT}>Privacy and Consent</span>}
-                  {!panelWide && <RowTooltip label="Privacy and Consent" />}
+                  {panelWide && <span className={ROW_TEXT}>Informed Consent</span>}
+                  {!panelWide && <RowTooltip label="Informed Consent" />}
                 </Link>
                 <button type="button" className={`nav ${panelWide ? 'px-3' : 'justify-center px-0'} ${chimeFlash ? 'chime-flash' : ''}`} onClick={handleTestChime} title={!panelWide ? 'Test Alert Chime' : undefined} aria-label="Test Alert Chime">
                   <span className="flex h-[18px] w-[18px] items-center justify-center"><NavIcon id="sound" size={18} /></span>
@@ -3177,11 +3344,16 @@ export default function CounselorDashboard() {
           className="flex-shrink-0 border-t px-3 py-2 lg:hidden"
           style={{
             borderColor: P.navyLight,
-            paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+            paddingBottom: '0.75rem',
           }}
         >
           <div className="flex flex-col gap-1">
-            <button type="button" className="hot flex min-h-[44px] w-full items-center gap-2.5" onClick={openHotlines}>
+            <button
+              type="button"
+              className="hot flex h-11 min-h-[44px] w-full items-center gap-3"
+              style={{ gap: 12 }}
+              onClick={openHotlines}
+            >
               <NavIcon id="hotline" size={18} />
               <span>Crisis hotlines</span>
             </button>
@@ -3190,8 +3362,8 @@ export default function CounselorDashboard() {
             <button
               type="button"
               onClick={handleTestChime}
-              className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${chimeFlash ? 'chime-flash' : ''}`}
-              style={{ color: '#7F949D' }}
+              className={`flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 py-2 text-[14px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD] ${chimeFlash ? 'chime-flash' : ''}`}
+              style={{ color: '#d6e0ea' }}
             >
               <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                 <NavIcon id="sound" size={16} />
@@ -3203,7 +3375,7 @@ export default function CounselorDashboard() {
               type="button"
               onClick={toggleDashboardTheme}
               aria-pressed={dashboardTheme === 'dark'}
-              className="nav min-h-[44px] gap-2.5 px-2 py-2 text-[11px]"
+              className="nav min-h-[44px] gap-3 px-2 py-2 text-[11px]"
             >
               <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center"><NavIcon id="theme" size={16} /></span>
               <span>Switch to {dashboardTheme === 'dark' ? 'light' : 'dark'} mode</span>
@@ -3212,8 +3384,8 @@ export default function CounselorDashboard() {
             <Link
               to="/privacy"
               state={{ from: 'counselor' }}
-              className="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
-              style={{ color: '#7F949D' }}
+              className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 py-2 text-[14px] transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5E8FBD]"
+              style={{ color: '#d6e0ea' }}
             >
               <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                 <NavIcon id="privacy" size={16} />
@@ -3271,6 +3443,9 @@ export default function CounselorDashboard() {
 
           {/* Connection status badge */}
           <div className="flex items-center gap-2">
+            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button" onClick={openHotlines} aria-label="Open crisis hotlines">
+              <NavIcon id="hotline" size={18} />
+            </button>
             <span className={`badge ${connectionStatus === 'live' ? '' : connectionStatus === 'offline' ? 'risk' : 'amb'}`}>
               <i aria-hidden="true" />{connection.label}
             </span>
@@ -3289,6 +3464,9 @@ export default function CounselorDashboard() {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button" onClick={openHotlines} aria-label="Open crisis hotlines">
+              <NavIcon id="hotline" size={18} />
+            </button>
             <button type="button" className="theme-toggle" onClick={toggleDashboardTheme} aria-label={`Switch to ${dashboardTheme === 'dark' ? 'light' : 'dark'} mode`} aria-pressed={dashboardTheme === 'dark'}>
               <NavIcon id="theme" size={17} />
               <span>{dashboardTheme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
@@ -3305,10 +3483,10 @@ export default function CounselorDashboard() {
         </div>
 
         {/* Scrollable page content - padded at bottom on mobile for fixed bottom nav */}
-        <main ref={mainRef} id="counselor-main" tabIndex="-1" className="flex-1 overflow-y-auto pb-32 lg:pb-6 no-scrollbar">
+        <main ref={mainRef} id="counselor-main" tabIndex="-1" className="flex-1 overflow-y-auto pb-[11rem] lg:pb-6 no-scrollbar">
           <div className="w-full max-w-[1240px] mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} onNavigate={setActivePage} onAcknowledge={handleAcknowledge} onViewSession={setChatSessionId} />}
-            {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} alertsLastSynced={alertsLastSynced} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} />}
+            {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} alertsLastSynced={alertsLastSynced} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} theme={dashboardTheme} />}
             {activePage === 'welfare'   && <WelfarePage welfare={welfare} welfareLoading={welfareLoading} welfareError={welfareError} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} onRefresh={fetchWelfare} />}
             {activePage === 'sessions' && (
               <SessionsPage
@@ -3335,12 +3513,15 @@ export default function CounselorDashboard() {
         pendingCount={pendingCount}
         welfareCount={welfare.length}
         sessionsCount={sessions.length}
+        drawerOpen={mobileNavOpen}
       />
 
-      <button type="button" className="fab hotline-fab" onClick={openHotlines}>
-        <NavIcon id="hotline" size={18} />
-        <span>Crisis hotlines</span>
-      </button>
+      {activePage !== 'alerts' && (
+        <button type="button" className="fab hotline-fab" onClick={openHotlines}>
+          <NavIcon id="hotline" size={18} />
+          <span>Crisis hotlines</span>
+        </button>
+      )}
 
       {chatSessionId && (
         <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
