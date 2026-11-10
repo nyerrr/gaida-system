@@ -3487,7 +3487,7 @@ export default function CounselorDashboard() {
 
         {/* Scrollable page content - padded at bottom on mobile for fixed bottom nav */}
         <main ref={mainRef} id="counselor-main" tabIndex="-1" className="flex-1 overflow-y-auto pb-[11rem] lg:pb-6 no-scrollbar">
-          <div className="w-full max-w-[1240px] mx-auto p-3.5 sm:p-6 min-w-0">
+          <div className="w-full max-w-[77.5rem] mx-auto p-3.5 sm:p-6 min-w-0">
             {activePage === 'overview'  && <OverviewPage alerts={alerts} sessions={sessions} alertsLoading={alertsLoading} alertsError={alertsError} onNavigate={setActivePage} onAcknowledge={handleAcknowledge} onViewSession={setChatSessionId} />}
             {activePage === 'alerts'    && <AlertsPage alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} alertsLastSynced={alertsLastSynced} onRetryAlerts={fetchAlerts} onViewChat={setChatSessionId} onUpdateStatus={handleUpdateStatus} onAcknowledge={handleAcknowledge} sessions={sessions} theme={dashboardTheme} />}
             {activePage === 'welfare'   && <WelfarePage welfare={welfare} welfareLoading={welfareLoading} welfareError={welfareError} onViewChat={setChatSessionId} onMarkChecked={handleMarkWelfareChecked} onRefresh={fetchWelfare} />}
