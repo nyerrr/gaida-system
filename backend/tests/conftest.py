@@ -16,6 +16,7 @@ import os
 import json
 
 os.environ.setdefault("GAIDA_DISABLE_PERSISTENCE", "1")
+os.environ["LLM_SEMANTIC_DETECTION"] = "0"
 os.environ["AUTH_REVOCATION_BACKEND"] = "memory"
 # Authentication tests use an explicit test-only roster; production defaults
 # contain no demo student or counselor accounts.

@@ -25,7 +25,11 @@ import pytest
 from app.services.intent_router import _detect_urgent, _prepare_turn
 from app.services.rule_intent import analyze_with_rules
 from app.services.session_manager import SESSIONS, start_session
-from app.services.virtual_agent import _is_panic_disclosure, detect_intent_and_level
+from app.services.virtual_agent import (
+    _build_result,
+    _is_panic_disclosure,
+    detect_intent_and_level,
+)
 
 PANIC_MESSAGE = "i am panicking right now"
 EXAM_MESSAGE = "i have an upcoming exam"
@@ -114,3 +118,48 @@ def test_neutral_first_turn_is_still_normal(live_session):
     assert result["intent"] == "neutral"
     assert result["severity"] == "Normal"
     assert result["anxiety_score"] == 0
+
+
+def test_vent_mode_persists_confident_acoustic_severity(live_session, monkeypatch):
+    session = SESSIONS[live_session]
+    session["meta"]["pending_acoustic"] = {
+        "severity": "Moderate",
+        "emotion": "anxious",
+        "confidence": 0.9,
+    }
+    monkeypatch.setattr(
+        "app.services.intent_router.detect_intent_and_level",
+        lambda _message: _build_result("neutral", 0.3),
+    )
+
+    result = _prepare_turn(
+        "you gotta gotta love me harder",
+        session_id=live_session,
+        vent_mode=True,
+    )
+
+    assert result["intent"] == "neutral"
+    assert result["severity"] == "Moderate"
+    assert result["anxiety_score"] == 3
+    assert result["anxiety_level"] == "venting"
+    assert session["meta"]["pending_acoustic"] is None
+
+
+def test_talk_mode_uses_anxious_voice_for_reply_guidance(live_session, monkeypatch):
+    session = SESSIONS[live_session]
+    session["meta"]["pending_acoustic"] = {
+        "severity": "Moderate",
+        "emotion": "anxious",
+        "confidence": 0.9,
+    }
+    monkeypatch.setattr(
+        "app.services.intent_router.detect_intent_and_level",
+        lambda _message: _build_result("neutral", 0.3),
+    )
+
+    result = _prepare_turn("a spoken lyric", session_id=live_session)
+
+    assert result["intent"] == "neutral"
+    assert result["severity"] == "Moderate"
+    assert result["anxiety_level"] == "moderate"
+    assert result["anxiety_score"] == 3

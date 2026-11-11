@@ -19,12 +19,21 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const finalTranscriptRef = useRef("");
+  const cancelledRef = useRef(false);
   const streamRef = useRef(null);
   const audioRef = useRef(null);  // audio element for playback
   const sentRef = useRef(false);  // whether a transcript was already sent for this recording
+  const fallbackTranscriptRef = useRef("");
   const maxRecordTimerRef = useRef(null);
 
   const pushStatus = (text) => onStatusChange?.(text);
+
+  const sendTranscript = (text) => {
+    const transcript = text?.trim();
+    if (!transcript || sentRef.current) return;
+    sentRef.current = true;
+    onTranscript?.(transcript);
+  };
 
   // Revoke the generated object URL whenever it changes (and on unmount).
   // audioURL is a dep so the cleanup sees the *current* URL — with `[]` the
@@ -50,12 +59,14 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
   // ── Cancel — discard everything including playback ────────────────────────
   const handleCancel = () => {
     clearTimeout(maxRecordTimerRef.current);
+    cancelledRef.current = true;
     chunksRef.current = [];
     stopAll();
     setRecording(false);
     setLiveTranscript("");
     finalTranscriptRef.current = "";
     sentRef.current = false;
+    fallbackTranscriptRef.current = "";
     pushStatus("");
     setError(null);
     // Clear playback
@@ -65,26 +76,24 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
     setPlaying(false);
   };
 
-  // ── Confirm — send immediately, process audio in the background ──────────
+  // ── Confirm — wait for voice analysis before sending the transcript ──────
   const handleConfirm = () => {
     clearTimeout(maxRecordTimerRef.current);
     try { recognitionRef.current?.stop(); } catch (e) { void e; }
 
-    const text = finalTranscriptRef.current.trim() || liveTranscript.trim();
-    if (text) {
-      sentRef.current = true;
-      setRecording(false);
-      setLiveTranscript("");
-      finalTranscriptRef.current = "";
-      pushStatus("");
-      onTranscript?.(text);
-    }
+    fallbackTranscriptRef.current =
+      finalTranscriptRef.current.trim() || liveTranscript.trim();
+    setRecording(false);
+    setLiveTranscript("");
+    finalTranscriptRef.current = "";
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      pushStatus("Extracting voice features...");
       stopRecorderIfActive(mediaRecorderRef.current);
-    } else if (!text) {
+    } else if (fallbackTranscriptRef.current) {
+      sendTranscript(fallbackTranscriptRef.current);
+    } else {
       setError("No speech detected. Try again.");
-      setRecording(false);
       pushStatus("");
     }
   };
@@ -92,11 +101,13 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
   // ── Start recording ───────────────────────────────────────────────────────
   const handleStart = async () => {
     if (disabled) return; // low-bandwidth / offline fallback keeps text-only interaction
+    cancelledRef.current = false;
     clearTimeout(maxRecordTimerRef.current);
     setError(null);
     setLiveTranscript("");
     finalTranscriptRef.current = "";
     sentRef.current = false;
+    fallbackTranscriptRef.current = "";
     chunksRef.current = [];
     // Clear previous playback when starting new recording
     if (audioRef.current) audioRef.current.pause();
@@ -135,7 +146,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (!cancelledRef.current && e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       mediaRecorder.onstop = async () => {
@@ -143,7 +154,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
 
-        if (chunksRef.current.length > 0) {
+        if (!cancelledRef.current && chunksRef.current.length > 0) {
           // Create local playback URL from recorded chunks
           const mimeType = chunksRef.current[0]?.type || "audio/webm";
           const blob = new Blob(chunksRef.current, { type: mimeType });
@@ -152,6 +163,8 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
 
           // Send to backend for acoustic extraction + transcription
           await extractAcousticsAndSetTranscript();
+        } else if (fallbackTranscriptRef.current) {
+          sendTranscript(fallbackTranscriptRef.current);
         }
       };
 
@@ -206,6 +219,7 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
 
   // ── Send audio to backend ─────────────────────────────────────────────────
   const extractAcousticsAndSetTranscript = async () => {
+    if (cancelledRef.current) return;
     setLoading(true);
     setError(null);
     pushStatus("Extracting voice features...");
@@ -232,6 +246,8 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
         body: formData,
       });
 
+      if (cancelledRef.current) return;
+
       if (!res.ok) {
         // Surface the server's reason (e.g. "Transcription failed: ...") instead of a
         // generic message, so a failure can be diagnosed from the screen.
@@ -250,17 +266,14 @@ export default function VoiceInput({ onTranscript, sessionId, onStatusChange, di
       setLiveTranscript("");
       finalTranscriptRef.current = "";
 
-      if (!sentRef.current) onTranscript?.(data.transcript);
+      sendTranscript(data.transcript);
 
     } catch (err) {
       setError(err.message);
       pushStatus("");
       setRecording(false);
 
-      if (!sentRef.current) {
-        const fallback = finalTranscriptRef.current.trim() || liveTranscript.trim();
-        if (fallback) onTranscript?.(fallback);
-      }
+      sendTranscript(fallbackTranscriptRef.current);
     } finally {
       setLoading(false);
     }

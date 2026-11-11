@@ -73,3 +73,6 @@ frontend/dev-dist/
 # Never commit (user's personal work)
 postman/
 frontend/src/components/GoogleSignIn.jsx
+
+# Real student numbers used for expert validation - never commit
+backend/training/expert_validation/sql/

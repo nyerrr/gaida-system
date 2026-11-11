@@ -361,8 +361,15 @@ export default function ResearchFlow() {
                 If you're participating anonymously, no one is able to be notified about
                 you specifically, since we have no way to identify or reach you. Either way,
                 GAIDA is not an emergency service. If you are in crisis right now, please
-                contact the National Crisis Hotline at 1553 (24/7) or the UE Guidance Office
-                directly rather than relying on this session.
+                contact the Philippine NCMH Crisis Hotline at 1553 (24/7), HOPELINE
+                Philippines at (02) 8804-4673 or 0917-558-4673, or In Touch Community
+                Services at (02) 8893-7603 or 0917-800-1123. If you are in immediate danger,
+                call 911. UE Manila GCCSO: Internal Local Number: Local 390 (via the
+                University of the East Telephone Directory); Manila Campus Trunkline:
+                (632) 8735-5471 or (632) 5328-5471; Email Address: guidance@ue.edu.ph;
+                Facebook Page: UE Manila GCCSO; Location: Ground Floor of the SFC Building,
+                UE Manila Campus.
+                Do not rely on this session for emergency help.
               </p>
               <p>
                 <strong style={{ color: T.textPrimary }}>Risks and benefits:</strong> Talking about anxiety or stress may

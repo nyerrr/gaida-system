@@ -263,8 +263,7 @@ def test_escalation_reset_for_acknowledged_alert():
 
 def test_welfare_check_flags_silent_high_session():
     """A High/Crisis session silent past the threshold must be flagged for a
-    welfare check. Previously the naive-vs-aware datetime math raised TypeError
-    and silently skipped every in-memory session."""
+    welfare check, even if the student has ended the chat."""
     import uuid
     from datetime import datetime, timezone, timedelta
 
@@ -278,7 +277,7 @@ def test_welfare_check_flags_silent_high_session():
     SESSIONS[sid] = {
         "session_id": sid,
         "user_id": "u1",
-        "active": True,
+        "active": False,
         "started_at": old_ts,
         "messages": [{"sender": "user", "text": "i want to die", "timestamp": old_ts}],
         "meta": {"peak_severity": "Crisis", "counselor_active": False},
@@ -291,3 +290,69 @@ def test_welfare_check_flags_silent_high_session():
         assert matches[0]["idle_minutes"] >= 30
     finally:
         SESSIONS.pop(sid, None)
+
+
+def test_welfare_check_uses_pending_alerts_after_restart(monkeypatch):
+    import uuid
+    from datetime import datetime, timezone, timedelta
+    from types import SimpleNamespace
+
+    import app.database.database as database
+    from app.services import session_manager
+
+    sid = "SESS_WELFARE_DB_" + uuid.uuid4().hex[:8]
+    old_ts = (
+        datetime.now(timezone.utc) - timedelta(minutes=45)
+    ).isoformat()
+
+    class FakeQuery:
+        def __init__(self, table_name):
+            self.table_name = table_name
+
+        def select(self, *_args):
+            return self
+
+        def in_(self, *_args):
+            return self
+
+        def eq(self, *_args):
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args):
+            return self
+
+        def execute(self):
+            if self.table_name == "counselor_alerts":
+                return SimpleNamespace(data=[{
+                    "session_id": sid,
+                    "user_id": "student-1",
+                    "severity": "Crisis",
+                    "status": "pending",
+                    "created_at": old_ts,
+                }])
+            return SimpleNamespace(data=[{
+                "timestamp": old_ts,
+                "message": "I have been feeling unsafe.",
+            }])
+
+    class FakeSupabase:
+        def table(self, name):
+            return FakeQuery(name)
+
+    monkeypatch.setattr(database, "supabase", FakeSupabase())
+    monkeypatch.setattr(
+        session_manager,
+        "_WELFARE_DB_LAST_SCAN",
+        datetime.fromtimestamp(0, tz=timezone.utc),
+    )
+
+    flagged = session_manager.get_sessions_needing_welfare_check(stale_minutes=30)
+    matches = [item for item in flagged if item["session_id"] == sid]
+
+    assert matches
+    assert matches[0]["peak_severity"] == "Crisis"
+    assert matches[0]["from_db"] is True
+    assert matches[0]["idle_minutes"] >= 30

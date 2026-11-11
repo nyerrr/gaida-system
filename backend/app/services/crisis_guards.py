@@ -6,24 +6,24 @@ being diluted by surrounding context. Used by both rule_intent.py (rule fallback
 and virtual_agent.py (hard crisis path) so the whole pipeline agrees.
 
 Guards:
-    1. SOFT_VENTING_PHRASES  — colloquial "I give up" phrases. These are only
-       treated as suicidal when NO school/work context surrounds them. With
-       school/work context they are venting → reclassified as stress. With no
-       such context they still alert, but at HIGH (not Crisis) and with a
-       `clarify` flag so GAIDA asks what "giving up" means before assuming the
-       worst. A negated give-up ("I don't want to give up") is not a risk at all.
+    1. SOFT_VENTING_PHRASES  — ambiguous give-up and passive death-wish phrases.
+       Clear school/work venting can be reclassified as stress; otherwise they
+       alert at HIGH (not Crisis) with a `clarify` flag. A negated give-up ("I
+       don't want to give up") is not a risk at all.
     2. FICTION_CONTEXT       — essays, movies, songs, stories, poems. The death
        talk is about content, not the speaker → tone down, no auto-alert.
     3. HYPOTHETICAL_CONTEXT  — hedged/conditional musing ("what if", "kung").
        Still concerning, but not yet an active plan → keep alert at HIGH.
 
 Explicit death/harm statements ("I want to die", "kill myself") bypass the
-soft-give-up path entirely and remain a full Crisis.
+soft-warning path entirely and remain a full Crisis.
 """
 
 import re
 
-# Colloquial "give up" phrases. Normalized keys; compare via is_soft_venting_phrase.
+# Ambiguous give-up and passive death-wish phrases. These merit a High alert
+# and a clarifying question, but do not by themselves establish intent or a
+# plan. Normalized keys; compare via is_soft_venting_phrase.
 SOFT_VENTING_PHRASES = {
     "i can't do this anymore",
     "cant do this anymore",
@@ -36,6 +36,18 @@ SOFT_VENTING_PHRASES = {
     "im done with everything",
     "i just want it to stop",
     "no point in trying anymore",
+    "i don't see the point anymore",
+    "i dont see the point anymore",
+    "better off without me",
+    "no one would notice if i was gone",
+    "no one would notice if i were gone",
+    "nobody would notice if i was gone",
+    "nobody would notice if i were gone",
+    "no one would miss me",
+    "nobody would miss me",
+    "i don't want to be here anymore",
+    "i do not want to be here anymore",
+    "i dont want to be here anymore",
     "tired of it all",
     "make everything stop",
     "make it all stop",
@@ -98,7 +110,10 @@ def is_give_up_on_everyday_thing(text: str) -> bool:
 LOSS_OR_DESPAIR_RE = re.compile(
     r"\b(loss of|lost (?:my|a|our|someone|both)|passed away|pass away|died|"
     r"death of|namatay|pumanaw|hopeless|worthless|burden|family problems?|"
-    r"no reason to)\b",
+    r"better off without me|no one would notice|nobody would notice|"
+    r"no one would miss me|nobody would miss me|"
+    r"no point anymore|don't see the point anymore|"
+    r"dont see the point anymore|no reason to)\b",
     re.IGNORECASE,
 )
 
@@ -531,13 +546,13 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
       5. soft give-up phrase + venting context → stress
       6. fiction context → no alert
       7. negated soft give-up ("i don't want to give up") → neutral
-      8. ambiguous soft give-up phrase → HIGH + clarify
+      8. ambiguous passive/give-up phrase → HIGH + clarify
 
-    A bare give-up phrase used to escalate to a full Crisis. That
-    over-reacted to ambiguous language: "i just want to give up" is a genuine
-    warning sign, but not the same as a stated intent to die. It now alerts at
-    HIGH and asks a clarifying question, while an explicit death statement
-    ("i want to die") still takes step 1 and remains Crisis.
+    A bare give-up phrase used to escalate to a full Crisis. That over-reacted
+    to ambiguous language: "i just want to give up" and "everyone would be
+    better off without me" are warning signs, but do not by themselves establish
+    intent or a plan. They alert at HIGH and ask a clarifying question, while an
+    explicit death statement ("i want to die") remains Crisis.
 
     The counselor decision behind this: prefer a false alert over a missed
     student, but do not let a vague phrase collapse the conversation into a
@@ -610,6 +625,8 @@ def resolve_crisis_level(matched_keywords, text: str) -> dict:
         return {"intent": "neutral", "confidence": 0.3}
 
     if has_hypothetical_context(text):
+        if any(is_soft_venting_phrase(k) for k in matched_keywords):
+            return {"intent": "suicidal", "confidence": 0.88, "clarify": True}
         return {"intent": "suicidal", "confidence": 0.88}
 
     return {"intent": "suicidal", "confidence": 0.88, "clarify": True}

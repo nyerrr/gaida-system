@@ -48,7 +48,7 @@ const QUICK_RESPONSES = [
   { label: "I'm here", text: "I'm here with you. You're not alone in this." },
   { label: "Take a breath", text: "Let's take a slow breath together. Inhale for 4 counts, hold for 4, exhale for 4. I'm right here with you." },
   { label: "Help coming", text: "I'm a counselor and I'm here to help you. You reached out at the right time. Can you tell me more about what you're feeling right now?" },
-  { label: "Call hotline", text: "Please call the National Crisis Hotline at 1553 right now - they are available 24/7 and can help you immediately. I'm staying with you." },
+  { label: "Call hotline", text: "Please contact the Philippine NCMH Crisis Hotline at 1553, HOPELINE Philippines at (02) 8804-4673 or 0917-558-4673, or In Touch at (02) 8893-7603 or 0917-800-1123. If you are in immediate danger, call 911. UE Manila GCCSO: Internal Local Number: Local 390 (via the University of the East Telephone Directory); Manila Campus Trunkline: (632) 8735-5471 or (632) 5328-5471; Email Address: guidance@ue.edu.ph; Facebook Page: UE Manila GCCSO; Location: Ground Floor of the SFC Building, UE Manila Campus. I'm staying with you." },
   { label: "Safe?", text: "I want to make sure you're safe right now. Are you in a safe place? Is there anyone with you?" },
   { label: "Follow up", text: "I'd like to schedule a follow-up session with you. You've shown a lot of courage today by reaching out." },
 ];
@@ -326,8 +326,17 @@ function HotlinesModal({ onClose, returnFocusRef }) {
         <p className="safety">Call a support line for immediate help.</p>
         <div className="mt-4 flex flex-col gap-3">
           <a className="btn" href="tel:1553">NCMH 1553</a>
-          <a className="btn ghost" href="tel:+63288044673">Hopeline (02) 8804-4673</a>
+          <a className="btn ghost" href="tel:09175584673">HOPELINE Philippines (02) 8804-4673 / 0917-558-4673</a>
+          <a className="btn ghost" href="tel:09178001123">In Touch (02) 8893-7603 / 0917-800-1123</a>
+          <a className="btn ghost" href="tel:911">Philippine emergency hotline 911</a>
+          <a className="btn ghost" href="tel:+63287355471">UE Manila GCCSO (632) 8735-5471</a>
+          <a className="btn ghost" href="tel:+63253285471">UE Manila GCCSO (632) 5328-5471</a>
         </div>
+        <p className="safety mt-4">
+          UE Manila GCCSO: Internal Local Number: Local 390 (via the University of the East Telephone Directory).
+          Email Address: <a href="mailto:guidance@ue.edu.ph">guidance@ue.edu.ph</a>; Facebook Page: UE Manila GCCSO.
+          Location: Ground Floor of the SFC Building, UE Manila Campus.
+        </p>
       </section>
     </div>
   );

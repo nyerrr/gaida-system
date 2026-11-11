@@ -94,10 +94,14 @@ export default function PrivacyPolicy() {
               <h3 className="font-semibold text-gray-900 mb-2">AI Processing:</h3>
               <p>
                 To analyze your messages and generate responses, GAIDA sends your text
-                input to OpenAI's API, a third-party AI service provider. This means your
-                messages are processed on OpenAI's servers as part of how GAIDA works. This
-                processing is used only to power the conversation and detection features
-                described above, not for any other purpose.
+                input to a third-party AI service provider that hosts the open-weight
+                language model (Qwen) used to write replies. If you use voice input, the
+                audio is sent to OpenAI's speech-to-text service to be transcribed, and if
+                you tap Listen, the reply text is sent to a text-to-speech service to
+                produce audio. This means your messages are processed on those providers'
+                servers as part of how GAIDA works. This processing is used only to power
+                the conversation and detection features described above, not for any
+                other purpose.
               </p>
             </div>
 
@@ -177,9 +181,11 @@ export default function PrivacyPolicy() {
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">Questions or Concerns:</h3>
               <p>
-                If you have any questions about this consent form or GAIDA's data practices, please contact the 
-                Guidance, Counseling and Career Services Office (GCCSO) at guidance@ue.edu.ph or visit the GCCSO at 2219 C.M. Recto
-                Avenue, Sampaloc, Manila.
+                If you have any questions about this consent form or GAIDA's data practices, contact the UE Manila
+                Guidance, Counseling and Career Services Office (GCCSO): Internal Local Number: Local 390 (via the
+                University of the East Telephone Directory); Manila Campus Trunkline: (632) 8735-5471 or
+                (632) 5328-5471; Email Address: guidance@ue.edu.ph; Facebook Page: UE Manila GCCSO; Location: Ground
+                Floor of the SFC Building, UE Manila Campus.
               </p>
             </div>
           </div>

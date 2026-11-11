@@ -3,7 +3,7 @@ Acoustic / voice-prosody scoring harness.
 
 Measures how well GAIDA's voice pipeline (app.analytics.acoustic_features)
 judges real voice clips against hand-labeled ground truth. The formula runs
-(librosa + ffmpeg) but its real-world accuracy has never been scored — this
+(librosa + openSMILE + ffmpeg) but its real-world accuracy has never been scored — this
 script is the validation instrument for closing that gap before defense.
 
 Ground truth: a CSV (see sample_labeled_acoustic.csv) with one row per audio

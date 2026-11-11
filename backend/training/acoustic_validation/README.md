@@ -1,7 +1,8 @@
 # Acoustic / Voice-Scoring Validation Kit
 
 GAIDA's voice pipeline (`backend/app/analytics/acoustic_features.py`) extracts
-librosa prosody features (pitch, energy, jitter, shimmer, speech rate, pauses)
+librosa prosody features (pitch, energy, speech rate, pauses) plus openSMILE
+jitter/shimmer (cycle-level period/amplitude perturbation)
 and maps them to an emotion (anxious / sad / angry / calm / neutral) and a
 severity (Normal / Low / Moderate / High). It runs technically, but **its
 real-world accuracy has never been measured** against human-labeled audio.

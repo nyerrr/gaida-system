@@ -112,14 +112,14 @@ consent). This works for a single server instance but means everything resets on
 - **Uvicorn** — ASGI server.
 - **scikit-learn** — 3 ML intent classifiers (Logistic Regression, Random Forest, Neural Network) trained on `anxiety_training.jsonl`, loaded from pickled pipelines.
 - **openai-whisper** — `medium` model, lazy-loaded on the first voice request, converts speech → text.
-- **librosa + numpy** — acoustic feature extraction (pitch, jitter, shimmer, pauses, energy, MFCCs).
+- **librosa + numpy + openSMILE** — acoustic feature extraction (pitch, energy, pauses, speech rate, MFCCs; openSMILE eGeMAPS for jitter/shimmer).
 - **noisereduce** — voice cleaning: background-noise removal (stationary spectral gating) before feature extraction; recordings are also RMS-normalized to a fixed loudness (see `app/analytics/voice_cleaning.py`).
 - **openai** — calls the fine-tuned chat model.
 - **gtts** — Google text-to-speech (returns MP3 bytes).
 - **supabase** — Postgres client for all persistence.
 - **reportlab** — generates the session PDF report.
 - **python-multipart, python-dotenv, pytest, httpx** — file uploads, env vars, tests.
-- **opensmile / pyaudio / speechrecognition** — installed (listed in `backend/README.md`) but not actively used by app code.
+- **pyaudio / speechrecognition** — installed (listed in `backend/README.md`) but not actively used by app code.
 
 ### Frontend (`frontend/`)
 - **React 19** + **Vite 7** + **Tailwind CSS 3**.
@@ -526,11 +526,13 @@ Called by `VoiceInput.jsx` with an audio blob (webm/ogg) + optional `session_id`
      loudness so features are comparable across mics/volumes. Disable with
      `GAIDA_VOICE_CLEANING=0` to restore the raw pipeline.
    - `extract_features()` in `acoustic_features.py` converts to WAV (ffmpeg — system PATH first,
-     then a hard-coded CapCut ffmpeg fallback), then computes with librosa:
-     - pitch mean/std (`pyin`), RMS energy, pause ratio, speech rate (onsets/sec), duration,
-       jitter, shimmer, zero-crossing rate, spectral centroid/rolloff, and 13 MFCCs.
-   - `_score_from_features` → **acoustic anxiety score 0–1** (weighted: pitch std 0.25, jitter
-     0.25, shimmer 0.20, pauses 0.15, rate 0.15).
+     then a hard-coded CapCut ffmpeg fallback), then computes (librosa, plus openSMILE for jitter/shimmer):
+     - pitch mean/std (`yin`), RMS energy, pause ratio, speech rate (onsets/sec), duration,
+       zero-crossing rate, spectral centroid/rolloff, and 13 MFCCs.
+     - jitter/shimmer (cycle-level period/amplitude perturbation) from openSMILE eGeMAPS,
+       with a band-limited cycle-peak fallback if openSMILE is unavailable.
+   - `_score_from_features` → **acoustic anxiety score 0–1** (raw weights: pitch 0.25,
+     jitter 0.15, shimmer 0.10, pauses 0.35, rate 0.25, energy 0.15; normalized by their sum).
    - `_detect_emotion` → `anxious / sad / angry / calm / neutral` from simple thresholds.
    - `map_acoustic_to_severity`: ≥0.65 High, ≥0.35 Moderate, ≥0.15 Low, else Normal.
    - Logs the full feature set to the `acoustic_logs` Supabase table.
