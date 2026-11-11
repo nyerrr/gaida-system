@@ -77,13 +77,56 @@ const severityColor = (s) => {
   return { bg: `bg-[${P.textMuted}]`, text: 'text-white', dot: `bg-[${P.textMuted}]`, border: `border-[${P.border}]`, light: `bg-[${P.panel}]`, hex: P.textMuted };
 };
 
+// Dates are formatted in the viewer's local timezone, so midnight, month, and
+// year boundaries all resolve to the correct calendar day on their machine.
+const RELATIVE_DATE_OPTIONS = { month: 'short', day: 'numeric', year: 'numeric' };
+
+// Human-readable age for alert/case timestamps. Everything is derived from the
+// existing timestamp on each render, so values stay current without touching
+// stored data. Recent times stay compact; older records fall back to a real
+// date instead of ever showing a large hour count like "1163h ago".
 const formatRelative = (ts) => {
   if (!ts) return '';
-  const diff = Math.floor((Date.now() - new Date(ts)) / 60000);
-  if (diff < 1) return 'just now';
-  if (diff < 60) return `${diff}m ago`;
-  return `${Math.floor(diff / 60)}h ago`;
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const elapsedMs = Date.now() - date.getTime();
+
+  // Future or clock-skewed timestamps never show a negative duration. A date
+  // just ahead is still worth showing in full rather than a misleading "Just now".
+  if (elapsedMs < 0) {
+    if (elapsedMs > -60000) return 'In a moment';
+    return date.toLocaleDateString('en-US', RELATIVE_DATE_OPTIONS);
+  }
+
+  const minutes = Math.floor(elapsedMs / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(elapsedMs / 3600000);
+  if (hours < 24) return `${hours}h ago`;
+
+  // 24h is where hours stop: 24–47h reads "Yesterday", never "24h ago".
+  const days = Math.floor(elapsedMs / 86400000);
+  if (days < 2) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+
+  // 7–13 days: the weekday reads more naturally than a date this recent.
+  if (days < 14) return date.toLocaleDateString('en-US', { weekday: 'long' });
+
+  return date.toLocaleDateString('en-US', RELATIVE_DATE_OPTIONS);
 };
+
+// Re-renders the calling view on an interval so relative timestamps never go
+// stale while a page is left open. Kept in one place so every timestamp view
+// uses the same cadence instead of owning its own duplicated timer.
+function useTimestampTick(intervalMs = 30000) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((n) => n + 1), intervalMs);
+    return () => clearInterval(interval);
+  }, [intervalMs]);
+}
 
 const formatDuration = (startedAt, now = Date.now()) => {
   if (!startedAt) return '—';
@@ -197,7 +240,11 @@ const DRAWER_MORE_IDS = ['welfare', 'detection', 'reports', 'resolved'];
 const getAlertStatusLabel = (alert) => {
   const status = String(alert?.status || '').toLowerCase();
   if (['reviewed', 'resolved', 'closed', 'done'].includes(status)) return 'Resolved';
-  if (alert?.acknowledged || status === 'escalated' || status === 'acknowledged') return 'Acknowledged';
+  // "escalated" means a counselor took over the session; it is NOT the same
+  // as acknowledging the alert. Only the explicit acknowledgement flag/status
+  // may hide the Acknowledge action, because /sessions/resolve still requires
+  // that flag for Crisis/High alerts.
+  if (alert?.acknowledged || status === 'acknowledged') return 'Acknowledged';
   return 'New';
 };
 
@@ -437,6 +484,9 @@ function OverviewPage({ alerts, sessions, alertsLoading, alertsError, onNavigate
   const [analyticsError, setAnalyticsError] = useState('');
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const analyticsTimerRef = useRef(null);
+
+  // Keep the Recent Alerts timestamps current even when no new alert arrives.
+  useTimestampTick();
 
   const loadAnalytics = useCallback(() => {
     clearTimeout(analyticsTimerRef.current);
@@ -980,6 +1030,10 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
     try { return !localStorage.getItem('gaida:alert-swipe-hint'); } catch { return true; }
   });
   const pull = usePullToRefresh(onRetryAlerts);
+
+  // Alert rows show relative ages; refresh them on a fixed cadence so values
+  // like "23h ago" advance to "Yesterday" without waiting for a poll event.
+  useTimestampTick();
   useEffect(() => {
     document.body.classList.toggle('filter-sheet-open', filterOpen);
     const main = document.getElementById('counselor-main');
@@ -1463,7 +1517,7 @@ function SessionsPage({ sessions, sessionsLoading, sessionsError, onRetrySession
 }
 
 // ── Chat Modal ────────────────────────────────────────────────────────────────
-function ChatModal({ sessionId, onClose }) {
+function ChatModal({ sessionId, alert, onAcknowledge, onClose }) {
   const [messages, setMessages] = useState([]);
   const messagesRef = useRef([]); // mirror used to dedupe realtime WS appends vs the 3s poll
   const [loading, setLoading] = useState(true);
@@ -1484,6 +1538,11 @@ function ChatModal({ sessionId, onClose }) {
   const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
+  const [acknowledgedLocally, setAcknowledgedLocally] = useState(false);
+
+  // Keeps the saved-note timestamp current while the modal stays open.
+  useTimestampTick();
 
   // ── Case Notes state ──────────────────────────────────────────────────────
   const [noteText, setNoteText] = useState('');
@@ -1879,6 +1938,21 @@ const typingThrottleRef = useRef(null);
     { id: 'notes', label: 'Case Notes' },
   ];
   
+  const needsAcknowledgment = Boolean(
+    alert
+    && ['High', 'Crisis'].includes(alert.severity)
+    && !alert.acknowledged
+    && !acknowledgedLocally
+  );
+
+  const handleAcknowledge = async () => {
+    if (!onAcknowledge) return;
+    setAcknowledging(true);
+    const ok = await onAcknowledge(sessionId);
+    setAcknowledging(false);
+    if (ok) setAcknowledgedLocally(true);
+  };
+
   const handleResolve = async () => {
     setResolveConfirmOpen(false);
     setResolving(true);
@@ -1930,16 +2004,16 @@ const typingThrottleRef = useRef(null);
       <div className="rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-xl" style={{ background: P.surface }}>
 
         {/* Header */}
-        <div className="px-5 py-4 flex items-center justify-between flex-shrink-0" style={{ borderBottom: `1px solid ${P.border}` }}>
-          <div>
+        <div className="px-4 py-3 sm:px-5 sm:py-4 flex flex-wrap items-start justify-between gap-3 flex-shrink-0" style={{ borderBottom: `1px solid ${P.border}` }}>
+          <div className="min-w-0">
             <h3 id="chat-modal-title" className="text-sm font-bold" style={{ color: P.textPrimary }}>Live Session</h3>
             <p className="text-xs" style={{ color: P.textSecondary }}>{sessionId.slice(0, 24)}...</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             <button
               onClick={handleExportSession}
               disabled={exporting}
-              className="text-xs px-3 py-1.5 rounded-lg transition-colors duration-200 disabled:opacity-50 flex items-center gap-1.5"
+              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs transition-colors duration-200 disabled:opacity-50 sm:flex-none"
               style={{ background: P.panel, color: P.textSecondary, border: `1px solid ${P.border}` }}
             >
               {exporting ? (
@@ -1953,26 +2027,37 @@ const typingThrottleRef = useRef(null);
                 </>
               )}
             </button>
+            {needsAcknowledgment && (
+              <button
+                type="button"
+                onClick={handleAcknowledge}
+                disabled={acknowledging}
+                className="order-first min-h-11 w-full whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed sm:order-none sm:w-auto"
+                style={{ background: P.red }}
+              >
+                {acknowledging ? 'Acknowledging...' : 'Acknowledge'}
+              </button>
+            )}
             {resolved ? (
               <span className="text-xs font-medium" style={{ color: P.greenDark }}>Session resolved</span>
             ) : (
               <button
                 onClick={() => setResolveConfirmOpen(true)}
-                disabled={resolving || !savedNote}
-                title={!savedNote ? 'Save a case note before resolving' : undefined}
-                className="text-xs px-3 py-1.5 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors duration-200"
+                disabled={resolving || !savedNote || needsAcknowledgment}
+                title={needsAcknowledgment ? 'Acknowledge this Crisis/High alert before resolving' : !savedNote ? 'Save a case note before resolving' : undefined}
+                className="min-h-11 flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed sm:flex-none"
                 style={{ background: P.green }}
               >
                 {resolving ? 'Resolving...' : 'Resolve session'}
               </button>
             )}
-            <div className="w-2 h-2 rounded-full" style={{ background: P.green }} />
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: P.green }} />
             <span className="text-xs mr-2" style={{ color: P.textMuted }}>Live</span>
             <button
               ref={closeBtnRef}
               onClick={onClose}
               aria-label="Close session details"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-bold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
+              className="h-11 w-11 flex-shrink-0 flex items-center justify-center rounded-lg text-sm font-bold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#5E8FBD]"
               style={{ border: `1px solid ${P.border}`, color: P.textSecondary }}
             >
               ✕
@@ -2782,12 +2867,14 @@ export default function CounselorDashboard() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) {
         notifyDashboard(data.detail || data.error || 'Could not acknowledge this alert.');
-        return;
+        return false;
       }
       fetchAlerts();
+      return true;
     } catch (e) {
       console.error('Acknowledge alert error:', e);
       notifyDashboard('Network error acknowledging alert. Please check your connection.');
+      return false;
     }
   };
 
@@ -3570,7 +3657,12 @@ export default function CounselorDashboard() {
       />
 
       {chatSessionId && (
-        <ChatModal sessionId={chatSessionId} onClose={() => setChatSessionId(null)} />
+        <ChatModal
+          sessionId={chatSessionId}
+          alert={alerts.find((item) => item.session_id === chatSessionId)}
+          onAcknowledge={handleAcknowledge}
+          onClose={() => setChatSessionId(null)}
+        />
       )}
       {logoutConfirmOpen && (
         <ConfirmationDialog
@@ -3604,6 +3696,11 @@ function ResolvedCasesPage() {
   const [outcomeFilter, setOutcomeFilter] = useState('all');
   const [outcomeMenuOpen, setOutcomeMenuOpen] = useState(false);
   const [casesRequestVersion, setCasesRequestVersion] = useState(0);
+
+  // Re-render every 30s so the relative timestamps stay accurate while this
+  // page is left open (e.g. "23h ago" becomes "Yesterday", "6 days ago"
+  // becomes a weekday or date). Formatting itself is handled by formatRelative.
+  useTimestampTick();
 
   const handleDelete = async (sessionId, e) => {
     e.stopPropagation();
