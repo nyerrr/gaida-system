@@ -58,7 +58,7 @@ GAIDA is a virtual guidance assistant for University of the East students. It co
 | AI chat | GAIDA replies in English, Tagalog, or Taglish and follows the language the student uses. |
 | Text anxiety detection | Each message is classified into a level such as Normal, Low, Moderate, High, or Crisis using rules and a machine-learning ensemble. |
 | Voice analysis | When voice input is used, speech features such as pitch, energy, pauses, and speech rate are analyzed. |
-| Human escalation | High and Crisis situations can notify a counselor and pause GAIDA until a counselor joins. |
+| Human escalation | Moderate, High, and Crisis situations are listed for counselors. High and Crisis also notify a counselor by alert and email. A Crisis pauses GAIDA until a counselor joins. |
 | Counselor workspace | Counselors review alerts, open flagged sessions, take over a conversation, record case notes, and export PDFs. |
 | Reports | The dashboard summarizes alerts, sessions, anxiety trends, and severity breakdowns. |
 | Research | An optional research flow collects consent, demographics, GAD-7 answers, and a post-session usability survey. |
@@ -238,7 +238,7 @@ After choosing one, you may add an optional short comment. Feedback helps improv
 | **Talk** | Normal conversation. GAIDA may reflect feelings, offer coping steps, and ask questions. |
 | **Vent** | GAIDA mainly listens. It avoids advice and redirects while you share freely. |
 
-**Important:** Vent mode does not disable safety. If a High or Crisis signal appears, GAIDA can still share hotlines, pause replies, and notify a counselor.
+**Important:** Vent mode does not disable safety. If a High or Crisis signal appears, GAIDA can still share hotlines and notify a counselor, and a Crisis pauses replies until a counselor joins.
 
 ### 5.8 How detection works
 
@@ -249,17 +249,19 @@ GAIDA assigns a level to messages using text and, when used, voice features. The
 | **Normal** | Below 0.46 | GAIDA responds freely |
 | **Low** | 0.46 – 0.71 | A counselor-written support protocol is added to the reply |
 | **Moderate** | 0.71 – 0.76 | A stronger support protocol is added |
-| **High** | 0.76 – 0.98 | A counselor alert is fired and GAIDA may pause |
-| **Crisis** | 0.99 – 1.00 | Immediate intervention flow, alert, and hotline guidance |
+| **High** | 0.76 – 0.98 | A counselor alert and email are sent; GAIDA keeps chatting and shares hotline details |
+| **Crisis** | 0.99 – 1.00 | Immediate intervention flow, alert, hotline guidance, and GAIDA pauses its replies until a counselor joins |
 
 These levels are **support signals, not a diagnosis**. A “Normal” result does not prove that someone is safe, and a high result does not by itself confirm a condition.
 
-### 5.9 If GAIDA pauses (High/Crisis hold)
+### 5.9 If GAIDA pauses (Crisis hold)
 
-When a High or Crisis signal is detected:
+When a High signal is detected, a counselor is notified by alert and email, GAIDA keeps chatting with you, and it shares hotline details.
+
+When a Crisis signal is detected:
 
 - A counselor is notified.
-- GAIDA may pause its replies until the counselor reviews the session.
+- GAIDA sends one fixed message with hotline details and then pauses its replies until a counselor takes over.
 - A banner explains that a counselor has been notified and will message you in the chat.
 - You can keep typing; the counselor will see what you send.
 - The banner shows **1553** and **911** for immediate help.
@@ -808,7 +810,7 @@ GAIDA includes:
 | **Escalation** | Raising an alert to a supervisor, backup, or in-person office |
 | **GAD-7** | A seven-item anxiety screening questionnaire |
 | **GAIDA** | Guidance system with multimodal Anxiety Intelligence and Detection Assistance |
-| **High** | A serious level that fires a counselor alert and may pause GAIDA |
+| **High** | A serious level that fires a counselor alert and email while GAIDA keeps chatting |
 | **Moderate** | A level that adds a stronger support protocol |
 | **New** | An alert that has not been acknowledged |
 | **Participant token** | The private code that identifies an anonymous research session |
