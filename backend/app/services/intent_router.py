@@ -703,6 +703,10 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
                 # dashboard can tell "sad" from "still wants them back and
                 # has been checking their profile for four days".
                 "loss_flags": turn.get("loss_flags") or None,
+                # How this reply was produced (gpt / fallback / counselor /
+                # crisis_hold / portal_redirect) so logged data can tell an
+                # LLM reply from a rule-fallback one.
+                "method": method,
             },
             response=response_text if method != "counselor" else None,
         )
@@ -716,7 +720,9 @@ def _finalize_turn(turn: Dict[str, Any], user_message: str, response_text: str, 
                 session_id=session_id,
                 sender="bot",
                 text=response_text,
-                analysis={},
+                # The bot message IS the reply this method produced; keep the
+                # label with it so logged bot rows explain themselves too.
+                analysis={"method": method},
                 response=None,
             )
         except Exception as e:

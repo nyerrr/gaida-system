@@ -327,6 +327,14 @@ def _persist_entry(entry: Dict[str, Any]):
     try:
         analysis = entry.get("analysis", {}) or {}
         session_id = entry.get("session_id", "")
+        # Real reply method from _finalize_turn (gpt / fallback / counselor /
+        # crisis_hold / portal_redirect). A hard-coded "gpt" here would record
+        # rule-fallback replies as model replies, which corrupts any later
+        # analysis of how often the LLM was actually used.
+        reply_method = (
+            analysis.get("method")
+            or ("counselor" if entry.get("sender") == "counselor" else "unknown")
+        )
         supabase.table("interactions").insert({
             "session_id": session_id,
             "student_id": _resolve_student_id(session_id) or session_id,
@@ -337,7 +345,7 @@ def _persist_entry(entry: Dict[str, Any]):
             "confidence": float(analysis.get("confidence", 0)) if analysis.get("confidence") else None,
             "anxiety_score": analysis.get("intensity"),
             "severity": analysis.get("severity"),
-            "method": "gpt",
+            "method": reply_method,
         }).execute()
     except Exception as e:
         print(f"Supabase insert error: {e}")
@@ -356,6 +364,13 @@ def _persist_session_data(session_id: str, entry: Dict[str, Any]):
 
         from app.utils.logger import log_interaction
 
+        # Same reply method _persist_entry stores in Supabase, so the local
+        # JSON log and the database agree on how each reply was produced.
+        reply_method = (
+            (entry.get("analysis", {}) or {}).get("method")
+            or ("counselor" if entry.get("sender") == "counselor" else "unknown")
+        )
+
         if entry.get("sender") == "user":
             log_interaction(
                 session_id=session_id,
@@ -364,7 +379,7 @@ def _persist_session_data(session_id: str, entry: Dict[str, Any]):
                 confidence=entry.get("analysis", {}).get("confidence", 0.0),
                 anxiety_score=entry.get("analysis", {}).get("intensity", 0),
                 response=entry.get("response") or "",
-                method="session-manager",
+                method=reply_method,
             )
         else:
             log_interaction(
@@ -374,7 +389,7 @@ def _persist_session_data(session_id: str, entry: Dict[str, Any]):
                 confidence=entry.get("analysis", {}).get("confidence", 0.0),
                 anxiety_score=entry.get("analysis", {}).get("anxiety_score", 0),
                 response=entry.get("response") or "",
-                method="session-manager",
+                method=reply_method,
             )
     except Exception:
         pass
