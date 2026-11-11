@@ -1038,40 +1038,59 @@ def _closing_question_for(anxiety_level: str, user_message: str,
 # with a note attached, not the number 155324.
 _CRISIS_NUMBER_RE = re.compile(r"\d{3,}")
 
-# Order matters only for readability of the appended block.
+# Used only when a caller supplies a resource block without numbered lines.
 _CRISIS_REQUIRED_LINES = (
-    "National Crisis Hotline: 1553 (available 24/7)",
-    "In Touch Crisis Line: (02) 893-7603",
-    "If you are in immediate danger, call 911",
+    "National Center for Mental Health (NCMH) Crisis Hotline: 1553 (available 24/7)",
+    "HOPELINE Philippines: (02) 8804-4673 / 0917-558-4673",
+    "In Touch Community Services Crisis Line: (02) 8893-7603 / 0917-800-1123",
+    "Philippine National Emergency Hotline: 911",
+    "UE Manila Guidance, Counseling and Career Services Office (GCCSO)",
+    "Internal Local Number: Local 390 (via the University of the East Telephone Directory)",
+    "Manila Campus Trunkline: (632) 8735-5471 or (632) 5328-5471",
+    "Email Address: guidance@ue.edu.ph",
+    "Facebook Page: UE Manila GCCSO",
+    "Location: Ground Floor of the SFC Building, UE Manila Campus",
+)
+
+_NON_PHILIPPINE_CRISIS_REFERENCE_RE = re.compile(
+    r"\b988\b|Suicide\s*(?:&|and)\s*Crisis\s*Lifeline", re.IGNORECASE
+)
+_UE_CONTACT_MARKERS = (
+    "ue manila",
+    "internal local number",
+    "manila campus trunkline",
+    "email address",
+    "facebook page",
+    "location:",
 )
 
 
 def _required_resource_lines(resources: str) -> list[str]:
     """
-    Pull the numbered lines out of whatever resource block was supplied.
+    Pull resource bullets out of whatever resource block was supplied.
 
     Derived from the caller's string rather than a second hardcoded copy, so
     the check cannot drift from CRISIS_RESOURCES the way a duplicated list
-    would. Falls back to the built-in lines only if the block has none.
+    would. Text-only contact lines are included so email, Facebook, and location
+    details are enforced too.
     """
     if not resources:
         return []
     lines = [
         line.strip(" -*\t")
         for line in resources.splitlines()
-        if _CRISIS_NUMBER_RE.search(line)
+        if line.strip().startswith("-")
     ]
     return lines or list(_CRISIS_REQUIRED_LINES)
 
 
 def missing_crisis_resources(reply: str, resources: str | None) -> list[str]:
     """
-    Return the required resource lines whose number is absent from the reply.
+    Return required resource lines whose numbers or text are absent.
 
     Matched on digits alone: the model reliably rewrites the wording
-    ("the National Crisis Hotline at 1553") but drops whole numbers, and it is
-    the number that has to survive. A reply that cites 1553 in any phrasing
-    counts as citing it.
+    ("the National Crisis Hotline at 1553") but drops whole numbers. Text-only
+    details, such as the UE email and location, are checked as written.
     """
     if not resources:
         return []
@@ -1080,22 +1099,47 @@ def missing_crisis_resources(reply: str, resources: str | None) -> list[str]:
     missing: list[str] = []
     for line in _required_resource_lines(resources):
         numbers = set(_CRISIS_NUMBER_RE.findall(line))
-        if not numbers:
-            continue
-        if not numbers.issubset(present):
+        requires_exact_text = any(
+            marker in line.casefold() for marker in _UE_CONTACT_MARKERS
+        )
+        if numbers and not numbers.issubset(present):
+            missing.append(line)
+        elif requires_exact_text and line.casefold() not in (reply or "").casefold():
+            missing.append(line)
+        elif not numbers and line.casefold() not in (reply or "").casefold():
             missing.append(line)
     return missing
+
+
+def _remove_non_philippine_crisis_references(text: str) -> str:
+    """Remove sentences that direct a student to the US-only 988 service."""
+    if not _NON_PHILIPPINE_CRISIS_REFERENCE_RE.search(text or ""):
+        return text
+
+    chunks = re.split(r"(?<=[.!?])(\s+)", text or "")
+    kept: list[str] = []
+    for index in range(0, len(chunks), 2):
+        sentence = chunks[index]
+        if _NON_PHILIPPINE_CRISIS_REFERENCE_RE.search(sentence):
+            continue
+        kept.append(sentence)
+        if index + 1 < len(chunks):
+            kept.append(chunks[index + 1])
+    return "".join(kept).strip()
 
 
 def ensure_crisis_resources(text: str, resources: str | None) -> str:
     """
     Append any crisis resource the reply failed to carry.
 
-    Runs on the finished reply, in crisis only. Never removes or rewrites what
-    the model wrote — a student should not be handed back a reply that was
-    edited around while they were reading it. If the reply already carries every
-    number this is a no-op.
+    Runs on the finished reply when the caller provides resources. It removes
+    sentences directing the student to the US-only 988 service, then appends
+    any missing local resource details.
     """
+    if not resources:
+        return text
+
+    text = _remove_non_philippine_crisis_references(text)
     missing = missing_crisis_resources(text, resources)
     if not missing:
         return text

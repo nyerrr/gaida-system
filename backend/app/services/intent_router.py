@@ -3,6 +3,7 @@ import logging
 import re
 from app.services.session_manager import get_session, start_session, record_interaction
 from app.services.virtual_agent import (
+    CRISIS_RESOURCES,
     detect_intent_and_level,
     should_semantically_review,
     _build_result,
@@ -309,6 +310,8 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
         severity, anxiety_score = _fuse_pending_acoustic(
             session, severity, anxiety_score
         )
+        if severity == "High" and not crisis_resources:
+            crisis_resources = CRISIS_RESOURCES
 
         session.setdefault("meta", {})
         session["meta"]["running_confidence"] = running_confidence
@@ -546,6 +549,8 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
             "High": "high",
         }[severity]
         counselor_protocol = final_detection.get("counselor_protocol")
+    if severity == "High" and not crisis_resources:
+        crisis_resources = CRISIS_RESOURCES
 
     # --- Step 6: Is a human counselor active? ---
     counselor_active = bool(session.get("meta", {}).get("counselor_active"))
@@ -580,12 +585,9 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
 HIGH_HOLD_EN = (
     "Thank you for telling me. It sounds like you are under significant distress, so I have alerted a UE guidance counselor. "
     "I am pausing my usual replies while a person reviews your session.\n\n"
-    "If you may hurt yourself or are in immediate danger, call someone now:\n"
-    "- National Crisis Hotline: 1553\n"
-    "- In Touch Crisis Line: (02) 893-7603\n"
-    "- Emergency: 911\n"
-    "- UE Guidance Office: guidance@ue.edu.ph\n\n"
-    "If you can, please stay on this page, or tell someone near you what's going on."
+    "If you may hurt yourself or are in immediate danger, contact local support now:\n"
+    + CRISIS_RESOURCES.strip()
+    + "\n\nIf you can, please stay on this page, or tell someone near you what's going on."
 )
 HIGH_HOLD_EN_OFFHOURS = (
     "\n\nThe guidance office may not be open right now, so a counselor might not reply right away. "
@@ -594,12 +596,9 @@ HIGH_HOLD_EN_OFFHOURS = (
 HIGH_HOLD_FIL = (
     "Salamat sa pagsabi sa akin nito. Mukhang mabigat ang pinagdaraanan mo, kaya inabisuhan ko na ang guidance counselor ng UE. "
     "Pansamantala kong ihihinto ang mga karaniwan kong sagot habang sinusuri ng isang tao ang session mo.\n\n"
-    "Kung may balak kang saktan ang sarili mo o nasa agarang panganib ka, tumawag ka ngayon:\n"
-    "- National Crisis Hotline: 1553\n"
-    "- In Touch Crisis Line: (02) 893-7603\n"
-    "- Emergency: 911\n"
-    "- UE Guidance Office: guidance@ue.edu.ph\n\n"
-    "Kung kaya mo, manatili ka sa page na ito o sabihin sa kasama mo ang nangyayari."
+    "Kung may balak kang saktan ang sarili mo o nasa agarang panganib ka, makipag-ugnayan ngayon sa mga serbisyong ito sa Pilipinas:\n"
+    + CRISIS_RESOURCES.strip()
+    + "\n\nKung kaya mo, manatili ka sa page na ito o sabihin sa kasama mo ang nangyayari."
 )
 HIGH_HOLD_FIL_OFFHOURS = (
     "\n\nMaaaring sarado ngayon ang guidance office, kaya baka hindi agad makasagot ang counselor. "

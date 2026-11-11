@@ -162,17 +162,10 @@ const CRISIS_HOTLINES = [
     badge: 'Emergency',
   },
   {
-    name: 'UE Guidance and Counseling Office (Manila)',
-    number: '(02) 8735-5471 loc. 390',
-    tel: '0287355471',
-    desc: 'University counselors on campus (Mon-Fri 8:00 AM - 5:00 PM)',
-    badge: 'UE Campus',
-  },
-  {
-    name: 'UE Guidance and Counseling Office (Caloocan)',
-    number: '(02) 8367-4572 loc. 175',
-    tel: '0283674572',
-    desc: 'Caloocan campus guidance office (Mon-Fri 8:00 AM - 5:00 PM)',
+    name: 'UE Manila Guidance, Counseling and Career Services Office (GCCSO)',
+    number: '(632) 8735-5471 or (632) 5328-5471 · Local 390',
+    tel: '+63287355471',
+    desc: 'Internal Local Number: Local 390 (via the University of the East Telephone Directory). Email Address: guidance@ue.edu.ph · Facebook Page: UE Manila GCCSO · Location: Ground Floor of the SFC Building, UE Manila Campus.',
     badge: 'UE Campus',
   },
 ];

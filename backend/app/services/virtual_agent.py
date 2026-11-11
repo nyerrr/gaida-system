@@ -56,6 +56,8 @@ COUNSELOR_PROTOCOLS = {
     Respond with calm urgency. You are a steady grounding presence.
     - Lead with strong validation — acknowledge the intensity directly
     - Inform them calmly that the counselor has been notified
+    - Offer the Philippine crisis and UE Manila GCCSO contacts supplied below
+    - Never mention 988, US hotlines, or resources for another country
     - Offer ONE simple immediate action: sit down, breathe slowly, stay where they are
     - Do NOT suggest specific objects, rooms, or actions you cannot verify they have access to
     - Do NOT mix languages mid-sentence — respond in the same language the student used
@@ -66,7 +68,8 @@ COUNSELOR_PROTOCOLS = {
     - Open with immediate acknowledgment — do not jump to resources first
     - Make them feel heard before anything else
     - Never minimize what they are feeling
-    - Provide crisis resources warmly: National Crisis Hotline 1553 (24/7), In Touch (02) 893-7603
+    - Provide the Philippine crisis and UE Manila GCCSO contacts supplied below
+    - Never mention 988, US hotlines, or resources for another country
     - Encourage them to reach out to someone nearby
     - End with reassurance and presence — not a question
     """,
@@ -99,10 +102,16 @@ COUNSELOR_PROTOCOLS = {
 
 CRISIS_RESOURCES = """
 Please reach out for immediate help:
-- National Crisis Hotline: 1553 (available 24/7)
-- In Touch Crisis Line: (02) 893-7603
-- School Guidance Office: please visit or call them now
-- If in immediate danger, call 911
+- National Center for Mental Health (NCMH) Crisis Hotline: 1553 (available 24/7)
+- HOPELINE Philippines: (02) 8804-4673 / 0917-558-4673
+- In Touch Community Services Crisis Line: (02) 8893-7603 / 0917-800-1123
+- Philippine National Emergency Hotline: 911
+- UE Manila Guidance, Counseling and Career Services Office (GCCSO)
+- Internal Local Number: Local 390 (via the University of the East Telephone Directory)
+- Manila Campus Trunkline: (632) 8735-5471 or (632) 5328-5471
+- Email Address: guidance@ue.edu.ph
+- Facebook Page: UE Manila GCCSO
+- Location: Ground Floor of the SFC Building, UE Manila Campus
 """
 
 # ---------------------------------------------------------------------------
@@ -1309,11 +1318,13 @@ def _build_result(
             "clarify": clarify,
         }
 
+    crisis_resources = None
     if confidence >= SEVERITY_HIGH:
         anxiety_level = "high"
         severity = "High"
         anxiety_score = 5
         protocol = COUNSELOR_PROTOCOLS["high"]
+        crisis_resources = CRISIS_RESOURCES
     elif confidence >= SEVERITY_MODERATE:
         anxiety_level = "moderate"
         severity = "Moderate"
@@ -1355,7 +1366,7 @@ def _build_result(
         "anxiety_level": anxiety_level,
         "severity": severity,
         "counselor_protocol": protocol,
-        "crisis_resources": None,
+        "crisis_resources": crisis_resources,
         "anxiety_score": anxiety_score,
         "loss_flags": (loss_result or {}).get("flags") if intent == "loss" else None,
         "clarify": clarify,

@@ -249,9 +249,11 @@ const handleAccept = async (e) => {
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">Questions or Concerns:</h3>
               <p>
-                If you have any questions about this consent form or GAIDA's data practices, please contact the 
-                Guidance, Counseling and Career Services Office (GCCSO) at guidance@ue.edu.ph or visit the GCCSO at 2219 C.M. Recto
-                Avenue, Sampaloc, Manila.
+                If you have any questions about this consent form or GAIDA's data practices, contact the UE Manila
+                Guidance, Counseling and Career Services Office (GCCSO): Internal Local Number: Local 390 (via the
+                University of the East Telephone Directory); Manila Campus Trunkline: (632) 8735-5471 or
+                (632) 5328-5471; Email Address: guidance@ue.edu.ph; Facebook Page: UE Manila GCCSO; Location: Ground
+                Floor of the SFC Building, UE Manila Campus.
               </p>
             </div>
           </div>

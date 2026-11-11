@@ -25,7 +25,7 @@ import pytest
 
 from app.services import gpt_agent
 from app.services.intent_router import _detect_calming
-from app.services.virtual_agent import _build_result
+from app.services.virtual_agent import CRISIS_RESOURCES, _build_result
 from app.services.gpt_agent import (
     TOKEN_LIMITS,
     _build_gpt_messages,
@@ -1090,13 +1090,7 @@ def test_crisis_carries_no_exemplar():
 # Crisis resources — verified, never left to the model
 # ─────────────────────────────────────────────────────────────────
 
-CRISIS_BLOCK = """
-Please reach out for immediate help:
-- National Crisis Hotline: 1553 (available 24/7)
-- In Touch Crisis Line: (02) 893-7603
-- School Guidance Office: please visit or call them now
-- If in immediate danger, call 911
-"""
+CRISIS_BLOCK = CRISIS_RESOURCES
 
 
 def test_a_reply_missing_numbers_gets_them_appended():
@@ -1104,20 +1098,34 @@ def test_a_reply_missing_numbers_gets_them_appended():
     their life is not an acceptable place to rely on the model."""
     reply = "I'm here. You're not alone in this. Please call the National Crisis Hotline at 1553 any time."
     missing = gpt_agent.missing_crisis_resources(reply, CRISIS_BLOCK)
-    assert len(missing) == 2
+    assert any("HOPELINE" in line for line in missing)
+    assert any("guidance@ue.edu.ph" in line for line in missing)
     fixed = gpt_agent.ensure_crisis_resources(reply, CRISIS_BLOCK)
-    assert "893-7603" in fixed and "911" in fixed
+    assert "8893-7603" in fixed and "911" in fixed
+    assert "(632) 5328-5471" in fixed
+    assert "UE Manila GCCSO" in fixed
+    assert "Ground Floor of the SFC Building" in fixed
     # The model's own wording is preserved, not rewritten around.
     assert fixed.startswith(reply)
 
 
 def test_a_complete_reply_is_left_alone():
-    reply = (
-        "I'm here and I'm not going anywhere. You can reach the National Crisis "
-        "Hotline at 1553, In Touch at (02) 893-7603, and 911 if you're in "
-        "immediate danger."
-    )
+    reply = "I'm here and I'm not going anywhere.\n" + CRISIS_BLOCK
     assert gpt_agent.ensure_crisis_resources(reply, CRISIS_BLOCK) == reply
+
+
+def test_us_988_reference_is_removed_and_philippine_resources_are_added():
+    reply = "I'm sorry you're going through this. Call or text 988 (the Suicide & Crisis Lifeline) now."
+    fixed = gpt_agent.ensure_crisis_resources(reply, CRISIS_BLOCK)
+    assert "I'm sorry you're going through this." in fixed
+    assert "988" not in fixed
+    assert "Suicide & Crisis Lifeline" not in fixed
+    assert "1553" in fixed
+    assert "guidance@ue.edu.ph" in fixed
+
+
+def test_high_severity_includes_local_crisis_resources():
+    assert _build_result("anxiety", 0.8)["crisis_resources"] == CRISIS_BLOCK
 
 
 def test_resource_check_ignores_rewording():
