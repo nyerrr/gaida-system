@@ -515,21 +515,22 @@ def get_sessions_needing_welfare_check(stale_minutes: int = WELFARE_CHECK_MINUTE
     simply hiding the session as "abandoned" (which is all SESSION_STALE_MINUTES
     did before).
 
-    The live scan only sees sessions still in memory, so a DB fallback
-    re-flags High/Crisis sessions from Supabase that aren't in memory (e.g.
-    after a backend restart) — a silent at-risk student is never lost."""
+    Closed sessions remain eligible: leaving the chat does not itself confirm
+    that a High/Crisis student is safe. Pending counselor alerts are the DB
+    fallback so sessions remain visible after a backend restart."""
     now = datetime.now(timezone.utc)
     flagged: List[Dict[str, Any]] = []
     seen: set = set()
 
     # ── Live (in-memory) scan ──────────────────────────────────────────────
     for sid, s in SESSIONS.items():
-        if not s.get("active"):
+        meta = s.get("meta", {})
+        if meta.get("resolved"):
             continue
-        severity = s.get("meta", {}).get("peak_severity", "Normal")
+        severity = meta.get("peak_severity", "Normal")
         if severity not in ("High", "Crisis"):
             continue
-        if s.get("meta", {}).get("counselor_active"):
+        if meta.get("counselor_active"):
             continue
         last_ts = None
         if s.get("messages"):
@@ -553,7 +554,7 @@ def get_sessions_needing_welfare_check(stale_minutes: int = WELFARE_CHECK_MINUTE
             })
             seen.add(sid)
 
-    # ── DB fallback (sessions not in memory, e.g. after restart) ───────────
+    # ── DB fallback (alerts for sessions not in memory, e.g. after restart) ─
     # Throttled so the dashboard's polling doesn't hammer Supabase.
     global _WELFARE_DB_LAST_SCAN
     if now - _WELFARE_DB_LAST_SCAN < _WELFARE_DB_SCAN_MIN:
@@ -564,19 +565,21 @@ def get_sessions_needing_welfare_check(stale_minutes: int = WELFARE_CHECK_MINUTE
         from app.database.database import supabase
 
         rows = (
-            supabase.table("sessions")
-            .select("session_token, student_id, peak_severity, created_at")
-            .in_("peak_severity", ["High", "Crisis"])
-            .is_("ended_at", "null")
+            supabase.table("counselor_alerts")
+            .select("*")
+            .in_("severity", ["High", "Crisis"])
+            .eq("status", "pending")
             .execute()
         ).data or []
         for row in rows:
-            sid = row.get("session_token")
+            sid = row.get("session_id")
             if not sid or sid in seen or sid in SESSIONS:
                 continue
-            sev = row.get("peak_severity") or "High"
+            if row.get("deleted") or row.get("counselor_took_over"):
+                continue
+            sev = row.get("severity") or "High"
             last_msg = ""
-            last_ts = row.get("created_at")
+            last_ts = None
             try:
                 last_rows = (
                     supabase.table("interactions")
@@ -592,6 +595,8 @@ def get_sessions_needing_welfare_check(stale_minutes: int = WELFARE_CHECK_MINUTE
             except Exception:
                 last_msg = ""
             if not last_ts:
+                last_ts = row.get("created_at")
+            if not last_ts:
                 continue
             try:
                 last_dt = _parse_utc_aware(last_ts)
@@ -601,7 +606,7 @@ def get_sessions_needing_welfare_check(stale_minutes: int = WELFARE_CHECK_MINUTE
             if idle_minutes >= stale_minutes:
                 flagged.append({
                     "session_id": sid,
-                    "student_id": row.get("student_id"),
+                    "student_id": row.get("user_id"),
                     "peak_severity": sev,
                     "idle_minutes": round(idle_minutes),
                     "last_message": last_msg,
