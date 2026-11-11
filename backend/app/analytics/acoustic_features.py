@@ -4,6 +4,7 @@ import io
 import tempfile
 import os
 import subprocess
+import threading
 
 from app.analytics.voice_cleaning import (
     clean_voice,
@@ -78,6 +79,129 @@ def _is_ffmpeg_available(cmd: str) -> bool:
         return True
     except Exception:
         return False
+
+
+# ── Jitter / shimmer (cycle-level vocal perturbation) ──────────────────────
+#
+# Jitter is cycle-to-cycle period perturbation; shimmer is cycle-to-cycle
+# amplitude perturbation. Both are classic acoustic correlates of vocal
+# tension/tremor and feed the anxiety score below.
+#
+# Primary path: openSMILE eGeMAPS (already a backend dependency), which
+# implements Praat-style local jitter and local shimmer dB on voiced segments.
+# Fallback: a small cycle-peak detector over a 70–500 Hz band, used when
+# openSMILE is unavailable or returns no voiced material. Both return
+# fractions (0.02 = 2%), matching the scorer's thresholds.
+
+_OPENSMILE = None
+_OPENSMILE_LOADED = False
+# openSMILE's Smile object keeps internal state; serialize calls because
+# FastAPI runs extraction in a thread pool and concurrent voice uploads can
+# otherwise share the same instance.
+_OPENSMILE_LOCK = threading.Lock()
+
+
+def _load_opensmile():
+    global _OPENSMILE, _OPENSMILE_LOADED
+    if _OPENSMILE_LOADED:
+        return _OPENSMILE
+    _OPENSMILE_LOADED = True
+    try:
+        import opensmile
+
+        _OPENSMILE = opensmile.Smile(
+            feature_set=opensmile.FeatureSet.eGeMAPSv02,
+            feature_level=opensmile.FeatureLevel.Functionals,
+        )
+    except Exception as e:  # pragma: no cover - import-failure path
+        print(f"[acoustic_features] openSMILE unavailable, using cycle fallback: {e}")
+        _OPENSMILE = None
+    return _OPENSMILE
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return float(min(max(value, low), high))
+
+
+def _cycle_jitter_shimmer(y: np.ndarray, sr: int) -> tuple[float, float]:
+    """Fallback cycle-level estimator. Returns fractions, not percentages."""
+    try:
+        from scipy.signal import butter, sosfiltfilt, find_peaks
+    except Exception:  # pragma: no cover - scipy ships with librosa
+        return 0.0, 0.0
+
+    if y is None or len(y) < int(sr * 0.1):
+        return 0.0, 0.0
+
+    nyq = sr / 2.0
+    low = 70.0 / nyq
+    high = min(500.0 / nyq, 0.99)
+    if not (0 < low < high < 1):
+        return 0.0, 0.0
+
+    sos = butter(4, [low, high], btype="bandpass", output="sos")
+    filtered = sosfiltfilt(sos, np.asarray(y, dtype=np.float64))
+
+    # Positive peaks approximate glottal closures. 500 Hz is the highest F0
+    # we accept, so peaks closer than one 500 Hz period are not cycles.
+    peaks, _ = find_peaks(
+        filtered,
+        distance=max(1, int(sr / 500.0)),
+        prominence=max(float(np.max(np.abs(filtered))) * 0.05, 1e-6),
+    )
+    if len(peaks) < 4:
+        return 0.0, 0.0
+
+    periods = np.diff(peaks) / float(sr)
+    amplitudes = np.array([
+        float(np.ptp(filtered[peaks[i]:peaks[i + 1]]))
+        for i in range(len(peaks) - 1)
+    ])
+
+    # Keep physiologically plausible periods (60–500 Hz) and drop isolated
+    # octave jumps/outliers that peak picking can produce.
+    median_period = float(np.median(periods))
+    valid = (
+        (periods >= 1.0 / 500.0)
+        & (periods <= 1.0 / 60.0)
+        & (periods >= 0.5 * median_period)
+        & (periods <= 2.0 * median_period)
+    )
+    periods = periods[valid]
+    amplitudes = amplitudes[valid]
+    if len(periods) < 3:
+        return 0.0, 0.0
+
+    mean_period = float(np.mean(periods))
+    mean_amplitude = float(np.mean(amplitudes))
+    if mean_period <= 0 or mean_amplitude <= 0:
+        return 0.0, 0.0
+
+    jitter = float(np.mean(np.abs(np.diff(periods))) / mean_period)
+    shimmer = float(np.mean(np.abs(np.diff(amplitudes))) / mean_amplitude)
+    return _clamp(jitter, 0.0, 0.20), _clamp(shimmer, 0.0, 0.50)
+
+
+def _estimate_jitter_shimmer(y: np.ndarray, sr: int) -> tuple[float, float]:
+    """Measure local jitter and shimmer as fractions (0.02 = 2%)."""
+    smile = _load_opensmile()
+    if smile is not None:
+        try:
+            with _OPENSMILE_LOCK:
+                frame = smile.process_signal(
+                    np.asarray(y, dtype=np.float32),
+                    int(sr),
+                )
+            jitter = float(frame["jitterLocal_sma3nz_amean"].iloc[0])
+            shimmer_db = float(frame["shimmerLocaldB_sma3nz_amean"].iloc[0])
+            # openSMILE reports shimmer in dB; the scorer works in relative
+            # amplitude (fraction), so convert and clamp.
+            shimmer = 10.0 ** (shimmer_db / 20.0) - 1.0
+            if np.isfinite(jitter) and np.isfinite(shimmer):
+                return _clamp(jitter, 0.0, 0.20), _clamp(shimmer, 0.0, 0.50)
+        except Exception as e:  # pragma: no cover - runtime failure path
+            print(f"[acoustic_features] openSMILE jitter/shimmer failed: {e}")
+    return _cycle_jitter_shimmer(y, sr)
 
 
 def extract_features(
@@ -178,13 +302,8 @@ def extract_features(
         else:
             features['rate_delta'] = 0.0
 
-        # ── Jitter ──────────────────────────────────────────────────────────
-        # Overlapping YIN frames cannot provide cycle-level jitter.
-        features['jitter'] = 0.0
-
-        # ── Shimmer ──────────────────────────────────────────────────────────
-        # Overlapping RMS frames cannot provide cycle-level shimmer.
-        features['shimmer'] = 0.0
+        # ── Jitter / Shimmer (cycle-level vocal perturbation) ───────────────
+        features['jitter'], features['shimmer'] = _estimate_jitter_shimmer(y, sr)
 
         # ── Zero Crossing Rate ───────────────────────────────────────────────
         zcr = librosa.feature.zero_crossing_rate(y)[0]
@@ -242,25 +361,27 @@ def _score_from_features(f: dict, baseline: dict = None) -> float:
     score += pitch_score * 0.25
     weights += 0.25
 
-    # 2. Jitter / Vocal Micro-tremor (weight: 0.25)
+    # 2. Jitter / Vocal Micro-tremor (weight: 0.15)
     # Healthy voice jitter is < 0.01; stressed vocal fold tension is >= 0.02
     jitter = f.get('jitter', 0.0)
     jitter_score = min(max(jitter - 0.005, 0.0) / 0.035, 1.0) if jitter > 0 else 0.0
-    # No contribution: extractor cannot calculate cycle-level jitter.
+    score += jitter_score * 0.15
+    weights += 0.15
 
-    # 3. Shimmer / Amplitude Perturbation (weight: 0.20)
+    # 3. Shimmer / Amplitude Perturbation (weight: 0.10)
     # Strained/breathy amplitude perturbation is >= 0.15
     shimmer = f.get('shimmer', 0.0)
     shimmer_score = min(max(shimmer - 0.05, 0.0) / 0.22, 1.0) if shimmer > 0 else 0.0
-    # No contribution: extractor cannot calculate cycle-level shimmer.
+    score += shimmer_score * 0.10
+    weights += 0.10
 
-    # 4. Pause Detection / Hesitations (weight: 0.15)
+    # 4. Pause Detection / Hesitations (weight: 0.35)
     pause_ratio = f.get('pause_ratio', 0.0)
     pause_score = min(max(pause_ratio - 0.15, 0.0) / 0.40, 1.0)
     score += pause_score * 0.35
     weights += 0.35
 
-    # 5. Speech Rate (weight: 0.15)
+    # 5. Speech Rate (weight: 0.25)
     # Agitated/pressured: > 5.5 onsets/sec. Hesitant/frozen: < 1.8 onsets/sec.
     rate = f.get('speech_rate', 3.0)
     if rate > 5.5:
@@ -271,6 +392,8 @@ def _score_from_features(f: dict, baseline: dict = None) -> float:
         rate_score = 0.0
     score += rate_score * 0.25
     weights += 0.25
+
+    # 6. Energy Variability (weight: 0.15)
     score += min(max(f.get('energy_cv', 0.0) - 0.25, 0.0) / 0.75, 1.0) * 0.15
     weights += 0.15
 

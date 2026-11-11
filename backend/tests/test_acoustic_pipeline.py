@@ -66,6 +66,21 @@ def test_extract_features_with_baseline():
     assert feats["pitch_delta_semitones"] > 1.0
 
 
+def test_extract_features_calculates_jitter_and_shimmer():
+    """Live extraction should measure perturbation, not return placeholder zeros."""
+    steady = extract_features(_make_wav(seconds=2.0, f0=180.0))
+    tremulous = extract_features(
+        _make_wav(seconds=2.0, f0=180.0, jitter_amt=0.05, shimmer_amt=0.3)
+    )
+
+    assert steady["jitter"] >= 0.0
+    assert steady["shimmer"] >= 0.0
+    assert tremulous["jitter"] > steady["jitter"]
+    assert tremulous["shimmer"] > steady["shimmer"]
+    assert tremulous["jitter"] > 0.0
+    assert tremulous["shimmer"] > 0.0
+
+
 def test_high_arousal_discrimination():
     """Verify controlled rapid speech (anger/excitement) is differentiated from anxious speech."""
     # 1. Assertive/angry speech: fast, loud, low jitter, low pauses
