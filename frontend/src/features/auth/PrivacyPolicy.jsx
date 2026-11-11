@@ -94,10 +94,14 @@ export default function PrivacyPolicy() {
               <h3 className="font-semibold text-gray-900 mb-2">AI Processing:</h3>
               <p>
                 To analyze your messages and generate responses, GAIDA sends your text
-                input to OpenAI's API, a third-party AI service provider. This means your
-                messages are processed on OpenAI's servers as part of how GAIDA works. This
-                processing is used only to power the conversation and detection features
-                described above, not for any other purpose.
+                input to a third-party AI service provider that hosts the open-weight
+                language model (Qwen) used to write replies. If you use voice input, the
+                audio is sent to OpenAI's speech-to-text service to be transcribed, and if
+                you tap Listen, the reply text is sent to a text-to-speech service to
+                produce audio. This means your messages are processed on those providers'
+                servers as part of how GAIDA works. This processing is used only to power
+                the conversation and detection features described above, not for any
+                other purpose.
               </p>
             </div>
 
