@@ -145,15 +145,44 @@ def test_fuse_with_text_severity_confidence_guard():
 
 
 def test_fuse_with_text_severity_escalation():
-    """High acoustic confidence with anxious emotion should elevate text severity."""
-    # Text is Normal, Voice is High with strong confidence
+    """A clear anxious voice estimate is primary for emotional severity."""
     fused = fuse_with_text_severity(
         acoustic_severity="High",
         text_severity="Normal",
         acoustic_emotion="anxious",
         acoustic_confidence=0.85,
     )
-    assert fused in ("Moderate", "High"), "High confidence anxious voice should elevate Normal text"
+    assert fused == "High"
+
+
+def test_fuse_text_can_raise_voice_severity():
+    fused = fuse_with_text_severity(
+        acoustic_severity="Low",
+        text_severity="High",
+        acoustic_emotion="anxious",
+        acoustic_confidence=0.85,
+    )
+    assert fused == "High"
+
+
+def test_fuse_preserves_text_crisis():
+    fused = fuse_with_text_severity(
+        acoustic_severity="Normal",
+        text_severity="Crisis",
+        acoustic_emotion="calm",
+        acoustic_confidence=1.0,
+    )
+    assert fused == "Crisis"
+
+
+def test_non_anxious_voice_does_not_raise_anxiety_severity():
+    fused = fuse_with_text_severity(
+        acoustic_severity="High",
+        text_severity="Normal",
+        acoustic_emotion="angry",
+        acoustic_confidence=0.95,
+    )
+    assert fused == "Normal"
 
 
 def test_fuse_with_text_never_escalates_to_crisis():

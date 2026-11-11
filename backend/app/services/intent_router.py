@@ -170,6 +170,46 @@ def _detect_urgent(text: str) -> bool:
     txt = _urgent_normalize(text)
     return any(kw in txt for kw in _URGENT_NORMALIZED)
 
+
+def _fuse_pending_acoustic(
+    session: Dict[str, Any], severity: str, anxiety_score: int
+) -> tuple[str, int]:
+    pending_acoustic = session.get("meta", {}).get("pending_acoustic")
+    if not pending_acoustic:
+        return severity, anxiety_score
+
+    text_severity = severity
+    try:
+        from app.analytics.acoustic_features import fuse_with_text_severity
+
+        acoustic_severity = pending_acoustic.get("severity", "Normal")
+        acoustic_emotion = pending_acoustic.get("emotion", "neutral")
+        acoustic_confidence = pending_acoustic.get("confidence", 0.0)
+        fused_severity = fuse_with_text_severity(
+            acoustic_severity=acoustic_severity,
+            text_severity=severity,
+            acoustic_emotion=acoustic_emotion,
+            acoustic_confidence=acoustic_confidence,
+        )
+
+        severity_order = {"Normal": 0, "Low": 1, "Moderate": 2, "High": 3}
+        if severity_order.get(fused_severity, 0) > severity_order.get(severity, 0):
+            severity = fused_severity
+            anxiety_score = {"Low": 1, "Moderate": 3, "High": 5}[fused_severity]
+
+        session["meta"]["pending_acoustic"] = None
+        logger.info(
+            "Acoustic fusion: text=%s acoustic=%s fused=%s",
+            text_severity,
+            acoustic_severity,
+            severity,
+        )
+    except Exception as e:
+        logger.error("Acoustic fusion error: %s", e)
+
+    return severity, anxiety_score
+
+
 def _scaled_boost(raw_confidence: float, base_multiplier: float, threshold: float = 0.5) -> float:
     """Scales the boost so confidence just above threshold gets minimal boost,
     while confidence well above threshold gets close to the full multiplier."""
@@ -265,8 +305,10 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
 
         final_detection = _build_result(detected_intent, raw_confidence)
         severity = final_detection["severity"]
-        anxiety_level = "venting"
         anxiety_score = final_detection["anxiety_score"]
+        severity, anxiety_score = _fuse_pending_acoustic(
+            session, severity, anxiety_score
+        )
 
         session.setdefault("meta", {})
         session["meta"]["running_confidence"] = running_confidence
@@ -277,7 +319,7 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
             "session_id": session_id,
             "intent": intent,
             "running_confidence": running_confidence,
-            "anxiety_level": anxiety_level,
+            "anxiety_level": "venting",
             "severity": severity,
             "anxiety_score": anxiety_score,
             "counselor_protocol": None,
@@ -493,37 +535,17 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     anxiety_score = final_detection["anxiety_score"]
 
     # --- Step 5b: Fuse with acoustic features if available ---
-    pending_acoustic = session.get("meta", {}).get("pending_acoustic")
-    if pending_acoustic:
-        try:
-            from app.analytics.acoustic_features import fuse_with_text_severity
-            acoustic_severity = pending_acoustic.get("severity", "Normal")
-            acoustic_emotion = pending_acoustic.get("emotion", "neutral")
-            acoustic_confidence = pending_acoustic.get("confidence", 0.0)
-
-            fused_severity = fuse_with_text_severity(
-                acoustic_severity=acoustic_severity,
-                text_severity=severity,
-                acoustic_emotion=acoustic_emotion,
-                acoustic_confidence=acoustic_confidence,
-            )
-
-            severity_order = {"Normal": 0, "Low": 1, "Moderate": 2, "High": 3}
-            if severity_order.get(fused_severity, 0) > severity_order.get(severity, 0):
-                severity = fused_severity
-                severity_to_level = {
-                    "Low": ("low", 1),
-                    "Moderate": ("moderate", 3),
-                    "High": ("high", 5),
-                }
-                if fused_severity in severity_to_level:
-                    anxiety_level, anxiety_score = severity_to_level[fused_severity]
-                    counselor_protocol = final_detection.get("counselor_protocol")
-
-            session["meta"]["pending_acoustic"] = None
-            logger.info(f"Acoustic fusion: text={final_detection['severity']} acoustic={acoustic_severity} fused={severity}")
-        except Exception as e:
-            logger.error(f"Acoustic fusion error: {e}")
+    text_severity = severity
+    severity, anxiety_score = _fuse_pending_acoustic(
+        session, severity, anxiety_score
+    )
+    if severity != text_severity:
+        anxiety_level = {
+            "Low": "low",
+            "Moderate": "moderate",
+            "High": "high",
+        }[severity]
+        counselor_protocol = final_detection.get("counselor_protocol")
 
     # --- Step 6: Is a human counselor active? ---
     counselor_active = bool(session.get("meta", {}).get("counselor_active"))

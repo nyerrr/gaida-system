@@ -19,6 +19,7 @@ both fixes, so it is kept here as the canonical case.
 """
 
 import re
+from types import SimpleNamespace
 
 import pytest
 
@@ -510,6 +511,71 @@ def no_client(monkeypatch):
     """_build_gpt_messages short-circuits without an OpenAI client; stand one
     in so the message list can be inspected without calling the API."""
     monkeypatch.setattr(gpt_agent, "client", object())
+
+
+def test_empty_gpt_oss_stream_retries_with_lower_reasoning(monkeypatch):
+    messages = [{"role": "user", "content": "I have been feeling anxious."}]
+    retry_calls = []
+    retry_text = "That sounds difficult to carry. What has been weighing on you?"
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=retry_text),
+                finish_reason="stop",
+            )
+        ]
+    )
+
+    def create(**kwargs):
+        retry_calls.append(kwargs)
+        return response
+
+    target = SimpleNamespace(
+        name="primary",
+        model="openai/gpt-oss-120b",
+        client=SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
+    )
+    empty_stream = [
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content=None),
+                    finish_reason="length",
+                )
+            ]
+        )
+    ]
+
+    monkeypatch.setattr(gpt_agent, "_LLM_TARGETS", [target])
+    monkeypatch.setattr(gpt_agent, "_build_gpt_messages", lambda **_kwargs: messages)
+    monkeypatch.setattr(
+        gpt_agent, "_add_few_shot_examples", lambda prompt, _message: prompt
+    )
+    monkeypatch.setattr(
+        gpt_agent,
+        "_open_stream",
+        lambda _messages, _level: (empty_stream, target),
+    )
+
+    result = list(
+        gpt_agent.stream_gpt_response(
+            "I have been feeling anxious.",
+            anxiety_level="moderate",
+            intent="anxiety",
+        )
+    )
+
+    assert result == [(retry_text, retry_text)]
+    assert retry_calls[0]["max_completion_tokens"] == 1024
+    assert retry_calls[0]["extra_body"]["reasoning_effort"] == "low"
+
+
+def test_gpt_oss_defaults_to_low_reasoning_for_chat(monkeypatch):
+    monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+    kwargs = gpt_agent._reasoning_effort_kwargs("openai/gpt-oss-120b")
+    assert kwargs["extra_body"]["reasoning_effort"] == "low"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

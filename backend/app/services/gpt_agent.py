@@ -485,19 +485,18 @@ def _reasoning_effort_kwargs(
 ) -> dict[str, dict[str, str]]:
     effort_value = effort_override or os.getenv("LLM_REASONING_EFFORT")
     effort = (effort_value or "").strip().lower()
-    # Groq's GPT-OSS endpoints reject Qwen's `default` / `none` values with a
-    # 400. Use the provider's supported middle setting instead, so a dashboard
-    # value carried over from the previous Qwen model cannot break every reply.
-    if model and model.lower().startswith("openai/gpt-oss") and effort not in {
-        "low", "medium", "high",
-    }:
-        if effort:
+    if model and model.lower().startswith("openai/gpt-oss"):
+        # Keep conversational replies from spending their whole completion
+        # budget on hidden reasoning. Respect valid explicit overrides.
+        if not effort:
+            effort = "low"
+        elif effort not in {"low", "medium", "high"}:
             logger.warning(
-                "LLM_REASONING_EFFORT=%r is unsupported by %s; using medium",
+                "LLM_REASONING_EFFORT=%r is unsupported by %s; using low",
                 effort,
                 model,
             )
-        effort = "medium"
+            effort = "low"
     if not effort:
         return {}
     extra_body = {"reasoning_effort": effort}
@@ -516,6 +515,67 @@ def _completion_limit_kwargs(model: str, max_tokens: int) -> dict[str, int]:
         # the final answer entirely.
         return {"max_completion_tokens": max(512, max_tokens)}
     return {"max_tokens": max_tokens}
+
+
+def _retry_empty_stream(
+    messages: list[dict[str, str]],
+    anxiety_level: str | None,
+    user_message: str,
+    intent: str | None,
+    crisis_resources: str | None,
+) -> str | None:
+    """Retry a stream that produced no visible answer with a larger, simpler completion."""
+    retry_limit = max(1024, _max_tokens_for(anxiety_level))
+    echo_flow = INTENT_FLOW_OVERRIDE.get((intent or "").lower()) or (
+        anxiety_level.lower() if anxiety_level else None
+    )
+
+    for target in _LLM_TARGETS:
+        is_gpt_oss = target.model.lower().startswith("openai/gpt-oss")
+        try:
+            response = target.client.chat.completions.create(
+                model=target.model,
+                messages=messages,
+                temperature=0.75,
+                **_completion_limit_kwargs(target.model, retry_limit),
+                **_reasoning_effort_kwargs(
+                    target.model, "low" if is_gpt_oss else None
+                ),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Empty-stream retry failed for target '%s' (%s): %s",
+                target.name,
+                target.model,
+                exc,
+            )
+            continue
+
+        choices = getattr(response, "choices", None)
+        if not choices:
+            logger.warning("Empty-stream retry from '%s' had no choices", target.name)
+            continue
+
+        choice = choices[0]
+        message = getattr(choice, "message", None)
+        text = getattr(message, "content", None) or ""
+        text = text.split("</think>")[-1].strip()
+        if not text:
+            logger.warning("Empty-stream retry from '%s' had no visible content", target.name)
+            continue
+
+        if getattr(choice, "finish_reason", None) == "length":
+            text = _trim_to_complete_sentence(text)
+        if not text or _is_exemplar_echo(text, echo_flow):
+            logger.warning("Empty-stream retry from '%s' did not produce a usable reply", target.name)
+            continue
+
+        text = ensure_crisis_resources(text, crisis_resources)
+        text = ensure_closing_question(text, anxiety_level, user_message, intent)
+        logger.info("Recovered empty LLM stream with non-streaming retry (%s)", target.model)
+        return text or None
+
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -2268,6 +2328,17 @@ def stream_gpt_response(
                 target.model,
                 finish_reason or "missing",
             )
+            recovered = _retry_empty_stream(
+                messages,
+                anxiety_level,
+                user_message,
+                intent,
+                crisis_resources,
+            )
+            if recovered:
+                yield (recovered, recovered)
+                return
+            logger.error("Empty GPT stream recovery failed; caller will use its safe fallback")
         else:
             # Hit the token cap mid-sentence. The already-streamed tokens were
             # shown live and can't be un-typed, but trim what gets returned

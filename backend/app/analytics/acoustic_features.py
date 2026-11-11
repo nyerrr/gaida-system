@@ -487,38 +487,30 @@ def fuse_with_text_severity(
     acoustic_emotion: str = None,
     acoustic_confidence: float = 1.0,
 ) -> str:
-    order = {'Normal': 0, 'Low': 1, 'Moderate': 2, 'High': 3}
-    reverse = {0: 'Normal', 1: 'Low', 2: 'Moderate', 3: 'High'}
+    order = {'Normal': 0, 'Low': 1, 'Moderate': 2, 'High': 3, 'Crisis': 4}
+    reverse = {rank: severity for severity, rank in order.items()}
+    text_rank = order.get(text_severity, 0)
 
-    a = order.get(acoustic_severity, 0)
-    t = order.get(text_severity, 0)
+    # Explicit crisis language remains authoritative regardless of vocal cues.
+    if text_rank == order['Crisis']:
+        return 'Crisis'
 
-    # If acoustic confidence is low (< 0.45), trust text only
+    # Confidence estimates signal quality, so unclear audio falls back to text.
     if acoustic_confidence < 0.45:
-        return text_severity if text_severity in order else reverse[t]
+        return reverse[text_rank]
 
-    fused = t
+    acoustic_rank = order.get(acoustic_severity, 0)
+    if acoustic_emotion not in ('anxious', 'sad'):
+        return reverse[text_rank]
 
-    # If acoustic indicates higher distress than text:
-    if a > t:
-        if acoustic_emotion in ('anxious', 'sad'):
-            if acoustic_confidence >= 0.75:
-                # Strong acoustic confidence: can upgrade up to 2 tiers (e.g. Normal -> Moderate)
-                fused = min(a, t + 2)
-            else:
-                # Moderate acoustic confidence: conservative single tier upgrade
-                fused = min(a, t + 1)
-    else:
-        fused = t
+    # For voice messages, use the vocal distress estimate as the affective
+    # baseline; semantic text can raise it but never lower it.
+    if acoustic_rank == order['Normal'] and acoustic_confidence >= 0.50:
+        acoustic_rank = order['Low']
 
-    # If text is Normal but voice indicates anxious/sad emotion with solid confidence, bump to Low
-    if fused == 0 and acoustic_emotion in ('anxious', 'sad') and acoustic_confidence >= 0.50:
-        fused = 1
-
-    # Safety guard: acoustic analysis alone NEVER escalates to Crisis
-    fused = min(fused, 3)
-
-    return reverse.get(fused, 'Normal')
+    fused_rank = max(acoustic_rank, text_rank)
+    # Acoustic analysis can reach High, but Crisis requires semantic evidence.
+    return reverse[min(fused_rank, order['High'])]
 
 
 def _empty_features() -> dict:
