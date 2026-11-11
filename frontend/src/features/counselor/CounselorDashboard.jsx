@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 
 import { BACKEND_URL as BACKEND } from '../../config';
-import apiFetch, { logoutAndClearAuth } from '../../api';
+import apiFetch, { logoutAndClearAuth, RATE_LIMIT_MESSAGE } from '../../api';
 import CounselorBottomNav from './CounselorBottomNav';
 import { FALLBACK_POLL_INTERVAL_MS, shouldPollDashboard } from './dashboardPolling';
 import ConfirmationDialog from '../../components/ConfirmationDialog';
@@ -1788,7 +1788,9 @@ const typingThrottleRef = useRef(null);
         body: JSON.stringify({ session_id: sessionId, message: text, counselor_id: getCounselorId() }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data.ok) {
+      if (res.status === 429) {
+        setActionError(RATE_LIMIT_MESSAGE);
+      } else if (data.ok) {
         setTookOver(true);
         setTakeoverMsg('');
         fetchChat();

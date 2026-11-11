@@ -205,7 +205,7 @@ _CURRENT_FIRST_PERSON_SELF_HARM_RE = re.compile(
     r"be alive|live anymore)\b"
     r"|\bi\s+(?:do not|don't|dont)\s+(?:want to|wanna)\s+live\b"
     r"|\bi\s+(?:really\s+)?(?:am\s+|['’]?m\s+)?tired of living\b"
-    r"|\bi\s+feel like dying\b"
+    r"|\bi\s+f(?:eel|ell) like dying\b"
     r"|\bgusto ko (?:na|nang) mamatay\b"
     r"|\b(?:magpapakamatay|papatayin ko (?:na )?sarili ko)\b"
     r"|\b(?:ma|mama)?matay na lang ako\b",
@@ -239,6 +239,19 @@ _FIRST_PERSON_SUICIDAL_DISCLOSURE_RE = re.compile(
     r"(?:currently\s+)?(?:suicidal|thinking about suicide|"
     r"considering suicide|suicidal thoughts?)\b"
     r"|\bi\s+(?:think|keep thinking|have been thinking)\s+about suicide\b",
+    re.IGNORECASE,
+)
+_IMMEDIATE_EXTERNAL_THREAT_RE = re.compile(
+    r"\b(?:someone|somebody|a person|people|they|he|she)"
+    r"(?:['’]?s|['’]re|\s+(?:is|are))?\s+"
+    r"(?:going to|gonna|gona|will|wants? to|plans? to|trying to)\s+"
+    r"(?:kill|hurt|attack)\s+(?:me|us)\b",
+    re.IGNORECASE,
+)
+_IMMINENT_SELF_DEATH_RE = re.compile(
+    r"\b(?:(?:i['’]?m|i am)\s+(?:literally\s+)?about to die\b"
+    r"(?!\s*(?:[,;:!?-]\s*)?(?:laughing|of laughter)\b)"
+    r"|i\s+f(?:eel|ell) like dying)\b",
     re.IGNORECASE,
 )
 
@@ -278,6 +291,27 @@ def has_current_first_person_self_harm_intent(text: str) -> bool:
         if _CURRENT_FIRST_PERSON_SELF_HARM_RE.search(clause):
             return True
     return False
+
+
+def has_immediate_external_threat(text: str) -> bool:
+    """True for a current, direct statement that another person may harm the speaker."""
+    text = text or ""
+    if has_fiction_context(text) or has_hypothetical_context(text):
+        return False
+    return bool(_IMMEDIATE_EXTERNAL_THREAT_RE.search(text))
+
+
+def has_immediate_danger(text: str) -> bool:
+    """Catch imminent-danger language that the self-harm keyword list cannot represent."""
+    text = text or ""
+    if has_fiction_context(text) or has_hypothetical_context(text):
+        return False
+    return has_immediate_external_threat(text) or bool(_IMMINENT_SELF_DEATH_RE.search(text))
+
+
+def has_urgent_safety_signal(text: str) -> bool:
+    """Keep urgent self-harm and physical-danger messages from being rate-limited."""
+    return has_immediate_danger(text) or has_current_first_person_self_harm_intent(text)
 
 
 def is_reported_self_harm(text: str) -> bool:

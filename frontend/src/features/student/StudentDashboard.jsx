@@ -8,7 +8,7 @@ import ReactMarkdown from 'react-markdown';
 // ─────────────────────────────────────────────────────────────
 
 import { BACKEND_URL as BACKEND } from '../../config';
-import apiFetch, { clearSensitiveLocalData, logoutAndClearAuth } from '../../api';
+import apiFetch, { clearSensitiveLocalData, logoutAndClearAuth, RATE_LIMIT_MESSAGE } from '../../api';
 import {
   enqueue as enqueueOffline,
   getAll as getQueuedOffline,
@@ -687,7 +687,7 @@ export default function StudentDashboard() {
 
     if (!res.ok || !res.body) {
       const errText = await res.text().catch(() => String(res.status));
-      const e = new Error(errText || String(res.status));
+      const e = new Error(res.status === 429 ? RATE_LIMIT_MESSAGE : errText || String(res.status));
       e.httpStatus = res.status;
       throw e;
     }
@@ -1142,7 +1142,9 @@ export default function StudentDashboard() {
         ));
       } else if (err.httpStatus) {
         setMessages(prev => [...prev, {
-          role: 'bot', text: `Error: ${err.message || err.httpStatus}`, timestamp: new Date(),
+          role: 'bot',
+          text: err.httpStatus === 429 ? err.message : `Error: ${err.message || err.httpStatus}`,
+          timestamp: new Date(),
         }]);
       } else if (botMsg && botMsg.text) {
         setMessages(prev => [...prev, {

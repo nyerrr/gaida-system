@@ -12,6 +12,8 @@ from app.services.crisis_guards import (
     has_fiction_context,
     has_hypothetical_context,
     has_current_first_person_self_harm_intent,
+    has_immediate_danger,
+    has_immediate_external_threat,
     has_venting_context,
     is_academic_setback_without_distress,
     is_informational_self_harm_context,
@@ -969,6 +971,13 @@ def should_semantically_review(text: str, detection: dict) -> bool:
 def detect_intent_and_level(text: str) -> dict:
     txt = _normalize_text(text)
     tokens = set(_tokenize(txt))
+
+    # Immediate physical danger is not necessarily a self-harm disclosure, but
+    # it still needs the crisis alert and emergency-response path.
+    if has_immediate_external_threat(text):
+        return _build_result("physical_danger", 0.99)
+    if has_immediate_danger(text):
+        return _build_result("suicidal", 0.99)
 
     # ── Step 1: Suicidal keyword check — run BEFORE the safe-phrase mask so a
     #    real crisis is never hidden (e.g. "ayoko na mag aral... gusto ko na

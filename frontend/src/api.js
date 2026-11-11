@@ -1,5 +1,7 @@
 import { BACKEND_URL } from './config'
 
+export const RATE_LIMIT_MESSAGE = "You're sending messages too quickly. Please wait a moment before trying again."
+
 // Bearer-token fetch wrapper.
 //
 // - Attaches `Authorization: Bearer <token>` from the active login

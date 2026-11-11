@@ -39,6 +39,7 @@ ORDINARY_LANGUAGE = [
     "I want to disappear for a while on vacation",
     "this class is killing me lol",
     "I'm dying of laughter",
+    "im about to die laughing",
     "goodbye, see you next week",
     "I want to sleep",
     # "give up" + a non-life object is not a death wish. The assignment one is
@@ -69,6 +70,8 @@ NEGATED_DENIALS = [
 # The other half of the contract: fixing the false positives above must never
 # silence a real crisis. These must still page.
 GENUINE_CRISIS = [
+    "im about to die",
+    "i fell like dying",
     "I want to kill myself",
     "i just want to die",
     "gusto ko na mamatay",
@@ -108,3 +111,47 @@ def test_genuine_crises_still_reach_the_crisis_flow():
         result = _detect(message)
         assert result["intent"] == "suicidal", (message, result)
         assert result["anxiety_level"] == "crisis", (message, result)
+
+
+def test_immediate_external_threats_reach_the_crisis_flow():
+    message = "THERES SOMETHING GOING ON RIGHT NOW, SOMEONES GONA KILL ME HELP I FELL LIKE DYING"
+    for threat in ("someone is going to kill me", "someone's gonna kill me", message):
+        result = _detect(threat)
+        assert result["intent"] == "physical_danger", (threat, result)
+        assert result["severity"] == "Crisis", (threat, result)
+
+
+def test_immediate_external_threat_gets_emergency_response():
+    from app.services.intent_router import stream_analyze_intent
+
+    events = list(stream_analyze_intent(
+        "THERES SOMETHING GOING ON RIGHT NOW, SOMEONES GONA KILL ME HELP I FELL LIKE DYING"
+    ))
+    result = events[-1]["result"]
+    assert result["severity"] == "Crisis"
+    assert "911 now" in result["response"].lower()
+    assert "safer public place" in result["response"].lower()
+
+
+def test_urgent_safety_message_bypasses_chat_rate_limit():
+    from uuid import uuid4
+
+    import pytest
+    from fastapi import HTTPException
+
+    from app.main import _check_chat_rate_limit
+    from app.services.rate_limiter import users_requests
+
+    user_id = f"safety-rate-limit-test-{uuid4()}"
+    try:
+        for _ in range(5):
+            _check_chat_rate_limit("hello", user_id)
+        with pytest.raises(HTTPException):
+            _check_chat_rate_limit("hello", user_id)
+
+        _check_chat_rate_limit("I'm about to die", user_id)
+
+        with pytest.raises(HTTPException):
+            _check_chat_rate_limit("hello", user_id)
+    finally:
+        users_requests.pop(user_id, None)

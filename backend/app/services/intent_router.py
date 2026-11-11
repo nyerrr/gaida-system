@@ -626,6 +626,16 @@ def _crisis_hold_state(turn: Dict[str, Any]) -> str | None:
 
 
 def _crisis_hold_message(user_message: str) -> str:
+    from app.services.crisis_guards import has_immediate_external_threat
+    if has_immediate_external_threat(user_message):
+        return (
+            "Someone may be threatening your safety. If you are in immediate danger, "
+            "call 911 now if it is safe to do so. Move away from that person toward a "
+            "safer public place and contact campus security or someone you trust nearby. "
+            "If you cannot call safely, ask someone nearby to call 911. Are you somewhere "
+            "safer right now?"
+        )
+
     from app.services.gpt_agent import _uses_filipino
     fil = _uses_filipino(user_message)
     base = HIGH_HOLD_FIL if fil else HIGH_HOLD_EN
