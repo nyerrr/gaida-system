@@ -30,9 +30,13 @@ export default function CounselorBottomNav({
   welfareCount = 0,
   sessionsCount = 0,
   drawerOpen = false,
+  moreMenuOpen: controlledMoreMenuOpen,
+  setMoreMenuOpen: controlledSetMoreMenuOpen,
   theme = 'light',
 }) {
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [localMoreMenuOpen, setLocalMoreMenuOpen] = useState(false);
+  const moreMenuOpen = controlledMoreMenuOpen ?? localMoreMenuOpen;
+  const setMoreMenuOpen = controlledSetMoreMenuOpen ?? setLocalMoreMenuOpen;
   const moreTriggerRef = useRef(null);
   const moreSheetRef = useRef(null);
 
@@ -69,7 +73,7 @@ export default function CounselorBottomNav({
       document.removeEventListener('keydown', onKeyDown, true);
       if (!drawerOpen && trigger?.isConnected) trigger.focus();
     };
-  }, [moreMenuOpen, drawerOpen]);
+  }, [moreMenuOpen, drawerOpen, setMoreMenuOpen]);
 
   // The side drawer is the active navigation surface while it is open; keeping
   // the bottom bar mounted underneath it would leave a second, tappable nav
@@ -327,13 +331,11 @@ export default function CounselorBottomNav({
         >
           <span className="relative flex items-center justify-center">
             <span style={{ color: isMoreActive ? 'var(--brand)' : 'var(--mut)' }}>
-              {activeSecondary ? activeSecondary.icon : (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="1.5" />
-                  <circle cx="19" cy="12" r="1.5" />
-                  <circle cx="5" cy="12" r="1.5" />
-                </svg>
-              )}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="1.5" />
+                <circle cx="19" cy="12" r="1.5" />
+                <circle cx="5" cy="12" r="1.5" />
+              </svg>
             </span>
             {welfareCount > 0 && (
               <span
@@ -351,10 +353,7 @@ export default function CounselorBottomNav({
             }`}
             style={{ color: isMoreActive ? 'var(--brand)' : 'var(--mut)' }}
           >
-            {activePage === 'welfare' ? 'Welfare' :
-             activePage === 'detection' ? 'Detection' :
-             activePage === 'reports' ? 'Reports' :
-             activePage === 'resolved' ? 'Resolved' : 'More'}
+            More
           </span>
         </button>
       </nav>

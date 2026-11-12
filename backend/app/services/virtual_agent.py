@@ -1285,14 +1285,20 @@ def detect_intent_and_level(text: str) -> dict:
     return _build_result("neutral", 0.3)
 
 
-# Severity band boundaries used by _build_result. These are mirrored in
-# app/api/counselor.py (the dashboard's confidence heuristic, twice) and in
-# frontend/src/features/counselor/CounselorDashboard.jsx (`confidenceToSeverity`
-# and the Detection page legend). Change all of them together, or the dashboard
-# will label a session differently from the band that actually fired.
-SEVERITY_HIGH = 0.76
+# Severity band boundaries used by _build_result. The bands are:
+#   Normal  0.00 - 0.44
+#   Low     0.45 - 0.70
+#   Moderate 0.71 - 0.76
+#   High    0.77 - 0.98
+#   Crisis  0.99 - 1.00
+# These are mirrored in app/api/counselor.py (the dashboard's confidence
+# heuristic, twice) and in frontend/src/features/counselor/CounselorDashboard.jsx
+# (`confidenceToSeverity` and the Detection page legend). Change all of them
+# together, or the dashboard will label a session differently from the band that
+# actually fired. The backend remains the source of truth.
+SEVERITY_HIGH = 0.77
 SEVERITY_MODERATE = 0.71
-SEVERITY_LOW = 0.46
+SEVERITY_LOW = 0.45
 
 
 def _build_result(

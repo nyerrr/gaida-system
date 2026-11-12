@@ -137,11 +137,13 @@ const formatDuration = (startedAt, now = Date.now()) => {
   return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 };
 
+// Mirrors the backend bands in app/services/virtual_agent.py. The backend is the
+// source of truth; this helper only keeps the dashboard labels in sync.
 const confidenceToSeverity = (c) => {
   if (c >= 0.99) return 'Crisis';
-  if (c >= 0.76) return 'High';
+  if (c >= 0.77) return 'High';
   if (c >= 0.71) return 'Moderate';
-  if (c >= 0.46) return 'Low';
+  if (c >= 0.45) return 'Low';
   return 'Normal';
 };
 
@@ -863,10 +865,44 @@ const getEscalationState = (a) => {
 // re-render doesn't remount every row and drop mid-click button presses.
 function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
   const pointerStart = useRef(null);
-  const sc  = severityColor(a.severity);
+  const copyTimerRef = useRef(null);
+  const [copied, setCopied] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const esc = getEscalationState(a);
   const statusLabel = getAlertStatusLabel(a);
   const actionable = statusLabel !== 'Resolved';
+  const alertCode = a.session_id || '';
+  const detailsId = `alert-details-${alertCode || 'unknown'}`;
+
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
+
+  const handleCopyCode = async () => {
+    if (!alertCode) return;
+    try {
+      await navigator.clipboard.writeText(alertCode);
+    } catch {
+      try {
+        const area = document.createElement('textarea');
+        area.value = alertCode;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      } catch { /* clipboard unavailable */ }
+    }
+    setCopied(true);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 1800);
+  };
+
+  // Only fully reviewed rows recede; acknowledged work stays readable and
+  // actionable in its own tab.
+  const muted = statusLabel === 'Resolved';
 
   // Overdue/urgent are genuinely time-critical — this is the one place on
   // the dashboard that intentionally borrows the reserved emergency red.
@@ -880,20 +916,32 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
     a.severity === 'Requested' ? P.accent :
     P.amber;
 
-  const bgColor =
-    esc.level === 'overdue' ? P.redSoft :
-    esc.level === 'urgent'  ? P.redSoft :
-    esc.level === 'warning' ? P.amberSoft :
-    a.severity === 'Crisis' ? P.redSoft :
-    a.severity === 'High'   ? P.highSoft :
-    a.severity === 'Moderate' ? P.amberSoft :
-    a.severity === 'Requested' ? P.accentSoft :
-    P.amberSoft;
+  const riskTone =
+    a.severity === 'Crisis' ? { fg: P.red, bg: P.redSoft } :
+    a.severity === 'High' ? { fg: P.high, bg: P.highSoft } :
+    a.severity === 'Moderate' ? { fg: P.amber, bg: P.amberSoft } :
+    a.severity === 'Requested' ? { fg: P.accent, bg: P.accentSoft } :
+    { fg: P.textMuted, bg: P.panel };
+
+  const riskLabel =
+    a.severity === 'Crisis' ? 'Crisis' :
+    a.severity === 'Requested' ? 'Requested' :
+    `${a.severity} risk`;
+
+  const intentLabel = a.intent
+    ? `${a.intent.charAt(0).toUpperCase()}${a.intent.slice(1)}`
+    : '';
+
+  const escalationLabel =
+    esc.level === 'overdue' ? `Overdue ${esc.ageMinutes}m` :
+    esc.level === 'urgent' ? `Unattended ${esc.ageMinutes}m` :
+    esc.level === 'warning' ? `Waiting ${esc.ageMinutes}m+` :
+    '';
 
   return (
-    <div
-      className="counselor-list-row p-4 rounded-r-xl mb-3"
-      style={{ borderLeft: `4px solid ${borderColor}`, background: bgColor }}
+    <article
+      className={`counselor-list-row counselor-alert-card${muted ? ' is-muted' : ''}`}
+      style={{ borderLeftColor: muted ? P.border : borderColor }}
       onPointerDown={(e) => {
         if (e.pointerType !== 'touch' || !e.isPrimary) return;
         pointerStart.current = {
@@ -915,107 +963,116 @@ function AlertRow({ a, onViewChat, onUpdateStatus, onAcknowledge }) {
       }}
       onPointerCancel={() => { pointerStart.current = null; }}
     >
-      <div className="alert-row-layout flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sc.text}`} style={{ background: sc.hex }}>{a.severity}</span>
-            <span className={`status-tag status-${statusLabel.toLowerCase()}`}>{statusLabel}</span>
-            <span className="text-xs" style={{ color: P.textSecondary }}>{a.intent}</span>
-            <span className="text-xs" style={{ color: P.textMuted }}>{formatRelative(a.timestamp)}</span>
-
-            {/* Escalation badge */}
-            {esc.level === 'overdue' && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold text-white" style={{ background: P.red }}>
-                Overdue {esc.ageMinutes}m
-              </span>
-            )}
-            {esc.level === 'urgent' && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold text-white" style={{ background: P.red }}>
-                Unattended {esc.ageMinutes}m
-              </span>
-            )}
-            {esc.level === 'warning' && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium text-white" style={{ background: P.amber }}>
-                Waiting {esc.ageMinutes}m+
-              </span>
-            )}
-
-            {/* Needs-supervisor badge (alert passed the overdue deadline) */}
-            {a.needs_supervisor && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium text-white" style={{ background: P.navy }}>
-                Needs supervisor
-              </span>
-            )}
-
-            {/* Off-hours tag */}
-            {esc.isOffHours && (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white" style={{ background: P.navyLight }}>
-                Off-hours
-              </span>
-            )}
-          </div>
-          <p className="text-xs font-semibold mb-1" style={{ color: P.textSecondary }}>
-            Alert code: <FocusTooltip label="Full alert code" className="alert-code-tooltip">
-              <span className="alert-code">{a.session_id || 'Code unavailable'}</span>
-            </FocusTooltip>
-          </p>
-          <p className="text-xs truncate" style={{ color: P.textSecondary }}>"{a.message}"</p>
-          {a.acknowledged && (
-            <p className="text-xs mt-1" style={{ color: P.greenDark }}>
-              Acknowledged{a.acknowledged_at ? ` ${formatRelative(a.acknowledged_at)}` : ''}
-            </p>
-          )}
-        </div>
-        <div className="alert-actions flex flex-col gap-2 flex-shrink-0">
-          <button
-            onClick={() => onViewChat(a.session_id)}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium text-white transition-colors duration-200"
-            style={{ background: P.navy }}
-          >
-            View session
-          </button>
-          {actionable && statusLabel === 'New' && (
-            <button
-              onClick={() => onAcknowledge(a.session_id)}
-              className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white transition-colors duration-200"
-              style={{ background: P.red }}
-            >
-              Acknowledge
-            </button>
-          )}
-          {actionable && statusLabel === 'Acknowledged' && (
-            <button
-              onClick={() => onUpdateStatus(a.session_id, 'reviewed')}
-              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors duration-200"
-              style={{ border: `1px solid ${P.border}`, color: P.textSecondary, background: P.surface }}
-            >
-              Mark Reviewed
-            </button>
-          )}
-        </div>
+      <div className="alert-card-top">
+        <span className="alert-risk-pill" style={{ color: riskTone.fg, background: riskTone.bg }}>
+          {riskLabel}
+        </span>
+        {intentLabel && (
+          <span className="alert-card-intent" aria-label={`Intent: ${a.intent}`}>{intentLabel}</span>
+        )}
+        <span className="alert-card-time">{formatRelative(a.timestamp)}</span>
       </div>
 
-      {/* Urgent warning bar */}
-      {(esc.level === 'urgent' || esc.level === 'overdue') && (
-        <div className="mt-3 pt-3 flex items-center gap-2" style={{ borderTop: `1px solid ${P.redBorder}` }}>
-          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: P.red }} />
-          <p className="text-xs font-medium" style={{ color: P.red }}>
-            This alert has been waiting {esc.ageMinutes} minutes without a response.
-            {esc.isOffHours && ' Session occurred outside office hours.'}
-          </p>
+      <p className="alert-card-message">
+        {a.message ? `“${a.message}”` : 'No message preview available.'}
+      </p>
+
+      {a.acknowledged && (
+        <p className="alert-card-ack">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m5 12 5 5L20 7" />
+          </svg>
+          Acknowledged{a.acknowledged_at ? ` ${formatRelative(a.acknowledged_at)}` : ''}
+        </p>
+      )}
+
+      {esc.isOffHours && (
+        <p className="alert-card-offhours">
+          Off-hours <span aria-hidden="true">·</span> Outside service hours
+        </p>
+      )}
+
+      {(esc.level === 'overdue' || esc.level === 'urgent') && (
+        <div className="alert-card-warning">
+          Waiting {esc.ageMinutes} minutes without a response.
+          {esc.isOffHours && ' Session occurred outside office hours.'}
         </div>
       )}
 
-      {/* Overdue → supervisor notice (server also re-notifies by email) */}
       {esc.level === 'overdue' && (
-        <div className="mt-2 pt-2 flex items-start gap-2" style={{ borderTop: `1px solid ${P.redBorder}` }}>
-          <div className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5" style={{ background: P.red }} />
-          <p className="text-xs font-semibold" style={{ color: P.red }}>
-            Past the escalation deadline — supervisor/backup has been notified by email. Acknowledge this alert immediately.
-          </p>
+        <div className="alert-card-warning is-supervisor">
+          Past the escalation deadline — supervisor/backup has been notified by email.
         </div>
       )}
-    </div>
+
+      <button
+        type="button"
+        className="alert-details-toggle"
+        aria-expanded={detailsOpen}
+        aria-controls={detailsId}
+        onClick={() => setDetailsOpen((open) => !open)}
+      >
+        <span>Alert details</span>
+        <svg className={`alert-details-chevron${detailsOpen ? ' is-open' : ''}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+
+      {detailsOpen && (
+        <div className="alert-details-panel" id={detailsId}>
+          <div className="alert-details-line">
+            <span className="alert-details-label">Alert code</span>
+            <button
+              type="button"
+              className="alert-details-copy"
+              onClick={handleCopyCode}
+              aria-label={alertCode ? `Copy full alert code ${alertCode}` : 'Alert code unavailable'}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <code className="alert-details-code">{alertCode || 'Unavailable'}</code>
+          <div className="alert-details-grid">
+            {intentLabel && (<><span>Intent</span><span>{intentLabel}</span></>)}
+            <span>Received</span><span>{formatRelative(a.timestamp)}</span>
+            {a.acknowledged_at && (<><span>Acknowledged</span><span>{formatRelative(a.acknowledged_at)}</span></>)}
+            {escalationLabel && (<><span>Escalation</span><span>{escalationLabel}</span></>)}
+            {a.needs_supervisor && (<><span>Supervisor</span><span>Notified</span></>)}
+          </div>
+          <span className="sr-only" role="status" aria-live="polite">
+            {copied ? 'Alert code copied to clipboard' : ''}
+          </span>
+        </div>
+      )}
+
+      <div className="alert-card-actions">
+        <button
+          type="button"
+          onClick={() => onViewChat(a.session_id)}
+          className="alert-card-action is-primary"
+        >
+          View session
+        </button>
+        {actionable && statusLabel === 'New' && (
+          <button
+            type="button"
+            onClick={() => onAcknowledge(a.session_id)}
+            className="alert-card-action is-ack"
+          >
+            Acknowledge
+          </button>
+        )}
+        {actionable && statusLabel === 'Acknowledged' && (
+          <button
+            type="button"
+            onClick={() => onUpdateStatus(a.session_id, 'reviewed')}
+            className="alert-card-action is-secondary"
+          >
+            Mark reviewed
+          </button>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -1023,7 +1080,11 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
+  // null = let the screen choose the best starting tab for current data.
+  const [alertTabChoice, setAlertTabChoice] = useState(null);
   const filterButtonRef = useRef(null);
+  const mobileFilterButtonRef = useRef(null);
+  const filterReturnRef = useRef(null);
   const filterSheetRef = useRef(null);
   const closeFilterSheet = useCallback(() => setFilterOpen(false), []);
   const [showSwipeHint, setShowSwipeHint] = useState(() => {
@@ -1040,7 +1101,7 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousMainOverflow = main?.style.overflowY ?? '';
-    const returnFocusTarget = filterButtonRef.current;
+    const returnFocusTarget = filterReturnRef.current || filterButtonRef.current;
 
     if (filterOpen) {
       document.body.style.overflow = 'hidden';
@@ -1110,6 +1171,49 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
   const acknowledged = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Acknowledged' && !overdueIds.has(a.session_id)));
   const resolved = sortBySeverity(filtered.filter(a => getAlertStatusLabel(a) === 'Resolved' && !overdueIds.has(a.session_id)));
 
+  const attention = sortBySeverity([...overdue, ...pending]);
+
+  // Default to "Needs attention". When nothing is open but acknowledged work
+  // exists, open on Acknowledged instead of an empty all-clear screen. An
+  // explicit tab choice always wins.
+  const alertTab = alertTabChoice ?? (
+    overdue.length === 0 && pending.length === 0 && acknowledged.length > 0
+      ? 'acknowledged'
+      : 'attention'
+  );
+
+  const activeAlerts =
+    alertTab === 'attention' ? attention :
+    alertTab === 'acknowledged' ? acknowledged :
+    resolved;
+
+  // Legend counts reflect only open work; acknowledged alerts are surfaced
+  // through the tab count and the all-clear note instead.
+  const openVisible = visibleAlerts.filter((a) => {
+    const status = getAlertStatusLabel(a);
+    if (status === 'Resolved') return false;
+    if (status === 'New') return true;
+    const level = getEscalationState(a).level;
+    return level === 'overdue' || level === 'urgent';
+  });
+  const acknowledgedVisibleCount = visibleAlerts.filter((a) => getAlertStatusLabel(a) === 'Acknowledged').length;
+  const filterActive = Boolean(searchTerm.trim()) || severityFilter !== 'all';
+
+  const selectTab = (nextTab) => setAlertTabChoice(nextTab);
+
+  const summaryText =
+    alertTab === 'attention'
+      ? (attention.length === 0
+        ? 'No alerts need attention'
+        : attention.length === 1 ? '1 alert needs attention' : `${attention.length} alerts need attention`)
+      : alertTab === 'acknowledged'
+        ? `${acknowledged.length} acknowledged alert${acknowledged.length === 1 ? '' : 's'}`
+        : `${resolved.length} reviewed alert${resolved.length === 1 ? '' : 's'}`;
+
+  const updatedLabel = alertsLastSynced
+    ? `Updated ${alertsLastSynced.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+    : 'Alert feed syncing…';
+
   return (
     <div onTouchStart={pull.onTouchStart} onTouchMove={pull.onTouchMove} onTouchEnd={pull.onTouchEnd} className="counselor-mobile-page counselor-alerts-page" aria-busy={alertsLoading} style={pull.style}>
       {pull.indicator && <div className="counselor-pull-indicator">{pull.indicator}</div>}
@@ -1123,7 +1227,29 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
           <span aria-hidden="true">›</span>
         </button>
       )}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="counselor-alerts-mobile-head">
+        <div className="counselor-alerts-mobile-heading">
+          <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Alerts</h1>
+          <p className="counselor-alerts-updated">{updatedLabel}</p>
+        </div>
+        <button
+          ref={mobileFilterButtonRef}
+          type="button"
+          className="counselor-alerts-filter-icon"
+          aria-label={severityFilter === 'all' ? 'Filter alerts' : `Filter alerts, currently ${severityFilter}`}
+          onClick={() => {
+            filterReturnRef.current = mobileFilterButtonRef.current;
+            setFilterOpen(true);
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 6h16M7 12h10M10 18h4" />
+          </svg>
+          {severityFilter !== 'all' && <span className="counselor-alerts-filter-dot" aria-hidden="true" />}
+        </button>
+      </div>
+
+      <div className="counselor-alerts-desktop-head mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Alerts</h1>
           <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Moderate, High and Crisis sessions requiring attention</p>
@@ -1148,7 +1274,15 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
             style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
           />
           <label htmlFor="alerts-severity-filter" className="sr-only">Filter alerts by severity</label>
-          <button ref={filterButtonRef} type="button" className="counselor-filter-button" onClick={() => setFilterOpen(true)}>
+          <button
+            ref={filterButtonRef}
+            type="button"
+            className="counselor-filter-button"
+            onClick={() => {
+              filterReturnRef.current = filterButtonRef.current;
+              setFilterOpen(true);
+            }}
+          >
             Filter{severityFilter !== 'all' ? `: ${severityFilter}` : ''}
           </button>
           <select
@@ -1189,18 +1323,26 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
       ) : null}
       <div className="alert-legend mb-4" aria-label="Alert severity legend">
         <span className="alert-legend-item">
-          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.red }} />Crisis <b>{visibleAlerts.filter((a) => a.severity === 'Crisis').length}</b></span>
+          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.red }} />Crisis <b>{openVisible.filter((a) => a.severity === 'Crisis').length}</b></span>
           <span className="alert-legend-description">Immediate response</span>
         </span>
         <span className="alert-legend-item">
-          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.high }} />High <b>{visibleAlerts.filter((a) => a.severity === 'High').length}</b></span>
+          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.high }} />High <b>{openVisible.filter((a) => a.severity === 'High').length}</b></span>
           <span className="alert-legend-description">Urgent attention</span>
         </span>
         <span className="alert-legend-item">
-          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.amber }} />Moderate <b>{visibleAlerts.filter((a) => a.severity === 'Moderate').length}</b></span>
+          <span className="alert-legend-label"><span className="alert-legend-dot" style={{ background: P.amber }} />Moderate <b>{openVisible.filter((a) => a.severity === 'Moderate').length}</b></span>
           <span className="alert-legend-description">Monitor and follow up</span>
         </span>
-        <span className="alert-legend-note">Highest risk appears first</span>
+        <span className="alert-legend-note">
+          {openVisible.length === 0
+            ? (acknowledgedVisibleCount > 0
+              ? `All clear · ${acknowledgedVisibleCount} acknowledged alert${acknowledgedVisibleCount === 1 ? '' : 's'}`
+              : 'All clear · no open alerts')
+            : (acknowledgedVisibleCount > 0
+              ? `${acknowledgedVisibleCount} acknowledged alert${acknowledgedVisibleCount === 1 ? '' : 's'}`
+              : 'Highest risk appears first')}
+        </span>
       </div>
       {showSwipeHint && alerts.length > 0 && (
         <button
@@ -1233,52 +1375,111 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
         </div>
       ) : (
         <>
-          {overdue.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full" style={{ background: P.red }} />
-                <h3 className="text-sm font-semibold" style={{ color: P.red }}>Overdue ({overdue.length})</h3>
+          <div className="alert-tabs" role="tablist" aria-label="Alert status">
+            <button
+              type="button"
+              role="tab"
+              id="alert-tab-attention"
+              aria-selected={alertTab === 'attention'}
+              aria-controls="alert-tab-panel"
+              className={`alert-tab${alertTab === 'attention' ? ' is-active' : ''}`}
+              onClick={() => selectTab('attention')}
+            >
+              <span>Needs attention</span>
+              {attention.length > 0 && <span className="alert-tab-count">{attention.length}</span>}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="alert-tab-acknowledged"
+              aria-selected={alertTab === 'acknowledged'}
+              aria-controls="alert-tab-panel"
+              className={`alert-tab${alertTab === 'acknowledged' ? ' is-active' : ''}`}
+              onClick={() => selectTab('acknowledged')}
+            >
+              <span>Acknowledged</span>
+              {acknowledged.length > 0 && <span className="alert-tab-count">{acknowledged.length}</span>}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="alert-tab-reviewed"
+              aria-selected={alertTab === 'reviewed'}
+              aria-controls="alert-tab-panel"
+              className={`alert-tab${alertTab === 'reviewed' ? ' is-active' : ''}`}
+              onClick={() => selectTab('reviewed')}
+            >
+              <span>Reviewed</span>
+              {resolved.length > 0 && <span className="alert-tab-count">{resolved.length}</span>}
+            </button>
+          </div>
+
+          <div className="alert-tab-summary">
+            <span>{filterActive && filtered.length === 0 ? 'No matching alerts' : summaryText}</span>
+            <span>Highest risk first</span>
+          </div>
+
+          <div id="alert-tab-panel" role="tabpanel" aria-labelledby={`alert-tab-${alertTab}`}>
+            {visibleAlerts.length === 0 ? (
+              <div className="alert-empty-state">
+                <div className="alert-empty-icon" aria-hidden="true"><NavIcon id="resolved" size={24} /></div>
+                <h2>No alerts yet</h2>
+                <p>Moderate, High and Crisis sessions will appear here when they need attention.</p>
+                <button type="button" className="btn ghost" onClick={onRetryAlerts}>
+                  Refresh alerts
+                </button>
               </div>
-              {overdue.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
-            </div>
-          )}
-          {pending.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full" style={{ background: P.red }} />
-                <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>Pending ({pending.length})</h3>
-              </div>
-              {pending.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
-            </div>
-          )}
-          {acknowledged.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full" style={{ background: P.accent }} />
-                <h3 className="text-sm font-semibold" style={{ color: P.textPrimary }}>Acknowledged ({acknowledged.length})</h3>
-              </div>
-              {acknowledged.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
-            </div>
-          )}
-          {resolved.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold mb-3" style={{ color: P.textMuted }}>Reviewed / Resolved ({resolved.length})</h3>
-              {resolved.map((a) => <AlertRow key={a.session_id} a={a} onViewChat={onViewChat} onUpdateStatus={onUpdateStatus} onAcknowledge={onAcknowledge} />)}
-            </div>
-          )}
-          {visibleAlerts.length === 0 && (
-            <div className="alert-empty-state">
-              <div className="alert-empty-icon" aria-hidden="true"><NavIcon id="resolved" size={24} /></div>
-              <h2>No alerts yet</h2>
-              <p>Moderate, High and Crisis sessions will appear here when they need attention.</p>
-              <button type="button" className="btn ghost" onClick={onRetryAlerts}>
-                Refresh alerts
-              </button>
-            </div>
-          )}
-          {visibleAlerts.length > 0 && filtered.length === 0 && (
-            <EmptyState icon="🔍" title="No matching alerts" sub="Try changing your search or filter criteria" />
-          )}
+            ) : filterActive && filtered.length === 0 ? (
+              <EmptyState icon="🔍" title="No matching alerts" sub="Try changing your search or filter criteria" />
+            ) : (
+              <>
+                {activeAlerts.map((a) => (
+                  <AlertRow
+                    key={a.session_id}
+                    a={a}
+                    onViewChat={onViewChat}
+                    onUpdateStatus={onUpdateStatus}
+                    onAcknowledge={onAcknowledge}
+                  />
+                ))}
+
+                {activeAlerts.length === 0 && alertTab === 'attention' && (
+                  <div className="alert-all-clear" role="status">
+                    <div className="alert-all-clear-icon" aria-hidden="true"><NavIcon id="resolved" size={22} /></div>
+                    <div className="alert-all-clear-text">
+                      <strong>No alerts need attention</strong>
+                      <p>
+                        {acknowledged.length > 0
+                          ? `${acknowledged.length} acknowledged alert${acknowledged.length === 1 ? '' : 's'} waiting to be reviewed.`
+                          : 'Everything is up to date.'}
+                      </p>
+                    </div>
+                    {acknowledged.length > 0 && (
+                      <button type="button" onClick={() => selectTab('acknowledged')}>
+                        View acknowledged
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {activeAlerts.length === 0 && alertTab === 'acknowledged' && (
+                  <EmptyState
+                    icon={<NavIcon id="resolved" size={24} />}
+                    title="No acknowledged alerts"
+                    sub="Alerts you acknowledge will stay here until they're reviewed."
+                  />
+                )}
+
+                {activeAlerts.length === 0 && alertTab === 'reviewed' && (
+                  <EmptyState
+                    icon={<NavIcon id="resolved" size={24} />}
+                    title="No reviewed alerts"
+                    sub="Reviewed alerts will appear here."
+                  />
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
       {filterOpen && createPortal(
@@ -1299,6 +1500,16 @@ function AlertsPage({ alerts, alertsLoading, alertsError, alertsLastSynced, onRe
               <button type="button" className="counselor-sheet-close" aria-label="Close filter alerts" onClick={closeFilterSheet}>
                 <NavIcon id="close" size={18} />
               </button>
+            </div>
+            <div className="counselor-filter-search">
+              <label htmlFor="alerts-sheet-search" className="sr-only">Search alerts</label>
+              <input
+                id="alerts-sheet-search"
+                type="search"
+                placeholder="Search alerts..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
             <div className="counselor-filter-options">
               {['all', 'crisis', 'high', 'moderate', 'requested'].map((value) => (
@@ -2387,10 +2598,10 @@ const typingThrottleRef = useRef(null);
 // ── Detection Page ────────────────────────────────────────────────────────────
 function DetectionPage() {
   const thresholds = [
-    { level: 'Normal', range: '< 0.46', color: P.textMuted, desc: 'GPT responds freely' },
-    { level: 'Low', range: '0.46 – 0.71', color: P.green, desc: 'Counselor protocol injected' },
+    { level: 'Normal', range: '0.00 – 0.44', color: P.textMuted, desc: 'GPT responds freely' },
+    { level: 'Low', range: '0.45 – 0.70', color: P.green, desc: 'Counselor protocol injected' },
     { level: 'Moderate', range: '0.71 – 0.76', color: P.teal, desc: 'Stronger protocol injected' },
-    { level: 'High', range: '0.76 – 0.98', color: P.amber, desc: 'Counselor alert fired' },
+    { level: 'High', range: '0.77 – 0.98', color: P.amber, desc: 'Counselor alert fired' },
     { level: 'Crisis', range: '0.99 – 1.00', color: P.red, desc: 'Immediate intervention' },
   ];
 
@@ -2709,6 +2920,7 @@ export default function CounselorDashboard() {
   // On desktop the same panel is a persistent rail, so `expanded` controls
   // its width; on mobile this controls whether it slides in from the left.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
   const [drawerMoreOpen, setDrawerMoreOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'live' | 'connecting' | 'polling' | 'offline'
   const prevPendingIdsRef = useRef(new Set());
@@ -3065,6 +3277,7 @@ export default function CounselorDashboard() {
   const openMobileNav = (trigger) => {
     lastTriggerRef.current = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
     setDrawerMoreOpen(DRAWER_MORE_IDS.includes(activePage));
+    setMoreSheetOpen(false);
     setMobileNavOpen(true);
   };
 
@@ -3583,13 +3796,12 @@ export default function CounselorDashboard() {
 
           {/* Connection status badge */}
           <div className="flex items-center gap-2">
-            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button" onClick={openHotlines} aria-label="Open crisis hotlines">
-              <NavIcon id="hotline" size={18} />
-            </button>
             <span className={`badge ${connectionStatus === 'live' ? '' : connectionStatus === 'offline' ? 'risk' : 'amb'}`}>
               <i aria-hidden="true" />{connection.label}
             </span>
-            {lastUpdated && <span className="counselor-mobile-updated">Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button" onClick={openHotlines} aria-label="Open crisis hotlines">
+              <NavIcon id="hotline" size={18} />
+            </button>
           </div>
         </div>
 
@@ -3640,7 +3852,7 @@ export default function CounselorDashboard() {
             )}
             {activePage === 'detection' && <DetectionPage />}
             {activePage === 'reports'   && <ReportsPage connection={connection} lastUpdated={lastUpdated} />}
-            {activePage === 'resolved'  && <ResolvedCasesPage />}
+            {activePage === 'resolved'  && <ResolvedCasesPage onBackToMore={() => setMoreSheetOpen(true)} />}
             <p className="safety-note" role="note">A zero count does not confirm safety. Follow your campus emergency procedure.</p>
           </div>
         </main>
@@ -3655,6 +3867,8 @@ export default function CounselorDashboard() {
         welfareCount={welfare.length}
         sessionsCount={sessions.length}
         drawerOpen={mobileNavOpen}
+        moreMenuOpen={moreSheetOpen}
+        setMoreMenuOpen={setMoreSheetOpen}
         theme={dashboardTheme}
       />
 
@@ -3688,10 +3902,11 @@ export default function CounselorDashboard() {
 }
 
 // ── Resolved Cases Page ───────────────────────────────────────────────────────
-function ResolvedCasesPage() {
+function ResolvedCasesPage({ onBackToMore }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+  const [openCaseMenu, setOpenCaseMenu] = useState(null);
   const [deleteCaseTarget, setDeleteCaseTarget] = useState(null);
   const [casesError, setCasesError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -3783,52 +3998,64 @@ function ResolvedCasesPage() {
   });
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+    <div className="counselor-mobile-page resolved-cases-page">
+      {onBackToMore && (
+        <button type="button" className="resolved-back" onClick={onBackToMore}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          Back to More
+        </button>
+      )}
+
+      <div className="resolved-page-head">
+        <div className="resolved-page-heading">
           <h1 className="text-2xl font-bold" style={{ color: P.textPrimary }}>Resolved Cases</h1>
           <p className="text-sm mt-0.5" style={{ color: P.textSecondary }}>Closed sessions with case notes and transcripts</p>
         </div>
 
-        {/* Search & Filter Bar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="resolved-search-input" className="sr-only">Search cases or notes</label>
-          <input
-            id="resolved-search-input"
-            name="resolved-search-input"
-            aria-label="Search cases or notes"
-            type="text"
-            placeholder="Search cases or notes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-1.5 text-xs rounded-lg border focus:outline-none w-44 sm:w-56"
-            style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
-          />
-          <label htmlFor="resolved-outcome-filter" className="sr-only">Filter cases by outcome</label>
-          <select
-            id="resolved-outcome-filter"
-            name="resolved-outcome-filter"
-            aria-label="Filter cases by outcome"
-            value={outcomeFilter}
-            onChange={(e) => setOutcomeFilter(e.target.value)}
-            className="resolved-outcome-native hidden px-2.5 py-1.5 text-xs rounded-lg border focus:outline-none sm:block"
-            style={{ background: P.surface, borderColor: P.border, color: P.textPrimary }}
-          >
-            <option value="all">All Outcomes</option>
-            <option value="resolved">Resolved</option>
-            <option value="referred">Referred</option>
-            <option value="follow_up">Follow-up</option>
-            <option value="false_alarm">False alarm</option>
-            <option value="ongoing">Ongoing</option>
-          </select>
-          <div className="resolved-outcome-mobile relative sm:hidden">
-            <button type="button" className="mobile-select-button" onClick={() => setOutcomeMenuOpen((open) => !open)} aria-expanded={outcomeMenuOpen} aria-haspopup="listbox">
-              {outcomeFilter === 'all' ? 'All Outcomes' : OUTCOME_LABELS[outcomeFilter]} <span aria-hidden="true">⌄</span>
+        <div className="resolved-controls">
+          <label className="resolved-search" htmlFor="resolved-search-input">
+            <span className="sr-only">Search cases or notes</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="10.8" cy="10.8" r="6.8" />
+              <path d="m16 16 5 5" />
+            </svg>
+            <input
+              id="resolved-search-input"
+              name="resolved-search-input"
+              aria-label="Search cases or notes"
+              type="text"
+              placeholder="Search cases or notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </label>
+
+          <div className="resolved-outcome">
+            <button
+              type="button"
+              className="resolved-outcome-button"
+              onClick={() => setOutcomeMenuOpen((open) => !open)}
+              aria-expanded={outcomeMenuOpen}
+              aria-haspopup="listbox"
+            >
+              <span>{outcomeFilter === 'all' ? 'All outcomes' : OUTCOME_LABELS[outcomeFilter]}</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
             </button>
             {outcomeMenuOpen && (
-              <div className="mobile-select-menu" role="listbox" aria-label="Filter cases by outcome">
-                {[['all', 'All Outcomes'], ...Object.entries(OUTCOME_LABELS)].map(([value, label]) => (
-                  <button type="button" role="option" aria-selected={outcomeFilter === value} className={outcomeFilter === value ? 'selected' : ''} key={value} onClick={() => { setOutcomeFilter(value); setOutcomeMenuOpen(false); }}>
+              <div className="resolved-outcome-menu" role="listbox" aria-label="Filter cases by outcome">
+                {[['all', 'All outcomes'], ...Object.entries(OUTCOME_LABELS)].map(([value, label]) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={outcomeFilter === value}
+                    className={outcomeFilter === value ? 'selected' : ''}
+                    key={value}
+                    onClick={() => { setOutcomeFilter(value); setOutcomeMenuOpen(false); }}
+                  >
                     {label}<span>{outcomeFilter === value ? '✓' : ''}</span>
                   </button>
                 ))}
@@ -3851,76 +4078,137 @@ function ResolvedCasesPage() {
       ) : filteredCases.length === 0 ? (
         <EmptyState icon="🔍" title="No matching cases" sub="Try changing your search or outcome filter" />
       ) : (
-        <div className="space-y-3">
+        <div className="resolved-cases-list">
           {filteredCases.map((c, i) => {
-            const sc = severityColor(c.severity);
             const isOpen = expanded === i;
             const oc = OUTCOME_COLORS[c.note?.outcome];
+            const severityChip =
+              c.severity === 'Crisis' ? { bg: P.redSoft, color: P.red } :
+              c.severity === 'High' ? { bg: P.highSoft, color: P.high } :
+              c.severity === 'Moderate' ? { bg: P.amberSoft, color: P.amber } :
+              c.severity === 'Requested' ? { bg: P.accentSoft, color: P.accent } :
+              { bg: P.panel, color: P.textSecondary };
             return (
-              <Card key={i} className="overflow-hidden">
-                {/* Case header */}
-                <div
-                  className="px-4 py-3.5 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 cursor-pointer transition-colors duration-200"
-                  onClick={() => setExpanded(isOpen ? null : i)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="text-sm font-semibold truncate" style={{ color: P.textPrimary }}>Resolved session</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium text-white flex-shrink-0" style={{ background: sc.hex }}>{c.severity}</span>
-                      {c.note?.outcome && (
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: oc?.bg, color: oc?.color }}>
-                          {OUTCOME_LABELS[c.note.outcome]}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-xs" style={{ color: P.textMuted }}>
-                      <span>•</span>
-                      <span>{formatRelative(c.timestamp)}</span>
-                      <span>•</span>
-                      <span>{c.transcript?.length || 0} messages</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0" style={{ borderColor: P.panel }}>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          downloadSessionPdf(c.session_id);
-                        }}
-                        className="text-xs px-2.5 py-1 rounded-lg transition-colors duration-200"
-                        style={{ background: P.panel, color: P.textSecondary, border: `1px solid ${P.border}` }}
-                      >
-                        Export PDF
-                      </button>
-                      <button
-                        onClick={(e) => handleDelete(c.session_id, e)}
-                        className="text-xs px-2.5 py-1 rounded-lg transition-colors duration-200"
-                        style={{ background: P.redSoft, color: P.red, border: `1px solid ${P.redBorder}` }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-
-                    <span className="text-sm ml-2" style={{ color: P.textMuted }}>{isOpen ? '▲' : '▼'}</span>
+              <article
+                key={i}
+                className={`resolved-case-card${isOpen ? ' is-open' : ''}`}
+                onClick={() => setExpanded(isOpen ? null : i)}
+              >
+                <div className="resolved-case-head">
+                  <h2>Resolved session</h2>
+                  <div className="resolved-case-menu-wrap">
+                    <button
+                      type="button"
+                      className="resolved-case-more"
+                      aria-label="Case actions"
+                      aria-expanded={openCaseMenu === i}
+                      aria-haspopup="menu"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenCaseMenu(openCaseMenu === i ? null : i);
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <circle cx="5" cy="12" r="1.6" />
+                        <circle cx="12" cy="12" r="1.6" />
+                        <circle cx="19" cy="12" r="1.6" />
+                      </svg>
+                    </button>
+                    {openCaseMenu === i && (
+                      <>
+                        <button
+                          type="button"
+                          className="resolved-menu-backdrop"
+                          aria-label="Close case actions"
+                          onClick={(e) => { e.stopPropagation(); setOpenCaseMenu(null); }}
+                        />
+                        <div className="resolved-case-menu" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenCaseMenu(null);
+                              downloadSessionPdf(c.session_id);
+                            }}
+                          >
+                            Export PDF
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="is-danger"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenCaseMenu(null);
+                              handleDelete(c.session_id, e);
+                            }}
+                          >
+                            Delete case
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Expanded content */}
+                <div className="resolved-case-badges">
+                  <span className="resolved-chip" style={{ background: severityChip.bg, color: severityChip.color }}>
+                    {c.severity}
+                  </span>
+                  {c.note?.outcome && (
+                    <span className="resolved-chip" style={{ background: oc?.bg, color: oc?.color }}>
+                      {OUTCOME_LABELS[c.note.outcome]}
+                    </span>
+                  )}
+                </div>
+
+                <p className="resolved-case-meta">
+                  <span>{formatRelative(c.timestamp)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{c.transcript?.length || 0} messages</span>
+                </p>
+
+                <div className="resolved-case-actions">
+                  <button
+                    type="button"
+                    className="resolved-export"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadSessionPdf(c.session_id);
+                    }}
+                  >
+                    Export PDF
+                  </button>
+                  <button
+                    type="button"
+                    className="resolved-view-details"
+                    aria-expanded={isOpen}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpanded(isOpen ? null : i);
+                    }}
+                  >
+                    View details
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6" />
+                    </svg>
+                  </button>
+                </div>
+
                 {isOpen && (
-                  <div style={{ borderTop: `1px solid ${P.border}` }}>
-                    {/* Case note */}
+                  <div className="resolved-details">
                     {c.note && (
-                      <div className="px-5 py-4" style={{ borderBottom: `1px solid ${P.panel}` }}>
-                        <p className="text-xs font-semibold mb-1" style={{ color: P.textPrimary }}>Case Note</p>
-                        <p className="text-xs leading-relaxed" style={{ color: P.textSecondary }}>{c.note.note || '—'}</p>
+                      <div className="resolved-note">
+                        <p className="resolved-details-label">Case note</p>
+                        <p className="resolved-note-text">{c.note.note || '—'}</p>
                       </div>
                     )}
 
-                    {/* Transcript */}
-                    <div className="px-5 py-4 max-h-80 overflow-y-auto space-y-2" style={{ background: P.bg }}>
-                      <p className="text-xs font-semibold mb-2" style={{ color: P.textPrimary }}>Transcript</p>
+                    <div className="resolved-transcript">
+                      <p className="resolved-details-label">Transcript</p>
                       {c.transcript?.length === 0 ? (
-                        <p className="text-xs" style={{ color: P.textMuted }}>No messages recorded</p>
+                        <p className="resolved-transcript-empty">No messages recorded</p>
                       ) : (
                         c.transcript?.map((m, j) => (
                           <div key={j} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -3945,7 +4233,7 @@ function ResolvedCasesPage() {
                     </div>
                   </div>
                 )}
-              </Card>
+              </article>
             );
           })}
         </div>

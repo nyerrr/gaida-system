@@ -3,7 +3,10 @@ import logging
 import re
 from app.services.session_manager import get_session, start_session, record_interaction
 from app.services.virtual_agent import (
+    CRISIS_CONFIDENCE,
     CRISIS_RESOURCES,
+    SEVERITY_HIGH,
+    SEVERITY_LOW,
     detect_intent_and_level,
     should_semantically_review,
     _build_result,
@@ -294,10 +297,10 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
         k: v for k, v in (loss_result.get("flags") or {}).items() if v
     }
 
-    if vent_mode and (detected_intent == "suicidal" or raw_confidence >= 0.99):
+    if vent_mode and (detected_intent == "suicidal" or raw_confidence >= CRISIS_CONFIDENCE):
         logger.warning("VENT MODE OVERRIDE: crisis detected in vent session %s", session_id)
 
-    is_venting = vent_mode and raw_confidence < 0.99
+    is_venting = vent_mode and raw_confidence < CRISIS_CONFIDENCE
 
     if is_venting:
         # VENT MODE: track analysis silently, respond with listening prompt only.
@@ -336,8 +339,8 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     # --- Normal path: crisis bypass / running confidence / priority ---
     intent = detected_intent
 
-    if raw_confidence >= 0.99:
-        running_confidence = 0.99
+    if raw_confidence >= CRISIS_CONFIDENCE:
+        running_confidence = CRISIS_CONFIDENCE
         if "meta" not in session:
             session["meta"] = {}
         session["meta"]["running_confidence"] = running_confidence
@@ -445,10 +448,10 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
         # creates an alert, and later turns still use the history blend.
         if (
             is_first_turn
-            and raw_confidence >= 0.46
+            and raw_confidence >= SEVERITY_LOW
             and _FIRST_PERSON_RE.search(user_message)
         ):
-            running_confidence = max(running_confidence, 0.46)
+            running_confidence = max(running_confidence, SEVERITY_LOW)
 
         # Grief sits just below suicidal and just above anxiety. Grief is the
         # situation; anxiety, stress and sadness are usually what it feels like
@@ -514,10 +517,10 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
     # De-escalation clearance: NEVER silently drop a High/Crisis session to
     # Low or Normal. Hold the last known high level and ask the student to
     # confirm they are safe before any de-escalation is allowed.
-    holding_clearance = post_crisis and not safety_confirm and running_confidence < 0.76
+    holding_clearance = post_crisis and not safety_confirm and running_confidence < SEVERITY_HIGH
     if holding_clearance:
         prev_sev = session.get("meta", {}).get("peak_severity", "High")
-        hold_confidence = 0.99 if prev_sev == "Crisis" else 0.80
+        hold_confidence = CRISIS_CONFIDENCE if prev_sev == "Crisis" else 0.80
         final_detection = _build_result(intent, hold_confidence)
         final_detection["counselor_protocol"] = CLEARANCE_PROTOCOL
         final_detection["crisis_resources"] = None
@@ -807,7 +810,7 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
 
     # --- Step 6: If counselor is active — skip GPT, still return full analysis ---
     if turn["counselor_active"]:
-        escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
+        escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= CRISIS_CONFIDENCE
         return _finalize_turn(turn, user_message, "", "counselor", escalate, fire_alert=False)
 
     # --- Step 6b: Crisis hold — fixed message once, then silence ---
@@ -852,7 +855,7 @@ def analyze_intent(user_message: str, session_id: str | None = None, user_id: st
         )
         method = "fallback"
 
-    escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
+    escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= CRISIS_CONFIDENCE
 
     return _finalize_turn(turn, user_message, response_text, method, escalate)
 
@@ -869,7 +872,7 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
 
     # --- Step 6: Counselor active — no GPT, immediately done ---
     if turn["counselor_active"]:
-        escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
+        escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= CRISIS_CONFIDENCE
         yield {"type": "done", "result": _finalize_turn(turn, user_message, "", "counselor", escalate, fire_alert=False)}
         return
 
@@ -928,7 +931,7 @@ def stream_analyze_intent(user_message: str, session_id: str | None = None, user
         yield {"type": "delta", "text": response_text}
 
     method = "gpt" if got_tokens else "fallback"
-    escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= 0.99
+    escalate = turn["severity"] in ("Moderate", "High", "Crisis") or turn["running_confidence"] >= CRISIS_CONFIDENCE
 
     result = _finalize_turn(turn, user_message, response_text, method, escalate)
     yield {"type": "done", "result": result}
