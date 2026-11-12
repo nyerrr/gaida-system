@@ -1055,6 +1055,16 @@ _CRISIS_REQUIRED_LINES = (
 _NON_PHILIPPINE_CRISIS_REFERENCE_RE = re.compile(
     r"\b988\b|Suicide\s*(?:&|and)\s*Crisis\s*Lifeline", re.IGNORECASE
 )
+
+# A crisis reply ends on the contact block, not on a sentence. The
+# closing-question guard used to see that block as an unfinished reply and add a
+# second question after the hotlines. Split the block off first, decide on the
+# body, then put the contacts back.
+_RESOURCE_APPENDIX_RE = re.compile(
+    r"\n\s*(?:these are available right now|please reach out for immediate help)"
+    r"\s*:\s*\n|\n(?=\s*[-*]?\s*National Center for Mental Health\b)",
+    re.IGNORECASE,
+)
 _UE_CONTACT_MARKERS = (
     "ue manila",
     "internal local number",
@@ -1166,16 +1176,25 @@ def ensure_closing_question(text: str, anxiety_level: str | None,
         return text
 
     stripped = text.rstrip()
+
+    resource_suffix = ""
+    resource_match = _RESOURCE_APPENDIX_RE.search(stripped)
+    if resource_match:
+        suffix = stripped[resource_match.start():].strip()
+        resource_suffix = f"\n\n{suffix}"
+        stripped = stripped[:resource_match.start()].rstrip()
+
     sentences = [s.strip() for s in _SENTENCE_SPLIT_RE.split(stripped) if s.strip()]
     while sentences and _is_trailing_fragment(sentences[-1]):
         sentences.pop()
 
     body = " ".join(sentences).strip()
     if not body:
-        return stripped
+        return text.rstrip()
     if _is_real_question(body):
-        return body
-    return f"{body} {_closing_question_for(level, user_message, intent, text_arg=body)}"
+        return f"{body}{resource_suffix}" if resource_suffix else body
+    question = _closing_question_for(level, user_message, intent, text_arg=body)
+    return f"{body} {question}{resource_suffix}"
 
 
 # ─────────────────────────────────────────────────────────────────

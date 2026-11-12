@@ -49,9 +49,10 @@ URGENT_PHYSICAL_KEYWORDS = [
     "shaking uncontrollably", "trembling uncontrollably", "nanginginig na grabe",
     "hyperventilating", "hyperventilation",
     "panic attack", "panicattack",
-    # Active panic itself, without the word "attack". Panic is not a physical
-    # emergency like chest pain, but it does need at least the Moderate band
-    # (a silent listing, not an alert), which is what this path guarantees.
+    # Active panic itself, without the word "attack". Panic and acute
+    # breathlessness are alert-band presentations for this app: the student
+    # needs a counselor check-in and the local contacts, not a silent Moderate
+    # listing. The floor this list feeds is the High band.
     "panicking", "panicked", "panicky", "in a panic",
     "cant control my breathing", "cant control breathing",
     "palpitations", "heart racing",
@@ -75,6 +76,15 @@ def _urgent_normalize(text: str) -> str:
 
 
 _URGENT_NORMALIZED = [_urgent_normalize(kw) for kw in URGENT_PHYSICAL_KEYWORDS]
+
+# A racing heart can be joy, not panic. When the detector itself reads the
+# message as Normal and the student names a positive cause, the urgent phrase
+# alone must not manufacture an alert.
+_POSITIVE_URGENT_CONTEXT_RE = re.compile(
+    r"\b(excited|exciting|happy|masaya|saya|kinikilig|kilig|proud|"
+    r"celebrating)\b",
+    re.IGNORECASE,
+)
 
 # "my"/"ko" are deliberately absent: they also appear in reports about someone
 # else ("my friend is stressed"), and the first-turn floor is only meant to
@@ -164,9 +174,22 @@ _CALMING_NEGATION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "I'm fine, just tired" / "okay lang, pagod lang" is a *dismissal*, not a
+# de-escalation. The bare "fine"/"okay" word used to release the post-crisis
+# hold and end grief framing, so a student who minimised after disclosing a
+# loss was moved back to a generic check-in. A concurrent distress word means
+# the calm reading is not safe to act on.
+_CALMING_MASKED_DISTRESS_RE = re.compile(
+    r"\b(?:tired|pagod|exhausted|drained|sleepy|antok|numb|empty|sad|"
+    r"lonely|awful|terrible|miserable|hurting|masakit)\b",
+    re.IGNORECASE,
+)
+
 
 def _detect_calming(text: str) -> bool:
     text = text or ""
+    if _CALMING_MASKED_DISTRESS_RE.search(text):
+        return False
     return bool(_CALMING_RE.search(text) and not _CALMING_NEGATION_RE.search(text))
 
 
@@ -398,7 +421,20 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
 
             if _detect_urgent(user_message):
                 running_confidence = (previous_confidence * 0.4) + (boosted_raw * 0.6)
-                running_confidence = max(running_confidence, 0.71)
+                # Acute breathlessness, chest tightness and panic are the High
+                # band. The old 0.71 floor left a first-turn
+                # "i cant breathe, my chest is tight" at Moderate even though
+                # the reply was already carrying crisis contacts — the
+                # dashboard and the message disagreed. High is the honest
+                # label: it alerts the counselor and attaches the contacts.
+                # Exception: a detector-Normal message that names a positive
+                # cause ("my heart is racing because I'm excited") is not
+                # escalated by the phrase alone.
+                positive_context = bool(
+                    _POSITIVE_URGENT_CONTEXT_RE.search(user_message)
+                )
+                if not (positive_context and raw_confidence < SEVERITY_LOW):
+                    running_confidence = max(running_confidence, SEVERITY_HIGH)
             else:
                 running_confidence = (previous_confidence * HISTORY_WEIGHT) + (boosted_raw * CURRENT_WEIGHT)
 
@@ -552,8 +588,20 @@ def _prepare_turn(user_message: str, session_id: str | None = None, user_id: str
             "High": "high",
         }[severity]
         counselor_protocol = final_detection.get("counselor_protocol")
-    if severity == "High" and not crisis_resources:
-        crisis_resources = CRISIS_RESOURCES
+
+    # Resources follow the severity that was actually *reached*, not the raw
+    # reading. The raw detector can fire High on an academic-stress message
+    # ("capstone defense next week, can't sleep, all the requirements") and the
+    # running-confidence blend then settles at Low. Attaching hotlines from the
+    # raw reading put a crisis block and a second closing question into an
+    # ordinary stress reply. A clearance hold deliberately asks the safety
+    # question instead, so it never carries the list.
+    if holding_clearance:
+        crisis_resources = None
+    else:
+        crisis_resources = (
+            CRISIS_RESOURCES if severity in ("High", "Crisis") else None
+        )
 
     # --- Step 6: Is a human counselor active? ---
     counselor_active = bool(session.get("meta", {}).get("counselor_active"))

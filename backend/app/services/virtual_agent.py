@@ -14,6 +14,7 @@ from app.services.crisis_guards import (
     has_current_first_person_self_harm_intent,
     has_immediate_danger,
     has_immediate_external_threat,
+    has_loss_or_despair_context,
     has_venting_context,
     is_academic_setback_without_distress,
     is_informational_self_harm_context,
@@ -93,6 +94,12 @@ COUNSELOR_PROTOCOLS = {
       Never state it as fact, and do not argue them out of it either.
     - Where there is a second pressure (thesis, exams), shrink it to one
       concrete next step instead of adding to the pile.
+    - Do NOT offer a list of coping tips or self-care suggestions ("take a
+      walk, listen to a song, stretch"). If they did not ask for advice, stay
+      with what they said and ask one question instead.
+    - If they minimise after disclosing ("I'm fine, just tired"), do not treat
+      that as the loss being resolved. Stay with the loss and leave room for
+      the part that is not fine.
     - It is appropriate — once, gently — to mention that a real counselor is
       available for this kind of loss. Frame it as an option, never a handoff.
     - End with ONE real question that invites them to keep going.
@@ -812,6 +819,34 @@ def _is_panic_disclosure(text: str) -> bool:
     return bool(PANIC_DISCLOSURE_RE.search(text)) and bool(_PANIC_SELF_RE.search(text))
 
 
+def _cap_academic_venting(intent: str, confidence: float, text: str) -> float:
+    """Keep school/work pressure out of the alert band.
+
+    The classifier reads "capstone defense next week, can't sleep, all the
+    requirements" as anxiety at 0.814 — High. That is a sincere stress
+    disclosure, not evidence that the student needs a crisis page and a hotline
+    list. The cap only touches the *top* of the scale: anything already at or
+    below Moderate is returned untouched, so a genuine escalation is not
+    diluted. Panic/breathing distress, immediate danger, and any loss or despair
+    context all lift the exemption, because those are the cases where academic
+    words were incidental. Explicit self-harm language never reaches here — the
+    crisis hard path and the suicidal ML vote are handled before this point.
+    """
+    if confidence < SEVERITY_HIGH:
+        return confidence
+    if intent not in ("anxiety", "stress", "academic"):
+        return confidence
+    if not has_venting_context(text):
+        return confidence
+    if _is_panic_disclosure(text):
+        return confidence
+    if has_immediate_danger(text):
+        return confidence
+    if has_loss_or_despair_context(text) or detect_loss(text).get("is_loss"):
+        return confidence
+    return SEVERITY_MODERATE
+
+
 def _context_override_for_suicidal(text: str):
     """When ML flags suicidal language but no explicit self-harm keyword matched
     (the rule hard-path already caught those), decide whether context actually
@@ -1152,7 +1187,11 @@ def detect_intent_and_level(text: str) -> dict:
                         _rule_conf = round(_rule_conf, 3)
                     return _build_result(
                         _rule_verdict["intent"],
-                        round(min(0.98, 0.3 + 0.7 * _rule_conf), 3),
+                        _cap_academic_venting(
+                            _rule_verdict["intent"],
+                            round(min(0.98, 0.3 + 0.7 * _rule_conf), 3),
+                            text,
+                        ),
                     )
             except Exception:
                 pass
@@ -1234,7 +1273,9 @@ def detect_intent_and_level(text: str) -> dict:
         ):
             scaled_confidence = CRISIS_CONFIDENCE
 
-        return _build_result(ml_intent, scaled_confidence)
+        return _build_result(
+            ml_intent, _cap_academic_venting(ml_intent, scaled_confidence, text)
+        )
 
     except Exception:
         pass
@@ -1277,7 +1318,10 @@ def detect_intent_and_level(text: str) -> dict:
         scaled_confidence = 0.3 + 0.7 * rule_confidence
         scaled_confidence = round(min(0.98, scaled_confidence), 3)
 
-        return _build_result(rule_intent, scaled_confidence)
+        return _build_result(
+            rule_intent,
+            _cap_academic_venting(rule_intent, scaled_confidence, text),
+        )
 
     except Exception:
         pass

@@ -24,7 +24,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services import gpt_agent
-from app.services.intent_router import _detect_calming
+from app.services.intent_router import _detect_calming, _prepare_turn
 from app.services.virtual_agent import CRISIS_RESOURCES, _build_result
 from app.services.gpt_agent import (
     TOKEN_LIMITS,
@@ -1047,6 +1047,125 @@ def test_a_copied_exemplar_is_detected():
             if "→" not in example:
                 continue
             assert gpt_agent._is_exemplar_echo(example.split("→", 1)[1], level), example
+
+
+# ─────────────────────────────────────────────────────────────────
+# Demo transcript regressions
+# ─────────────────────────────────────────────────────────────────
+# The four messages below are the verbatim transcript that exposed the bugs:
+# a breakup written from the speaker's side skipped grief, an academic-stress
+# message carried crisis hotlines on a Low turn, and "I'm fine just tired"
+# released the grief framing.
+
+BREAKUP_TRANSCRIPT_MESSAGE = (
+    "also, my girlftiend and i broke up three weeks ago. I dont know how to "
+    "cope. Shes in the same org so i her everywhere"
+)
+
+CAPSTONE_TRANSCRIPT_MESSAGE = (
+    "i have my capstone proposal defense next week and i cant sleep. Every "
+    "time i close my eyes i just think about all the requirements"
+)
+
+
+@pytest.mark.parametrize("message", [
+    "my girlfriend and i broke up three weeks ago",
+    "my girlftiend and i broke up three weeks ago",
+    "I broke up with my partner and I don't know how to cope",
+    "we broke up three weeks ago",
+    "we are done",
+])
+def test_breakup_phrasings_are_detected_as_loss(message):
+    assert detect_loss(message)["is_loss"] is True, message
+    assert detect_intent_and_level(message)["intent"] == "loss", message
+
+
+def test_transcript_breakup_enters_the_grief_flow():
+    result = detect_intent_and_level(BREAKUP_TRANSCRIPT_MESSAGE)
+    assert result["intent"] == "loss"
+    assert result["severity"] == "Low"
+    assert result["crisis_resources"] is None
+
+
+def test_capstone_stress_is_not_high_and_never_carries_hotlines():
+    result = detect_intent_and_level(CAPSTONE_TRANSCRIPT_MESSAGE)
+    assert result["severity"] != "High"
+    assert result["crisis_resources"] is None
+
+    turn = _prepare_turn(CAPSTONE_TRANSCRIPT_MESSAGE, "test-capstone-resources-1")
+    assert turn["severity"] == "Low"
+    assert not turn["crisis_resources"]
+
+
+@pytest.mark.parametrize("message", [
+    "im fine just tired",
+    "okay lang, pagod lang",
+    "i'm okay but still exhausted",
+])
+def test_minimising_after_a_loss_is_not_calming(message):
+    # "Fine" plus a distress word is a dismissal, not a de-escalation.
+    assert _detect_calming(message) is False, message
+
+
+def test_grief_context_survives_a_minimising_turn():
+    session_id = "test-loss-minimising-1"
+    _prepare_turn(
+        "we broke up three weeks ago and i dont know how to cope", session_id
+    )
+    turn = _prepare_turn("im fine just tired", session_id)
+    assert turn["intent"] == "loss"
+    assert turn["session"]["meta"].get("loss_context")
+
+
+def test_a_genuine_final_high_still_attaches_resources():
+    session_id = "test-high-resources-1"
+    _prepare_turn("i have chest pain and my heart is racing", session_id)
+    turn = _prepare_turn("i have chest pain and my heart is racing", session_id)
+    assert turn["severity"] == "High"
+    assert turn["crisis_resources"] == CRISIS_RESOURCES
+
+
+def test_acute_breathlessness_is_high_and_gets_resources():
+    # The transcript message that was labelled Moderate while the reply carried
+    # the contacts: "i cant breathe, my chest is tight. I feel like something
+    # bad is going to happen".
+    message = (
+        "i cant breathe, my chest is tight. I feel like something bad is "
+        "going to happen"
+    )
+    assert detect_intent_and_level(message)["severity"] in ("High", "Crisis")
+
+    turn = _prepare_turn(message, "test-breathlessness-high-1")
+    assert turn["severity"] in ("High", "Crisis")
+    assert turn["crisis_resources"] == CRISIS_RESOURCES
+
+
+def test_resource_block_does_not_earn_a_second_closing_question():
+    # A High reply ends on the contact list. The guard must judge the body, not
+    # the list, or it adds a second question after the hotlines.
+    reply = (
+        "That tightness sounds frightening. How intense is it from 1 to 10 "
+        "right now?\n\nThese are available right now:\n"
+        "- National Center for Mental Health (NCMH) Crisis Hotline: 1553 "
+        "(available 24/7)\n"
+        "- HOPELINE Philippines: (02) 8804-4673 / 0917-558-4673"
+    )
+    repaired = ensure_closing_question(reply, "high", "i cant breathe")
+    assert repaired.count("?") == 1
+    assert "These are available right now" in repaired
+    assert "HOPELINE Philippines" in repaired
+
+
+def test_resource_block_gets_the_question_before_the_contacts():
+    reply = (
+        "Your body is reacting to a lot right now.\n\n"
+        "These are available right now:\n"
+        "- National Center for Mental Health (NCMH) Crisis Hotline: 1553 "
+        "(available 24/7)"
+    )
+    repaired = ensure_closing_question(reply, "high", "i cant breathe")
+    assert repaired.count("?") == 1
+    assert repaired.index("?") < repaired.index("These are available right now")
 
 
 def test_every_guarded_flow_has_a_detectable_copy():

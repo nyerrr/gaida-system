@@ -16,7 +16,9 @@ TEST_CASES = [
     ("Okay check in",             "I'm feeling okay today",                                     None,     False),
     ("Study frustration",         "ayoko na mag aral",                                          None,     False),
     ("General tiredness",         "pagod na ako",                                               None,     False),
-    ("Breakup alone",             "I broke up with my partner",                                 None,     False),
+    # A disclosed breakup is grief, not a neutral check-in. It lands at the low
+    # band (loss alone never pages) but must enter the grief response flow.
+    ("Breakup alone",             "I broke up with my partner",                                 "low",    False),
     ("Mild sad",                  "I feel a bit sad today",                                     None,     False),
     ("Tired of studying",         "I'm tired of studying",                                      None,     False),
     ("Bored",                     "wala lang bored lang ako",                                   None,     False),

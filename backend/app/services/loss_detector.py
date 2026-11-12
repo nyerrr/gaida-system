@@ -65,6 +65,18 @@ BREAKUP_PATTERNS = [
     r"\bwe used to be together\b", r"\bnot together anymore\b",
     r"\bno longer together\b", r"\bbroke up days ago\b",
     r"\blast (week|month|year)\b", r"\ba (week|month|year) ago\b",
+    # A possessive breakup read from the speaker's side: "my girlfriend and I
+    # broke up", "I broke up with my partner". Both were reported verbatim and
+    # previously only "we broke up" was recognised, so the message fell through
+    # to the generic anxiety flow and got a problem-solving reply.
+    r"\bmy (?:\w+ ){0,2}and (?:i|me) (?:just |already )?broke up\b",
+    r"\bmy (?:girlfriend|boyfriend|partner|fianc[ée]e?|wife|husband|jowa|"
+    r"kasintahan) (?:just )?broke up with me\b",
+    r"\bi (?:just |already )?broke up with (?:my|him|her|them|someone|"
+    r"this person)\b",
+    r"\bwe (?:are|were) (?:done|finished|over)\b",
+    r"\bmy (?:girlfriend|boyfriend|partner|jowa) (?:and i|and me) (?:are )?"
+    r"(?:done|over)\b",
     # Filipino / Taglish
     r"\bnaghihati\s+na\s+kami\b", r"\bhiwalay\s+na\s+kami\b",
     r"\bnaghihati\s+kami\b", r"\btapos\s+na\s+kami\b",
@@ -257,6 +269,7 @@ _RE_SELF = _compile(SELF_MARKERS)
 _RE_SELF_ATTACHMENT = _compile([
     r"\bstill (want|love|miss|care)\b",
     r"\bi (still|can'?t|did)\b",
+    r"\bi (?:just |already )?broke up\b",
     r"\b(gusto|ibig|miss) ko (pa|pa rin|na)\b",
     r"\bhindi ko (pa|m)a[a]?w?a?y\b",
 ])
