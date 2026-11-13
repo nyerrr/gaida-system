@@ -3467,7 +3467,7 @@ export default function CounselorDashboard() {
 
         {/* Desktop sidebar profile (layout unchanged). */}
         <div
-          className="hidden flex-shrink-0 px-3 py-4 lg:block"
+          className="counselor-drawer-profile hidden flex-shrink-0 px-3 py-4 lg:block"
           style={{ borderBottom: `1px solid ${P.navyLight}` }}
         >
           <div className={`flex items-start gap-3 ${panelWide ? '' : 'justify-center'}`}>
@@ -3531,7 +3531,7 @@ export default function CounselorDashboard() {
 
         {/* ── Zone 2: navigation (its own scroll area) ──────────────────── */}
         <div
-          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 pl-2 pr-3 overscroll-contain no-scrollbar"
+          className="counselor-drawer-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 pl-2 pr-3 overscroll-contain no-scrollbar"
         >
           {/* Phone drawer navigation: the same four primary destinations as the
               bottom bar, plus the remaining views behind "More". */}
@@ -3658,7 +3658,7 @@ export default function CounselorDashboard() {
 
         {/* ── Zone 3a: desktop pinned utilities (unchanged) ────────────── */}
         <div
-          className="hidden flex-shrink-0 border-t px-2 py-2 lg:block"
+          className="counselor-drawer-footer hidden flex-shrink-0 border-t px-2 py-2 lg:block"
           style={{
             borderColor: P.navyLight,
             paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',

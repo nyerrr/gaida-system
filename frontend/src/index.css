@@ -3127,3 +3127,78 @@ body.filter-sheet-open .counselor-bottom-sheet {
   outline: 2px solid var(--red);
   outline-offset: 2px;
 }
+
+/* Collapsed desktop rail: every row gets the full 48px column, centred on the
+   avatar. The old 8px/12px inner padding squeezed rows to 36px, so the active
+   highlight was a narrow slab and the hotline button sat 4px off-grid. */
+@media (min-width: 1024px) {
+  .side:not(.side-wide) > .counselor-drawer-scroll,
+  .side:not(.side-wide) > .counselor-drawer-footer {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+  }
+
+  /* Base .nav uses space-between, which overrides the row's justify-center
+     utility and pins the icon to the left edge of a collapsed row. */
+  .side:not(.side-wide) .nav,
+  .side:not(.side-wide) .out {
+    justify-content: center;
+  }
+
+  /* Nine icon rows plus the pinned utilities do not fit a short window, and
+     `no-scrollbar` made the missing rows look like a rendering bug. Tighten
+     the collapsed rhythm so the full rail fits at ~670px, keep the rows at the
+     44px minimum, and fade the last row into the pinned footer as a scroll cue. */
+  .side:not(.side-wide) .nav,
+  .side:not(.side-wide) .out,
+  .side:not(.side-wide) .collapsed-hotline {
+    min-height: 2.75rem;
+  }
+
+  .side:not(.side-wide) > .counselor-drawer-scroll {
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+  }
+
+  .side:not(.side-wide) nav.hidden.space-y-3 > * + * {
+    margin-top: 0.25rem;
+  }
+
+  .side:not(.side-wide) nav.hidden .space-y-1 > * + * {
+    margin-top: 0.125rem;
+  }
+
+  .side:not(.side-wide) > .counselor-drawer-profile {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .side:not(.side-wide) > .counselor-drawer-footer {
+    position: relative;
+    padding-top: 0.25rem;
+  }
+
+  .side:not(.side-wide) nav.hidden svg {
+    stroke-width: 2;
+  }
+
+  .side:not(.side-wide) .collapsed-hotline {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #f0a08e;
+  }
+
+  .side:not(.side-wide) .collapsed-hotline:hover {
+    background: rgb(255 255 255 / 8%);
+    color: #ffc9bd;
+  }
+
+  .side:not(.side-wide) .collapsed-hotline:focus-visible {
+    outline: 2px solid var(--red);
+    outline-offset: -2px;
+  }
+}
