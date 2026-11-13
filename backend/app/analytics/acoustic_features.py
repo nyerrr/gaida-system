@@ -235,7 +235,7 @@ def extract_features(
             return _empty_features()
 
         # ── Voice cleaning: background-noise removal + loudness normalization
-        y = clean_voice(y, sr, denoise=False)
+        y = clean_voice(y, sr, denoise=True)
 
         features = {}
 

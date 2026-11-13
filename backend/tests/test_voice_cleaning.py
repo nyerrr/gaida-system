@@ -111,6 +111,20 @@ def test_extract_features_runs_with_cleaning(monkeypatch):
     assert feats["acoustic_emotion"] in ("neutral", "anxious", "sad", "angry", "calm")
 
 
+def test_extract_features_enables_denoising(monkeypatch):
+    import app.analytics.acoustic_features as acoustic_features
+
+    calls = []
+
+    def fake_clean_voice(y, sr, denoise=True):
+        calls.append(denoise)
+        return y
+
+    monkeypatch.setattr(acoustic_features, "clean_voice", fake_clean_voice)
+    extract_features(_wav_bytes(_synthetic()))
+    assert calls == [True]
+
+
 def test_empty_signal_is_safe(monkeypatch):
     monkeypatch.setattr(vc, "VOICE_CLEANING_ENABLED", True)
     out = vc.clean_voice(np.array([], dtype="float32"), 16000)

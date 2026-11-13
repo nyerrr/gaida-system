@@ -197,8 +197,6 @@ def clean_voice(y: np.ndarray, sr: int, denoise: bool = True) -> np.ndarray:
         return y
 
     # 1) Optional background-noise removal (stationary spectral gating).
-    # The interactive acoustic route skips this expensive step on Render;
-    # loudness normalization below still runs for comparable measurements.
     _nr_mod = _load_noisereduce() if denoise else None
     if _nr_mod is not None:
         try:
