@@ -271,6 +271,7 @@ function FocusTooltip({ children, label, className = '' }) {
 
 // One shared type scale for every sidebar row (nav + utilities).
 const ROW_TEXT = 'text-[13px] font-medium';
+const DRAWER_TEXT = 'text-[14px] font-medium';
 
 // One consistent line-icon set for the sidebar (was a mix of emoji and
 // symbol glyphs that rendered at different weights/sizes across browsers).
@@ -294,7 +295,14 @@ function NavIcon({ id, size = 18 }) {
     case 'resolved':
       return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></svg>;
     case 'hotline':
-      return <svg {...common}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" /></svg>;
+      // Solid handset. The outlined handset's thin diagonal notches smear
+      // together below ~20px, which made the crisis-call action hard to read,
+      // so this glyph is deliberately filled rather than stroke-based.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+        </svg>
+      );
     case 'sound':
       return <svg {...common}><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M18.36 5.64a9 9 0 0 1 0 12.73" /><path d="M5.59 15H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h1.59l4.7-4.71C10.92 3.66 12 4.11 12 5v14c0 .89-1.08 1.34-1.71.71L5.59 15z" /></svg>;
     case 'privacy':
@@ -1601,7 +1609,7 @@ function WelfarePage({ welfare, welfareLoading, welfareError, onViewChat, onMark
         })
       ) : !welfareLoading && !welfareError ? (
         <div className="counselor-empty-state" style={{ color: P.textMuted }}>
-          <div className="mb-3 flex justify-center"><NavIcon id="hotline" size={40} /></div>
+          <div className="mb-3 flex justify-center" style={{ opacity: 0.75 }}><NavIcon id="resolved" size={28} /></div>
           <p className="text-sm font-semibold" style={{ color: P.textSecondary }}>No welfare checks needed</p>
           <p className="text-xs mt-1">Silent High/Crisis sessions will appear here.</p>
           <button type="button" className="btn ghost mt-4" onClick={onRefresh}>Refresh checks</button>
@@ -3229,6 +3237,18 @@ export default function CounselorDashboard() {
 
   const pendingCount = alerts.filter(isPendingAlert).length;
 
+  // One source for every navigation badge so the drawer and desktop rail
+  // always agree on what needs attention.
+  const navBadgeCount = (id) => {
+    if (id === 'alerts') return pendingCount;
+    if (id === 'welfare') return welfare.length;
+    if (id === 'sessions') return sessions.length;
+    return 0;
+  };
+  const badgeClass = (id) =>
+    id === 'welfare' ? 'cnt cnt-warn' : id === 'sessions' ? 'cnt cnt-neutral' : 'cnt';
+  const moreAttention = welfare.length > 0;
+
   const logout = async () => {
     await logoutAndClearAuth();
     navigate('/counselor-login');
@@ -3415,14 +3435,14 @@ export default function CounselorDashboard() {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="break-words pr-10 text-sm font-semibold leading-snug text-white">
+              <p className="break-words pr-10 text-[15px] font-semibold leading-snug text-white">
                 {counselor.name || 'Counselor'}
               </p>
-              <p className="mt-0.5 text-[11px]" style={{ color: '#8FA3AC' }}>
+              <p className="mt-0.5 text-[12px]" style={{ color: '#A8BBC7' }}>
                 Guidance Counselor
               </p>
               <p
-                className="counselor-sidebar-id mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                className="counselor-sidebar-id mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-medium"
                 style={{ background: 'rgba(255,255,255,0.08)', color: '#BBD6EA' }}
                 title={`Workspace ID: ${counselorId}`}
               >
@@ -3515,24 +3535,25 @@ export default function CounselorDashboard() {
         >
           {/* Phone drawer navigation: the same four primary destinations as the
               bottom bar, plus the remaining views behind "More". */}
-          <nav className="space-y-1 lg:hidden" aria-label="Counselor drawer navigation">
+          <nav className="counselor-drawer-nav space-y-1 lg:hidden" aria-label="Counselor drawer navigation">
+            <p className="drawer-group-label">Workspace</p>
             {DRAWER_PRIMARY_ITEMS.map((item) => {
               const active = activePage === item.id;
-              const badgeCount = item.id === 'alerts' ? pendingCount : 0;
+              const badgeCount = navBadgeCount(item.id);
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => { setActivePage(item.id); closeMobileNav(); }}
                   aria-current={active ? 'page' : undefined}
-                  aria-label={item.label}
+                  aria-label={`${item.label}${badgeCount > 0 ? `, ${badgeCount} pending` : ''}`}
                   className={`nav ${active ? 'on' : ''} px-3`}
                 >
                   <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
                     <NavIcon id={item.id} size={18} />
                   </span>
-                  <span className={`${ROW_TEXT} whitespace-nowrap`}>{item.label}</span>
-                  {badgeCount > 0 && <span className="cnt">{badgeCount}</span>}
+                  <span className={`${DRAWER_TEXT} whitespace-nowrap`}>{item.label}</span>
+                  {badgeCount > 0 && <span className={`${badgeClass(item.id)}`} aria-hidden="true">{badgeCount}</span>}
                 </button>
               );
             })}
@@ -3542,13 +3563,14 @@ export default function CounselorDashboard() {
               onClick={() => setDrawerMoreOpen((open) => !open)}
               aria-expanded={drawerMoreOpen}
               aria-controls="counselor-drawer-more"
-              aria-current={DRAWER_MORE_IDS.includes(activePage) ? 'page' : undefined}
-              className={`nav ${DRAWER_MORE_IDS.includes(activePage) ? 'on' : ''} px-3`}
+              aria-label={moreAttention ? 'More, welfare checks need attention' : 'More'}
+              className={`nav ${DRAWER_MORE_IDS.includes(activePage) ? 'section-on' : ''} px-3`}
             >
               <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
                 <NavIcon id="more" size={18} />
               </span>
-              <span className={`${ROW_TEXT} whitespace-nowrap`}>More</span>
+              <span className={`${DRAWER_TEXT} whitespace-nowrap`}>More</span>
+              {moreAttention && <span className="drawer-attention-dot" aria-hidden="true" />}
               <span
                 aria-hidden="true"
                 className={`text-[11px] transition-transform duration-200 ${drawerMoreOpen ? 'rotate-180' : ''}`}
@@ -3558,23 +3580,26 @@ export default function CounselorDashboard() {
             </button>
 
             {drawerMoreOpen && (
-              <div id="counselor-drawer-more" className="space-y-1">
+              <div id="counselor-drawer-more" className="drawer-subnav space-y-1">
+                <p className="drawer-group-label">More tools</p>
                 {DRAWER_MORE_IDS.map((id) => {
                   const navItem = NAV.find((item) => item.id === id);
                   const active = activePage === id;
+                  const badgeCount = navBadgeCount(id);
                   return (
                     <button
                       key={id}
                       type="button"
                       onClick={() => { setActivePage(id); closeMobileNav(); }}
                       aria-current={active ? 'page' : undefined}
-                      aria-label={navItem.label}
+                      aria-label={`${navItem.label}${badgeCount > 0 ? `, ${badgeCount} pending` : ''}`}
                       className={`nav ${active ? 'on' : ''} px-3`}
                     >
                       <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
                         <NavIcon id={id} size={18} />
                       </span>
-                      <span className={`${ROW_TEXT} whitespace-nowrap`}>{navItem.label}</span>
+                      <span className={`${DRAWER_TEXT} whitespace-nowrap`}>{navItem.label}</span>
+                      {badgeCount > 0 && <span className={`${badgeClass(id)}`} aria-hidden="true">{badgeCount}</span>}
                     </button>
                   );
                 })}
@@ -3590,7 +3615,7 @@ export default function CounselorDashboard() {
                   {group.ids.map((id) => {
                     const navItem = NAV.find((item) => item.id === id);
                     const active = activePage === id;
-                    const badgeCount = id === 'alerts' ? pendingCount : 0;
+                    const badgeCount = navBadgeCount(id);
                     return (
                       <button
                         key={id}
@@ -3605,7 +3630,7 @@ export default function CounselorDashboard() {
                           <NavIcon id={id} size={18} />
                         </span>
                         {panelWide && <span className={`${ROW_TEXT} whitespace-nowrap`}>{navItem.label}</span>}
-                        {id === 'alerts' && badgeCount > 0 && <span className="cnt">{badgeCount}</span>}
+                        {badgeCount > 0 && <span className={`${badgeClass(id)}`} aria-hidden="true">{badgeCount}</span>}
                         {!panelWide && <RowTooltip label={`${navItem.label}${badgeCount > 0 ? ` (${badgeCount})` : ''}`} />}
                       </button>
                     );
@@ -3698,6 +3723,7 @@ export default function CounselorDashboard() {
           }}
         >
           <div className="flex flex-col gap-1">
+            <p className="drawer-group-label drawer-group-label-footer">Safety &amp; account</p>
             <button
               type="button"
               className="hot flex h-11 min-h-[44px] w-full items-center gap-3"
@@ -3799,8 +3825,8 @@ export default function CounselorDashboard() {
             <span className={`badge ${connectionStatus === 'live' ? '' : connectionStatus === 'offline' ? 'risk' : 'amb'}`}>
               <i aria-hidden="true" />{connection.label}
             </span>
-            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button" onClick={openHotlines} aria-label="Open crisis hotlines">
-              <NavIcon id="hotline" size={18} />
+            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button hotline-button" onClick={openHotlines} aria-label="Open crisis hotlines">
+              <NavIcon id="hotline" size={20} />
             </button>
           </div>
         </div>
@@ -3816,8 +3842,8 @@ export default function CounselorDashboard() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button" onClick={openHotlines} aria-label="Open crisis hotlines">
-              <NavIcon id="hotline" size={18} />
+            <button ref={hotlinesTriggerRef} type="button" className="counselor-icon-button hotline-button" onClick={openHotlines} aria-label="Open crisis hotlines">
+              <NavIcon id="hotline" size={20} />
             </button>
             <button type="button" className="theme-toggle" onClick={toggleDashboardTheme} aria-label={`Switch to ${dashboardTheme === 'dark' ? 'light' : 'dark'} mode`} aria-pressed={dashboardTheme === 'dark'}>
               <NavIcon id="theme" size={17} />
