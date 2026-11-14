@@ -3178,6 +3178,22 @@ body.filter-sheet-open .counselor-bottom-sheet {
     padding-top: 0.25rem;
   }
 
+  /* Counts stay inline in the expanded rail, where there is room. In the
+     48px collapsed row the badge was a flex sibling, so an 18px icon plus a
+     21.6px pill overflowed the row and the welfare badge covered the handset.
+     Anchor it to the row's top-right corner instead. */
+  .side:not(.side-wide) nav.hidden .cnt {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    min-width: 1rem;
+    min-height: 1rem;
+    padding: 0 0.25rem;
+    font-size: 0.5625rem;
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--side);
+  }
+
   .side:not(.side-wide) nav.hidden svg {
     stroke-width: 2;
   }

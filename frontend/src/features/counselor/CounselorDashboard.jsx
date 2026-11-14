@@ -3622,7 +3622,7 @@ export default function CounselorDashboard() {
                         type="button"
                         onClick={() => { setActivePage(id); closeMobileNav(); }}
                         title={!panelWide ? navItem.label : undefined}
-                        aria-label={navItem.label}
+                        aria-label={`${navItem.label}${badgeCount > 0 ? `, ${badgeCount} pending` : ''}`}
                         aria-current={active ? 'page' : undefined}
                         className={`nav ${active ? 'on' : ''} group relative min-h-[44px] ${panelWide ? 'px-3' : 'justify-center px-0'}`}
                       >
